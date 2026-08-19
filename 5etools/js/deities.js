@@ -1,0 +1,134 @@
+"use strict";
+
+class DeitiesSublistManager extends SublistManager {
+	static _getRowTemplate () {
+		return [
+			new SublistCellTemplate({
+				name: "Name",
+				css: "ve-bold ve-col-4 ve-pl-0",
+				colStyle: "",
+			}),
+			new SublistCellTemplate({
+				name: "Pantheon",
+				css: "ve-col-2 ve-text-center",
+				colStyle: "text-center",
+			}),
+			new SublistCellTemplate({
+				name: "Alignment",
+				css: "ve-col-2 ve-text-center",
+				colStyle: "text-center",
+			}),
+			new SublistCellTemplate({
+				name: "Domains",
+				css: "ve-col-4",
+				colStyle: "",
+			}),
+		];
+	}
+
+	pGetSublistItem (it, hash) {
+		const alignment = it.alignment ? it.alignment.join("") : "\u2014";
+		const domains = it.domains.join(", ");
+		const cellsText = [it.name, it.pantheon, alignment, domains];
+
+		const ele = veT`<div class="ve-lst__row ve-lst__row--sublist ve-flex-col">
+			<a href="#${hash}" class="ve-lst__row-border ve-lst__row-inner">
+				${this.constructor._getRowCellsHtml({values: cellsText})}
+			</a>
+		</div>`
+			.vee.onn("contextmenu", evt => this._handleSublistItemContextMenu(evt, listItem))
+			.vee.onn("click", evt => this._listSub.doSelect(listItem, evt));
+
+		const listItem = new ListItem(
+			hash,
+			ele,
+			it.name,
+			{
+				...ListItem.getCommonValues(it),
+				pantheon: it.pantheon,
+				alignment,
+				domains,
+			},
+			{
+				hash,
+				entity: it,
+				mdRow: [...cellsText],
+			},
+		);
+		return listItem;
+	}
+}
+
+class DeitiesPage extends ListPage {
+	constructor () {
+		const pageFilter = new PageFilterDeities();
+		super({
+			dataSource: DataUtil.deity.loadJSON.bind(DataUtil.deity),
+
+			pageFilter,
+
+			dataProps: ["deity"],
+
+			bookViewOptions: {
+				nameSingular: "deity",
+				namePlural: "deities",
+				pageTitle: "Deities Book View",
+			},
+
+			listSyntax: new ListSyntaxDeities({fnGetDataList: () => this._dataList}),
+		});
+	}
+
+	getListItem (ent, dtI, isExcluded) {
+		this._pageFilter.mutateAndAddToFilters(ent, isExcluded);
+
+		const eleLi = document.createElement("div");
+		eleLi.className = `ve-lst__row ve-flex-col ${isExcluded ? "ve-lst__row--blocklisted" : ""}`;
+
+		const source = Parser.sourceJsonToAbv(ent.source);
+		const hash = UrlUtil.autoEncodeHash(ent);
+		const alignment = ent.alignment ? ent.alignment.join("") : "\u2014";
+		const domains = ent.domains.join(", ");
+
+		eleLi.innerHTML = `<a href="#${hash}" class="ve-lst__row-border ve-lst__row-inner">
+			<span class="ve-bold ve-col-3 ve-pl-0 ve-pr-1">${ent.name}</span>
+			<span class="ve-col-2 ve-px-1 ve-text-center">${ent.pantheon}</span>
+			<span class="ve-col-2 ve-px-1 ve-text-center">${alignment}</span>
+			<span class="ve-col-3 ve-px-1 ${ent.domains[0] === VeCt.STR_NONE ? `ve-italic` : ""}">${domains}</span>
+			<span class="ve-col-2 ve-text-center ${Parser.sourceJsonToSourceClassname(ent.source)} ve-pl-1 ve-pr-0" title="${Parser.sourceJsonToFull(ent.source)}">${source}</span>
+		</a>`;
+
+		const listItem = new ListItem(
+			dtI,
+			eleLi,
+			ent.name,
+			{
+				source,
+				...ListItem.getCommonValues(ent),
+				title: ent.title || "",
+				pantheon: ent.pantheon,
+				alignment,
+				domains,
+			},
+			{
+				hash,
+				isExcluded,
+			},
+		);
+
+		eleLi.addEventListener("click", (evt) => this._list.doSelect(listItem, evt));
+		eleLi.addEventListener("contextmenu", (evt) => this._openContextMenu(evt, this._list, listItem));
+
+		return listItem;
+	}
+
+	_renderStats_doBuildStatsTab ({ent}) {
+		this._pgContent.vee.empty().vee.appends(RenderDeities.getRenderedDeity(ent));
+	}
+}
+
+const deitiesPage = new DeitiesPage();
+deitiesPage.sublistManager = new DeitiesSublistManager();
+window.addEventListener("load", () => deitiesPage.pOnLoad());
+
+globalThis.dbg_page = deitiesPage;

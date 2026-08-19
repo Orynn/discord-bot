@@ -1,0 +1,38 @@
+@use "vars/vars";
+@use "vars/vars-night";
+
+@layer vetools {
+	.conv__ {
+		&disp-message {
+			flex-shrink: 0;
+			font-size: 13px;
+			background-color: vars.$rgb-bg--alt;
+			border: 1px solid vars.$rgb-border-grey;
+			border-radius: 4px;
+			margin-right: 3rem;
+
+			&--warning {
+				color: #df00ff;
+			}
+
+			&--error {
+				color: #f00;
+			}
+		}
+	}
+
+	.ve-night-mode {
+		.conv__ {
+			&disp-message {
+				background-color: vars-night.$rgb-bg--alt-night;
+				border-color: vars-night.$rgb-border-grey--night;
+			}
+		}
+	}
+
+	@media screen and (width <= #{vars.$width-screen-md}) {
+		.ace_editor {
+			height: 40vh !important;
+		}
+	}
+}

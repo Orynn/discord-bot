@@ -1,0 +1,143 @@
+export class FilterSnapshotBaseSelectClickHandler extends RenderableCollectionSelectClickHandler {
+	_setHighlighted (item, {toVal = false} = {}) {
+		item.stgHeader.vee.toggleClass("list-multi-selected", toVal);
+	}
+}
+
+/** @abstract */
+export class RenderableCollectionFilterSnapshotBase extends RenderableCollectionGenericRows {
+	constructor (
+		{
+			filterBox,
+			comp,
+			prop,
+			wrpRows,
+			selectClickHandler,
+		},
+	) {
+		super(comp, prop, wrpRows, {selectClickHandler});
+		this._filterBox = filterBox;
+	}
+
+	/* -------------------------------------------- */
+
+	doCleanup () {
+		const rendered = this._comp._getRenderedCollection();
+		Object.values(rendered)
+			.forEach(({fnCleanup}) => fnCleanup?.());
+	}
+
+	doDeleteExistingRender (rendered) {
+		rendered.fnCleanup?.();
+	}
+
+	/* -------------------------------------------- */
+
+	_getWrpRow () {
+		return veT`<div class="ve-flex-col ve-w-100"></div>`;
+	}
+
+	/* -------------------------------------------- */
+
+	static _getCbSel () {
+		return veT`<input type="checkbox" class="ve-no-events">`;
+	}
+
+	static _getBtnToggleExpand (comp, {isSibling = false} = {}) {
+		const btnExpand = veT`<div class="ve-py-1 ve-flex-vh-center ve-h-100 ve-clickable ve-no-select ${isSibling ? `ve-mr-1 ve-px-2` : `ve-w-100`}"></div>`
+			.vee.onn("click", evt => {
+				evt.stopPropagation();
+				comp._state.manager_loader_isExpanded = !comp._state.manager_loader_isExpanded;
+			});
+		comp._addHookBase("manager_loader_isExpanded", () => {
+			btnExpand
+				.vee.txt(comp._state.manager_loader_isExpanded ? `[\u2212]` : `[+]`)
+				.vee.tooltip(comp._state.manager_loader_isExpanded ? "Collapse" : "Expand");
+		})();
+		return btnExpand;
+	}
+
+	/* -------------------------------------------- */
+
+	_getSnapshotsPreviewState ({snapshots}) {
+		const previewState = {};
+		this._filterBox.filters
+			.forEach(filter => {
+				if (!filter.isAnySnapshotRelevant({snapshots})) return;
+				Object.assign(previewState, filter.getResetState({snapshots}));
+			});
+		return previewState;
+	}
+
+	/* -------------------------------------------- */
+
+	_getSnapshotsDisplayState ({snapshots}) {
+		const previewState = this._getSnapshotsPreviewState({snapshots});
+		return this._getPreviewStateDisplayState({previewState});
+	}
+
+	_getDeckSnapshotsDisplayState ({boxSnapshotDeck}) {
+		const snapshots = this._comp.getSnapshots({boxSnapshotDeck});
+
+		const previewState = {};
+		this._filterBox.filters
+			.forEach(filter => Object.assign(previewState, filter.getResetState({snapshots})));
+
+		return this._getPreviewStateDisplayState({previewState});
+	}
+
+	_getPreviewStateDisplayState ({previewState}) {
+		const ptsFilter = [];
+		const filtersDefault = [];
+
+		this._filterBox.filters
+			.forEach(filter => {
+				if (!previewState[filter.header]) return;
+
+				const displayStateParts = filter.getDisplayStatePartsHtml({nxtState: previewState, isIgnoreSnapshot: true});
+				if (displayStateParts.length) return ptsFilter.push(...displayStateParts);
+
+				filtersDefault.push(filter.header);
+			});
+
+		if (!ptsFilter.length && !filtersDefault.length) {
+			return this._getPreviewStateDisplayState_getJoined([`<i class="ve-muted">(No filters)</i>`]);
+		}
+
+		return this._getPreviewStateDisplayState_getJoined(
+			[
+				...ptsFilter,
+				filtersDefault.length
+					? `<span class="ve-text-right ve-w-140p ve-no-shrink ve-mr-2 ve-bold ve-muted">Default:</span><span class="ve-muted">${filtersDefault.join(" | ")}</span>`
+					: null,
+			],
+		);
+	}
+
+	_getPreviewStateDisplayState_getJoined (pts) {
+		return pts
+			.filter(Boolean)
+			.map((pt, i, arr) => `<div class="ve-flex-v-center ${arr.length - 1 === i ? "" : "ve-mb-1"}">${pt}</div>`)
+			.join("\n");
+	}
+
+	/* -------------------------------------------- */
+
+	_getSnapshotsDefaultFilterHeaders ({snapshots}) {
+		const previewState = this._getSnapshotsPreviewState({snapshots});
+
+		const filtersDefault = [];
+
+		this._filterBox.filters
+			.flatMap(filter => [filter, ...filter.getChildFilters()])
+			.forEach(filter => {
+				if (!previewState[filter.header]) return;
+
+				if (filter.isAnyStateNotDefault({nxtState: previewState, isIgnoreSnapshot: true})) return;
+
+				filtersDefault.push(filter.header);
+			});
+
+		return filtersDefault;
+	}
+}

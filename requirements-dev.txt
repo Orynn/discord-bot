@@ -1,0 +1,2 @@
+# Dev / CI only — not required to run the bot
+ruff>=0.9.0

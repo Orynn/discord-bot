@@ -1,0 +1,80 @@
+import logging
+
+import discord
+from discord.ext import commands
+from discord.voice_client import VoiceClient
+
+# This bot does not use voice; skip optional PyNaCl/davey warnings at startup.
+VoiceClient.warn_nacl = False
+VoiceClient.warn_dave = False
+from discord.ext.commands.bot import Bot
+from discord.flags import Intents
+
+from bot.events import register_events
+from bot.help_commands import setup_help
+from bot.logging_config import setup_logging
+from bot.slash import setup_slash
+from bot.tree_utils import clamp_app_command_descriptions
+from campaign.commands import setup_campaign
+from combat.commands import setup_combat
+from config import PREFIX, require_token
+from data.db import init_db
+from initiative.commands import setup_initiative
+from npc.commands import setup_npc
+from party.commands import setup_party
+from pc.commands import setup_pc
+from players.commands import setup_player
+from roll.commands import setup_roll
+from scene.commands import setup_desc
+from sheets.commands import setup_sheet
+from srd.commands import setup_srd
+
+init_db()
+setup_logging()
+
+logger = logging.getLogger(__name__)
+
+
+class ArkannBot(commands.Bot):
+    async def setup_hook(self) -> None:
+        try:
+            clamp_app_command_descriptions(self.tree)
+            synced = await self.tree.sync()
+            logger.info("Synced %s slash command(s).", len(synced))
+        except Exception:
+            logger.exception("Slash command sync failed")
+
+    async def close(self) -> None:
+        from campaign.wiki import close_session as close_wiki_session
+
+        await close_wiki_session()
+        await super().close()
+
+
+intents: Intents = discord.Intents.default()
+intents.message_content = True
+
+bot: ArkannBot = ArkannBot(command_prefix=PREFIX, intents=intents)
+
+COMMAND_SETUPS = (
+    setup_npc,
+    setup_desc,
+    setup_pc,
+    setup_roll,
+    setup_sheet,
+    setup_initiative,
+    setup_party,
+    setup_player,
+    setup_srd,
+    setup_campaign,
+    setup_combat,
+    setup_help,
+    setup_slash,
+)
+
+for setup in COMMAND_SETUPS:
+    setup(bot)
+
+register_events(bot)
+
+bot.run(token=require_token(), log_handler=None)

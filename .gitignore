@@ -1,0 +1,17 @@
+config.json
+.env
+data/arkann.db
+data/arkann.db-*
+data/exports/
+5etools.json
+5etools/5etools.json
+5etools/homebrew.json
+5etools/5etools.json.bak
+.cache/
+srd/glossary_cache.json
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+*.egg-info/

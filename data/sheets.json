@@ -1,0 +1,234 @@
+{
+    "216985711541354496": {
+        "name": "Arkann",
+        "species": "",
+        "char_class": "",
+        "subclass": "",
+        "level": 1,
+        "background": "",
+        "abilities": {
+            "str": 10,
+            "dex": 10,
+            "con": 10,
+            "int": 10,
+            "wis": 10,
+            "cha": 10
+        },
+        "hp_max": 0,
+        "hp_current": 0,
+        "ac": 10,
+        "speed": 30,
+        "save_proficiencies": [],
+        "skill_proficiencies": [],
+        "skill_expertise": [],
+        "spells": [],
+        "notes": ""
+    },
+    "228541807317745664": {
+        "name": "Labreb",
+        "species": "Shifter",
+        "char_class": "Bard",
+        "subclass": "",
+        "level": 1,
+        "background": "Hermit",
+        "abilities": {
+            "str": 10,
+            "dex": 14,
+            "con": 14,
+            "int": 10,
+            "wis": 10,
+            "cha": 17
+        },
+        "hp_max": 10,
+        "hp_current": 10,
+        "ac": 12,
+        "speed": 30,
+        "save_proficiencies": [
+            "dex",
+            "cha"
+        ],
+        "skill_proficiencies": [
+            "athletics",
+            "medicine",
+            "perception",
+            "performance",
+            "religion",
+            "survival"
+        ],
+        "skill_expertise": [],
+        "spells": [],
+        "currency": {
+            "cp": 0,
+            "sp": 0,
+            "ep": 0,
+            "gp": 140,
+            "pp": 0
+        },
+        "notes": ""
+    },
+    "696687747154575410": {
+        "name": "Graosh",
+        "species": "Orc",
+        "char_class": "Wizard",
+        "subclass": "",
+        "level": 1,
+        "background": "Sage",
+        "abilities": {
+            "str": 8,
+            "dex": 12,
+            "con": 14,
+            "int": 16,
+            "wis": 15,
+            "cha": 10
+        },
+        "hp_max": 8,
+        "hp_current": 8,
+        "ac": 11,
+        "speed": 30,
+        "save_proficiencies": [
+            "int",
+            "wis"
+        ],
+        "skill_proficiencies": [
+            "arcana",
+            "history",
+            "investigation",
+            "nature"
+        ],
+        "skill_expertise": [],
+        "spells": [
+            "acid-splash",
+            "mage-hand",
+            "ray-of-frost",
+            "alarm",
+            "feather-fall",
+            "mage-armor",
+            "magic-missile",
+            "sleep",
+            "thunderwave"
+        ],
+        "currency": {
+            "cp": 0,
+            "sp": 0,
+            "ep": 0,
+            "gp": 55,
+            "pp": 0
+        },
+        "notes": ""
+    },
+    "231452026620477440": {
+        "name": "Chagrin",
+        "species": "Tiefling",
+        "char_class": "Rogue",
+        "subclass": "",
+        "level": 1,
+        "background": "Wayfarer",
+        "abilities": {
+            "str": 8,
+            "dex": 12,
+            "con": 14,
+            "int": 15,
+            "wis": 13,
+            "cha": 10
+        },
+        "hp_max": 10,
+        "hp_current": 10,
+        "ac": 11,
+        "speed": 30,
+        "save_proficiencies": [
+            "dex",
+            "int"
+        ],
+        "skill_proficiencies": [
+            "acrobatics",
+            "insight",
+            "investigation",
+            "perception",
+            "persuasion",
+            "stealth"
+        ],
+        "skill_expertise": [
+            "investigation",
+            "stealth"
+        ],
+        "spells": [
+            "poison-spray",
+            "thaumaturgy"
+        ],
+        "currency": {
+            "cp": 1,
+            "sp": 16,
+            "ep": 0,
+            "gp": 1,
+            "pp": 0
+        },
+        "notes": ""
+    },
+    "496230058801758210": {
+        "name": "Ilidor",
+        "species": "Elf",
+        "char_class": "Druid",
+        "subclass": "",
+        "level": 1,
+        "background": "Guide",
+        "abilities": {
+            "str": 8,
+            "dex": 14,
+            "con": 14,
+            "int": 12,
+            "wis": 17,
+            "cha": 10
+        },
+        "hp_max": 10,
+        "hp_current": 10,
+        "ac": 15,
+        "speed": 35,
+        "save_proficiencies": [
+            "int",
+            "wis"
+        ],
+        "skill_proficiencies": [
+            "arcana",
+            "nature",
+            "perception",
+            "stealth",
+            "survival"
+        ],
+        "skill_expertise": [],
+        "spells": [
+            "spare-the-dying",
+            "awaken",
+            "animal-messenger",
+            "druidcraft",
+            "thunderclap",
+            "cure-wounds",
+            "healing-word",
+            "arcanists-magic-aura",
+            "thunderwave",
+            "earthquake",
+            "targeting-foreknowledge",
+            "bitter-chains",
+            "animal-friendship",
+            "faerie-fire",
+            "fog-cloud",
+            "protection-from-evil-and-good",
+            "purify-food-and-drink",
+            "goodberry",
+            "charm-person",
+            "jump",
+            "longstrider",
+            "speak-with-animals",
+            "create-or-destroy-water",
+            "detect-poison-and-disease",
+            "entangle"
+        ],
+        "currency": {
+            "cp": 0,
+            "sp": 0,
+            "ep": 0,
+            "gp": 12,
+            "pp": 0
+        },
+        "notes": ""
+    }
+}

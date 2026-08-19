@@ -1,0 +1,1288 @@
+import {RenderMap} from "./render-map.js";
+import {OmnisearchUtilsUi} from "./omnisearch/omnisearch-utils-ui.js";
+
+export class BookUtil {
+	static getHeaderText (header) {
+		return header.header || header;
+	}
+
+	static async _scrollClick_pScrollElementIntoView (ele) {
+		if (!BrowserUtil.isFirefox()) {
+			await AnimationUtil.pRecomputeStyles();
+			ele.scrollIntoView();
+			return;
+		}
+
+		// Loop until rendering stabilizes
+		// 6 repeated matches (i.e., 12 animation frames(!)) seems to be the sweet spot
+		const posLookup = {[ele.getBoundingClientRect().toJSON().y]: 1};
+		for (let i = 0; i < 99; ++i) {
+			await AnimationUtil.pRecomputeStyles();
+
+			const bcr = ele.getBoundingClientRect().toJSON();
+			if (!posLookup[bcr.y]) posLookup[bcr.y] = 1;
+			else posLookup[bcr.y]++;
+
+			if (posLookup[bcr.y] >= 6) break;
+		}
+
+		ele.scrollIntoView();
+	}
+
+	static _scrollClick (ixChapter, headerText, headerNumber) {
+		headerText = headerText.toLowerCase().trim();
+
+		// When handling a non-full-book header in full-book mode, map the header to the appropriate position
+		if (!~BookUtil.curRender.chapter && ~ixChapter) {
+			const minHeaderIx = BookUtil.curRender.allViewFirstTitleIndexes[ixChapter];
+			const maxHeaderIx = BookUtil.curRender.allViewFirstTitleIndexes[ixChapter + 1] == null ? Number.MAX_SAFE_INTEGER : BookUtil.curRender.allViewFirstTitleIndexes[ixChapter + 1];
+
+			// Loop through the list of tracked titles, starting at our chapter's first tracked title, until we hit
+			const trackedTitles = BookUtil._renderer.getTrackedTitles();
+			const trackedTitleIndexes = Object.keys(trackedTitles).map(it => Number(it)).sort(SortUtil.ascSort);
+
+			// Search for a matching header between the current chapter's header start and end
+			let curHeaderNumber = 0;
+			const ixTitleUpper = Math.min(trackedTitleIndexes.length, maxHeaderIx) + 1; // +1 since it's 1-indexed
+			for (let ixTitle = minHeaderIx; ixTitle < ixTitleUpper; ++ixTitle) {
+				let titleName = trackedTitles[ixTitle];
+				if (!titleName) throw new Error(`No tracked title for index "${ixTitle}"! This is a bug!`);
+
+				titleName = titleName.toLowerCase().trim();
+				if (titleName === headerText) {
+					if (curHeaderNumber < headerNumber) {
+						curHeaderNumber++;
+						continue;
+					}
+
+					this._scrollClick_pScrollElementIntoView(veEs(`[data-title-index="${ixTitle}"]`)).then(null);
+					break;
+				}
+			}
+
+			return;
+		}
+
+		const trackedTitlesInverse = BookUtil._renderer.getTrackedTitlesInverted({isStripTags: true});
+
+		const ixTitle = (trackedTitlesInverse[headerText] || [])[headerNumber || 0];
+		if (ixTitle != null) this._scrollClick_pScrollElementIntoView(veEs(`[data-title-index="${ixTitle}"]`)).then(null);
+	}
+
+	static _scrollPageTop (ixChapter) {
+		// In full-book view, find the Xth section
+		if (ixChapter != null && !~BookUtil.curRender.chapter) {
+			const ixTitle = BookUtil.curRender.allViewFirstTitleIndexes[ixChapter];
+			if (ixTitle != null) veEs(`[data-title-index="${ixTitle}"]`).scrollIntoView();
+			return;
+		}
+
+		document.getElementById(`pagecontent`).scrollIntoView();
+	}
+
+	static _sectToggle (evt, btnToggleExpand, headersBlock) {
+		if (evt) {
+			evt.stopPropagation();
+			evt.preventDefault();
+		}
+
+		btnToggleExpand.vee.txt(btnToggleExpand.vee.txt() === `[+]` ? `[\u2212]` : `[+]`);
+		headersBlock.vee.toggle();
+	}
+
+	static _showBookContent (data, fromIndex, bookId, hashParts) {
+		const ixChapterPrev = BookUtil.curRender.chapter;
+		const bookIdPrev = BookUtil.curRender.curBookId;
+
+		let ixChapter = 0;
+		let scrollToHeaderText;
+		let scrollToHeaderNumber;
+		let isForceScroll = false;
+
+		if (hashParts && hashParts.length > 0) ixChapter = Number(hashParts[0]);
+
+		const isRenderingNewChapterOrNewBook = BookUtil.curRender.chapter !== ixChapter
+			|| UrlUtil.encodeForHash(bookIdPrev.toLowerCase()) !== UrlUtil.encodeForHash(bookId);
+
+		if (hashParts && hashParts.length > 1) {
+			scrollToHeaderText = decodeURIComponent(hashParts[1]);
+
+			isForceScroll = true;
+			if (hashParts[2]) {
+				scrollToHeaderNumber = Number(hashParts[2]);
+			}
+
+			if (BookUtil.referenceId && !isRenderingNewChapterOrNewBook) {
+				const isHandledScroll = this._showBookContent_handleQuickReferenceShow({sectionHeader: scrollToHeaderText});
+				if (isHandledScroll) {
+					isForceScroll = false;
+					scrollToHeaderText = null;
+				}
+			}
+		} else if (BookUtil.referenceId) {
+			this._showBookContent_handleQuickReferenceShowAll();
+		}
+
+		BookUtil.curRender.data = data;
+		BookUtil.curRender.fromIndex = fromIndex;
+		BookUtil.curRender.headerMap = Renderer.adventureBook.getEntryIdLookup(data);
+
+		// If it's a new chapter or a new book
+		if (isRenderingNewChapterOrNewBook) {
+			BookUtil.curRender.curBookId = bookId;
+			BookUtil.curRender.chapter = ixChapter;
+			BookUtil.dispBook.vee.html("");
+
+			const chapterTitle = (fromIndex.contents[ixChapter] || {}).name;
+			document.title = `${chapterTitle ? `${chapterTitle} - ` : ""}${fromIndex.name} - 5etools`;
+
+			BookUtil.curRender.controls = {};
+			BookUtil.dispBook.vee.appends(Renderer.utils.getBorderTr());
+			this._showBookContent_renderNavButtons({isTop: true, ixChapter, bookId, data});
+			const textStack = [];
+			BookUtil._renderer
+				.setFirstSection(true)
+				.setLazyImages(true)
+				.resetHeaderIndex()
+				.setHeaderIndexTableCaptions(true)
+				.setHeaderIndexImageTitles(true);
+			if (ixChapter === -1) {
+				BookUtil.curRender.allViewFirstTitleIndexes = [];
+				data.forEach(d => {
+					BookUtil.curRender.allViewFirstTitleIndexes.push(BookUtil._renderer.getHeaderIndex());
+					BookUtil._renderer.recursiveRender(d, textStack);
+				});
+			} else BookUtil._renderer.recursiveRender(data[ixChapter], textStack);
+			// If there is no source, we're probably in the Quick Reference, so avoid adding the "Excluded" text, as this is a composite source.
+			BookUtil.dispBook.vee.appends(`<tr><td colspan="6" class="ve-py-2 ve-px-5">${fromIndex.source ? Renderer.utils.getExcludedHtml({entity: fromIndex, dataProp: BookUtil.contentType, page: UrlUtil.getCurrentPage()}) : ""}${textStack.join("")}</td></tr>`);
+			Renderer.initLazyImageLoaders();
+			BookUtil._renderer
+				.setLazyImages(false)
+				.setHeaderIndexTableCaptions(false)
+				.setHeaderIndexImageTitles(false);
+			this._showBookContent_renderNavButtons({ixChapter, bookId, data});
+
+			BookUtil.dispBook.vee.appends(Renderer.utils.getBorderTr());
+
+			if (scrollToHeaderText) {
+				let handled = false;
+				if (BookUtil.referenceId) handled = this._showBookContent_handleQuickReferenceShow({sectionHeader: scrollToHeaderText});
+				if (!handled) {
+					BookUtil._scrollClick(ixChapter, scrollToHeaderText, scrollToHeaderNumber);
+				}
+			} else {
+				BookUtil._scrollPageTop();
+			}
+		} else {
+			// It's the same chapter/same book
+			if (hashParts.length <= 1) {
+				if (~ixChapter) {
+					if (BookUtil.referenceId) MiscUtil.scrollPageTop();
+					else BookUtil._scrollPageTop();
+				} else {
+					if (hashParts.length === 1 && BookUtil._LAST_CLICKED_LINK) {
+						const lastLink = veE({ele: BookUtil._LAST_CLICKED_LINK});
+						const lastHref = lastLink.vee.attr("href");
+						const mLink = new RegExp(`^${UrlUtil.PG_ADVENTURE}#${BookUtil.curRender.curBookId},(\\d+)$`, "i").exec(lastHref.trim());
+						if (mLink) {
+							const linkChapterIx = Number(mLink[1]);
+							const ele = veEs(`#pagecontent tr.text td`).vee.children(`.${Renderer.HEAD_NEG_1}`)[linkChapterIx];
+							if (ele) ele.scrollIntoView();
+							else setTimeout(() => { throw new Error(`Failed to find header scroll target with index "${linkChapterIx}"`); });
+							return;
+						}
+					}
+				}
+			} else if (isForceScroll) {
+				BookUtil._scrollClick(ixChapter, scrollToHeaderText, scrollToHeaderNumber);
+			} else if (scrollToHeaderText) {
+				BookUtil._scrollClick(ixChapter, scrollToHeaderText, scrollToHeaderNumber);
+			}
+		}
+
+		this._showBookContent_updateSidebar({ixChapter, ixChapterPrev, bookIdPrev, bookId});
+
+		this._showBookContent_updateControls({ixChapter, data});
+
+		this._removeLoadingOverlay();
+
+		if (BookUtil._pendingPageFromHash) {
+			const pageTerm = BookUtil._pendingPageFromHash;
+			BookUtil._pendingPageFromHash = null;
+			BookUtil._handlePageFromHash(pageTerm);
+		}
+	}
+
+	static _removeLoadingOverlay () {
+		veEs(`.bk__overlay-loading`)?.remove();
+	}
+
+	static _showBookContent_handleQuickReferenceShowAll () {
+		veEm(`.${Renderer.HEAD_NEG_1}`)
+			.forEach(ele => ele.vee.show());
+		veEm(`.ve-rd__hr--section`)
+			.forEach(ele => ele.vee.show());
+	}
+
+	/**
+	 * @param sectionHeader Section header to scroll to.
+	 * @return {boolean} True if the scroll happened, false otherwise.
+	 */
+	static _showBookContent_handleQuickReferenceShow ({sectionHeader}) {
+		this._showBookContent_handleQuickReferenceShowAll();
+
+		if (sectionHeader && ~BookUtil.curRender.chapter) {
+			const allSects = veEm(`.${Renderer.HEAD_NEG_1}`);
+			const cleanSectionHead = sectionHeader.trim().toLowerCase();
+
+			const toShow = allSects
+				.filter(ele => {
+					const matches = ele
+						.vee.findAll(`.ve-rd__h .entry-title-inner`)
+						.filter(eleSub => eleSub.vee.txt().trim().toLowerCase() === cleanSectionHead);
+					return !!matches.length;
+				});
+
+			if (toShow.length) {
+				BookUtil.curRender.lastRefHeader = sectionHeader.toLowerCase();
+				allSects
+					.forEach(ele => ele.vee.hide());
+				veEm(`hr.ve-rd__hr--section`)
+					.forEach(ele => ele.vee.hide());
+				toShow
+					.forEach(ele => ele.vee.show());
+				MiscUtil.scrollPageTop();
+			} else BookUtil.curRender.lastRefHeader = null;
+
+			return !!toShow.length;
+		}
+	}
+
+	static _showBookContent_goToPage ({mod, isGetHref, bookId, ixChapter}) {
+		const getHashPart = () => {
+			const newHashParts = [bookId, ixChapter + mod];
+			return newHashParts.join(HASH_PART_SEP);
+		};
+
+		const changeChapter = () => {
+			window.location.hash = getHashPart();
+			MiscUtil.scrollPageTop();
+		};
+
+		if (isGetHref) return getHashPart();
+
+		if (BookUtil.referenceId && BookUtil.curRender.lastRefHeader) {
+			const chap = BookUtil.curRender.fromIndex.contents[ixChapter];
+			const ix = chap.headers.findIndex(it => BookUtil.getHeaderText(it).toLowerCase() === BookUtil.curRender.lastRefHeader);
+			if (~ix) {
+				if (chap.headers[ix + mod]) {
+					const newHashParts = [bookId, ixChapter, BookUtil.getHeaderText(chap.headers[ix + mod]).toLowerCase()];
+					window.location.hash = newHashParts.join(HASH_PART_SEP);
+				} else {
+					changeChapter();
+					const nxtHeaders = BookUtil.curRender.fromIndex.contents[ixChapter + mod].headers;
+					const nxtIx = mod > 0 ? 0 : nxtHeaders.length - 1;
+					const newHashParts = [bookId, ixChapter + mod, nxtHeaders[nxtIx].toLowerCase()];
+					window.location.hash = newHashParts.join(HASH_PART_SEP);
+				}
+			} else changeChapter();
+		} else changeChapter();
+	}
+
+	static _showBookContent_renderNavButtons ({isTop, ixChapter, bookId, data}) {
+		const tdStyle = `padding-${isTop ? "top" : "bottom"}: 6px; padding-left: 9px; padding-right: 9px;`;
+		const wrpControls = veT`<div class="ve-split"></div>`;
+
+		veT`<tr><td colspan="6" style="${tdStyle}">${wrpControls}</td></tr>`.vee.appendTo(BookUtil.dispBook);
+
+		const showPrev = ~ixChapter && ixChapter > 0;
+		BookUtil.curRender.controls.btnsPrv = BookUtil.curRender.controls.btnsPrv || [];
+		let btnPrev;
+		if (BookUtil.referenceId) {
+			btnPrev = veT`<button class="ve-btn ve-btn-xs ve-btn-default bk__nav-head-foot-item no-print"><span class="glyphicon glyphicon-chevron-left"></span>Previous</button>`
+				.vee.onn("click", () => this._showBookContent_goToPage({mod: -1, bookId, ixChapter}));
+		} else {
+			btnPrev = veT`<a href="#${this._showBookContent_goToPage({mod: -1, isGetHref: true, bookId, ixChapter})}" class="ve-btn ve-btn-xs ve-btn-default bk__nav-head-foot-item no-print"><span class="glyphicon glyphicon-chevron-left"></span>Previous</a>`
+				.vee.onn("click", () => MiscUtil.scrollPageTop());
+		}
+		btnPrev
+			.vee.toggle(showPrev)
+			.vee.appendTo(wrpControls);
+		BookUtil.curRender.controls.btnsPrv.push(btnPrev);
+
+		(BookUtil.curRender.controls.divsPrv = BookUtil.curRender.controls.divsPrv || [])
+			.push(veT`<div class="bk__nav-head-foot-item no-print"></div>`
+				.vee.toggle(!showPrev)
+				.vee.appendTo(wrpControls));
+
+		if (isTop) this._showBookContent_renderNavButtons_top({bookId, wrpControls});
+		else this._showBookContent_renderNavButtons_bottom({bookId, wrpControls});
+
+		const showNxt = ~ixChapter && ixChapter < data.length - 1;
+		BookUtil.curRender.controls.btnsNxt = BookUtil.curRender.controls.btnsNxt || [];
+		let btnNext;
+		if (BookUtil.referenceId) {
+			btnNext = veT`<button class="ve-btn ve-btn-xs ve-btn-default bk__nav-head-foot-item no-print">Next<span class="glyphicon glyphicon-chevron-right"></span></button>`
+				.vee.onn("click", () => this._showBookContent_goToPage({mod: 1, bookId, ixChapter}));
+		} else {
+			btnNext = veT`<a href="#${this._showBookContent_goToPage({mod: 1, isGetHref: true, bookId, ixChapter})}" class="ve-btn ve-btn-xs ve-btn-default bk__nav-head-foot-item no-print">Next<span class="glyphicon glyphicon-chevron-right"></span></a>`
+				.vee.onn("click", () => MiscUtil.scrollPageTop());
+		}
+		btnNext
+			.vee.toggle(showNxt)
+			.vee.appendTo(wrpControls);
+		BookUtil.curRender.controls.btnsNxt.push(btnNext);
+
+		(BookUtil.curRender.controls.divsNxt = BookUtil.curRender.controls.divsNxt || [])
+			.push(veT`<div class="bk__nav-head-foot-item no-print"></div>`
+				.vee.toggle(!showNxt)
+				.vee.appendTo(wrpControls));
+
+		if (isTop) {
+			BookUtil.wrpFloatControls.vee.empty();
+
+			let btnPrev;
+			if (BookUtil.referenceId) {
+				btnPrev = veT`<button class="ve-btn ve-btn-xxs ve-btn-default"><span class="glyphicon glyphicon-chevron-left"></span></button>`
+					.vee.onn("click", () => this._showBookContent_goToPage({mod: -1, bookId, ixChapter}));
+			} else {
+				btnPrev = veT`<a href="#${this._showBookContent_goToPage({mod: -1, isGetHref: true, bookId, ixChapter})}" class="ve-btn ve-btn-xxs ve-btn-default"><span class="glyphicon glyphicon-chevron-left"></span></a>`
+					.vee.onn("click", () => MiscUtil.scrollPageTop());
+			}
+			btnPrev
+				.vee.toggle(showPrev)
+				.vee.appendTo(BookUtil.wrpFloatControls)
+				.vee.tooltip("Previous Chapter");
+			BookUtil.curRender.controls.btnsPrv.push(btnPrev);
+
+			let btnNext;
+			if (BookUtil.referenceId) {
+				btnNext = veT`<button class="ve-btn ve-btn-xxs ve-btn-default"><span class="glyphicon glyphicon-chevron-right"></span></button>`
+					.vee.onn("click", () => this._showBookContent_goToPage({mod: 1, bookId, ixChapter}));
+			} else {
+				btnNext = veT`<a href="#${this._showBookContent_goToPage({mod: 1, isGetHref: true, bookId, ixChapter})}" class="ve-btn ve-btn-xxs ve-btn-default"><span class="glyphicon glyphicon-chevron-right"></span></a>`
+					.vee.onn("click", () => MiscUtil.scrollPageTop());
+			}
+			btnNext
+				.vee.toggle(showNxt)
+				.vee.appendTo(BookUtil.wrpFloatControls)
+				.vee.tooltip("Next Chapter");
+			BookUtil.curRender.controls.btnsNxt.push(btnNext);
+
+			BookUtil.wrpFloatControls.vee.toggleClass("ve-btn-group", showPrev && showNxt);
+			BookUtil.wrpFloatControls.vee.toggle(!!~ixChapter);
+		}
+	}
+
+	static _TOP_MENU = null;
+
+	static _showBookContent_renderNavButtons_top ({bookId, wrpControls}) {
+		const href = ~this.curRender.chapter
+			? this._getHrefShowAll(bookId)
+			: `#${UrlUtil.encodeForHash(bookId)}`;
+		const btnEntireBook = veT`<a href="${href}" class="ve-btn ve-btn-xs ve-btn-default no-print ${~this.curRender.chapter ? "" : "ve-active"}" title="Warning: Slow">View Entire ${this.contentType.uppercaseFirst()}</a>`;
+
+		if (this._isNarrow == null) {
+			const saved = StorageUtil.syncGetForPage("narrowMode");
+			if (saved != null) this._isNarrow = saved;
+			else this._isNarrow = false;
+		}
+
+		const hdlNarrowUpdate = () => {
+			btnToggleNarrow.vee.toggleClass("ve-active", this._isNarrow);
+			veEs(`#pagecontent`).vee.toggleClass(`bk__stats--narrow`, this._isNarrow);
+		};
+		const btnToggleNarrow = veT`<button class="ve-btn ve-btn-xs ve-btn-default" title="Toggle Narrow Reading Width"><span class="glyphicon glyphicon-resize-small"></span></button>`
+			.vee.onn("click", () => {
+				this._isNarrow = !this._isNarrow;
+				hdlNarrowUpdate();
+				StorageUtil.syncSetForPage("narrowMode", this._isNarrow);
+			});
+		hdlNarrowUpdate();
+
+		if (!this._TOP_MENU) {
+			const doDownloadFullText = () => {
+				DataUtil.userDownloadText(
+					`${this.curRender.fromIndex.name}.md`,
+					this.curRender.data
+						.map(chapter => RendererMarkdown.get().render(chapter))
+						.join("\n\n------\n\n"),
+				);
+			};
+
+			this._TOP_MENU = ContextUtil.getMenu([
+				new ContextUtil.Action(
+					"Download Chapter as Markdown",
+					() => {
+						if (!~BookUtil.curRender.chapter) return doDownloadFullText();
+
+						const contentsInfo = this.curRender.fromIndex.contents[this.curRender.chapter];
+						DataUtil.userDownloadText(
+							`${this.curRender.fromIndex.name} - ${Parser.bookOrdinalToAbv(contentsInfo.ordinal, {isPlainText: true}).replace(/:/g, "")}${contentsInfo.name}.md`,
+							RendererMarkdown.get().render(this.curRender.data[this.curRender.chapter]),
+						);
+					},
+				),
+				new ContextUtil.Action(
+					`Download ${this.typeTitle} as Markdown`,
+					() => {
+						doDownloadFullText();
+					},
+				),
+			]);
+		}
+
+		const btnMenu = veT`<button class="ve-btn ve-btn-xs ve-btn-default" title="Other Options"><span class="glyphicon glyphicon-option-vertical"></span></button>`
+			.vee.onn("click", evt => ContextUtil.pOpenMenu(evt, this._TOP_MENU));
+
+		veT`<div class="no-print ve-flex-v-center ve-btn-group">${btnEntireBook}${btnToggleNarrow}${btnMenu}</div>`.vee.appendTo(wrpControls);
+	}
+
+	static _showBookContent_renderNavButtons_bottom ({bookId, wrpControls}) {
+		veT`<button class="ve-btn ve-btn-xs ve-btn-default no-print">Back to Top</button>`
+			.vee.onn("click", () => MiscUtil.scrollPageTop())
+			.vee.appendTo(wrpControls);
+	}
+
+	static _showBookContent_updateSidebar ({ixChapter, ixChapterPrev, bookIdPrev, bookId}) {
+		if (ixChapter === ixChapterPrev && bookIdPrev === bookId) return;
+
+		// region Add highlight to current section
+		if (!~ixChapter) {
+			// In full-book mode, remove all highlights
+			BookUtil.curRender.lnksChapter.forEach(lnk => lnk.vee.removeClass("bk__head-chapter--active"));
+			Object.values(BookUtil.curRender.lnksHeader).forEach(lnks => {
+				lnks.forEach(lnk => lnk.vee.removeClass("bk__head-section--active"));
+			});
+		} else {
+			// In regular chapter mode, add highlights to the appropriate section
+			if (ixChapterPrev != null && ~ixChapterPrev) {
+				if (BookUtil.curRender.lnksChapter[ixChapterPrev]) {
+					BookUtil.curRender.lnksChapter[ixChapterPrev].vee.removeClass("bk__head-chapter--active");
+					(BookUtil.curRender.lnksHeader[ixChapterPrev] || []).forEach(lnk => lnk.vee.removeClass("bk__head-section--active"));
+				}
+			}
+
+			BookUtil.curRender.lnksChapter[ixChapter].vee.addClass("bk__head-chapter--active");
+			(BookUtil.curRender.lnksHeader[ixChapter] || []).forEach(lnk => lnk.vee.addClass("bk__head-section--active"));
+			BookUtil.curRender.wrpLnksHeader[ixChapter].scrollIntoView({block: "nearest", inline: "nearest"});
+		}
+		// endregion
+
+		// region Toggle section expanded/not expanded
+		// In full-book mode, expand all the sections
+		if (!~ixChapter) {
+			// If we're in "show all mode," collapse all first, then show all. Otherwise, show all.
+			if (BookUtil.curRender.btnToggleExpandAll.vee.txt() === "[\u2212]") BookUtil.curRender.btnToggleExpandAll.vee.trigger("click");
+			BookUtil.curRender.btnToggleExpandAll.vee.trigger("click");
+			return;
+		}
+
+		if (BookUtil.curRender.btnsToggleExpand[ixChapter] && BookUtil.curRender.btnsToggleExpand[ixChapter].vee.txt() === "[+]") BookUtil.curRender.btnsToggleExpand[ixChapter].vee.trigger("click");
+		// endregion
+	}
+
+	/**
+	 * Update the Previous/Next/To Top buttons at the top/bottom of the page
+	 */
+	static _showBookContent_updateControls ({ixChapter, data}) {
+		if (BookUtil.referenceId) {
+			const cnt = BookUtil.curRender.controls;
+
+			if (~ixChapter) {
+				const chap = BookUtil.curRender.fromIndex.contents[ixChapter];
+				const headerIx = chap.headers.findIndex(it => BookUtil.getHeaderText(it).toLowerCase() === BookUtil.curRender.lastRefHeader);
+				const renderPrev = ixChapter > 0 || (~headerIx && headerIx > 0);
+				const renderNxt = ixChapter < data.length - 1 || (~headerIx && headerIx < chap.headers.length - 1);
+				cnt.btnsPrv.forEach(ele => ele.vee.toggle(!!renderPrev));
+				cnt.btnsNxt.forEach(ele => ele.vee.toggle(!!renderNxt));
+				cnt.divsPrv.forEach(ele => ele.vee.toggle(!renderPrev));
+				cnt.divsNxt.forEach(ele => ele.vee.toggle(!renderNxt));
+			} else {
+				cnt.btnsPrv.forEach(ele => ele.vee.toggle(false));
+				cnt.btnsNxt.forEach(ele => ele.vee.toggle(false));
+				cnt.divsPrv.forEach(ele => ele.vee.toggle(true));
+				cnt.divsNxt.forEach(ele => ele.vee.toggle(true));
+			}
+		}
+	}
+
+	/* -------------------------------------------- */
+
+	static async pInit () {
+		this._initLinkGrabbers();
+		this._initScrollTopFloat();
+		this._initLinkReNav();
+		await this._pInitLibraries();
+	}
+
+	static _initLinkGrabbers () {
+		veE({ele: document.body})
+			.vee.onn(`mousedown`, (evt) => {
+				if (!evt.target.classList.contains(`entry-title-inner`)) return;
+				evt.preventDefault();
+			})
+			.vee.onn(`click`, async (evt) => {
+				if (!evt.target.classList.contains(`entry-title-inner`)) return;
+
+				const ele = veE({ele: evt.target});
+				const text = ele.vee.txt().trim().replace(/\.$/, "");
+
+				const hashParts = [BookUtil.curRender.chapter, text, ele.vee.parent().vee.attr("data-title-relative-index")].map(it => UrlUtil.encodeForHash(it));
+				const url = [`${window.location.href.split("#")[0]}#${BookUtil.curRender.curBookId}`, ...hashParts].join(HASH_PART_SEP);
+
+				if (EventUtil.isCtrlMetaKey(evt)) {
+					window.location.href = url;
+					JqueryUtil.showCopiedEffect(ele, {text: "Moved to link!"});
+					return;
+				}
+
+				if (evt.shiftKey) {
+					await MiscUtil.pCopyTextToClipboard(text);
+					JqueryUtil.showCopiedEffect(ele);
+					return;
+				}
+
+				await MiscUtil.pCopyTextToClipboard(url);
+				JqueryUtil.showCopiedEffect(ele, {text: "Copied link!"});
+			});
+	}
+
+	static _initScrollTopFloat () {
+		const wrpScrollTop = OmnisearchUtilsUi.addScrollTopFloat();
+		BookUtil.wrpFloatControls = veT`<div class="ve-flex-vh-center ve-w-100 ve-mb-2 ve-btn-group"></div>`.vee.prependTo(wrpScrollTop);
+	}
+
+	static _initLinkReNav () {
+		veE({ele: document.body})
+			.vee.onn("click", evt => {
+				if (evt.target.tagName !== "A") return;
+				BookUtil._handleCheckReNav(veE({ele: evt.target}));
+			});
+	}
+
+	static async _pInitLibraries () {
+		const {polylabel} = await import("../lib/polylabel.js");
+		globalThis.polylabel = polylabel;
+	}
+
+	/* -------------------------------------------- */
+
+	// custom loading to serve multiple sources
+	static async booksHashChange () {
+		const wrpContents = veEs("#lst-contents");
+
+		const [bookIdRaw, ...hashParts] = Hist.util.getHashParts(window.location.hash, {isReturnEncoded: true});
+		const bookId = decodeURIComponent(bookIdRaw);
+
+		if (!bookId) {
+			this._booksHashChange_noContent({wrpContents});
+			return;
+		}
+
+		const isNewBook = BookUtil.curRender.curBookId !== bookId;
+
+		// Handle "page:" parts
+		if (hashParts.some(it => it.toLowerCase().startsWith("page:"))) {
+			let term = "";
+
+			// Remove the "page" parts, and save the first one found
+			for (let i = 0; i < hashParts.length; ++i) {
+				const hashPart = hashParts[i];
+				if (hashPart.toLowerCase().startsWith("page:")) {
+					if (!term) term = hashPart.toLowerCase().split(":")[1];
+					hashParts.splice(i, 1);
+					i--;
+				}
+			}
+
+			// Stash the page for later use
+			BookUtil._pendingPageFromHash = term;
+
+			// Re-start the hashchange with our clean hash
+			Hist.replaceHistoryHash([bookIdRaw, ...hashParts].join(HASH_PART_SEP));
+			return BookUtil.booksHashChange();
+		}
+
+		// if current chapter is -1 (full book mode), and a chapter is specified, override + stay in full-book mode
+		if (
+			BookUtil.curRender.chapter === -1
+			&& hashParts.length && hashParts[0] !== "-1"
+			&& UrlUtil.encodeForHash(BookUtil.curRender.curBookId) === UrlUtil.encodeForHash(bookId)
+		) {
+			// Offset any unspecified header indices (i.e. those likely originating from sidebar header clicks) to match
+			//   their chapter.
+			const [headerName, headerIndex] = hashParts.slice(1);
+			if (headerName && !headerIndex) {
+				const headerNameClean = decodeURIComponent(headerName).trim().toLowerCase();
+				const chapterNum = Number(hashParts[0]);
+				const minChapterHeaderIx = BookUtil.curRender.allViewFirstTitleIndexes[chapterNum];
+				const offsetHeaderIndex = Object.entries(BookUtil._renderer.getTrackedTitles())
+					.filter(([ix, header]) => Number(ix) <= minChapterHeaderIx && header.toLowerCase().trim() === headerNameClean)
+					.length;
+				hashParts[2] = `${offsetHeaderIndex}`;
+			}
+
+			Hist.replaceHistoryHash([bookIdRaw, -1, ...hashParts.slice(1)].join(HASH_PART_SEP));
+			return BookUtil.booksHashChange();
+		}
+
+		const fromIndex = BookUtil.bookIndex.find(bk => UrlUtil.encodeForHash(bk.id) === UrlUtil.encodeForHash(bookId));
+		if (fromIndex) {
+			return this._booksHashChange_pHandleFound({fromIndex, bookId, hashParts, wrpContents, isNewBook});
+		}
+
+		// if it's prerelease/homebrew
+		if (await this._booksHashChange_pDoLoadPrerelease({bookId, wrpContents, hashParts, isNewBook})) return;
+		if (await this._booksHashChange_pDoLoadBrew({bookId, wrpContents, hashParts, isNewBook})) return;
+
+		// if it's prerelease/homebrew but hasn't been loaded
+		if (await this._booksHashChange_pDoFetchPrereleaseBrew({bookId, wrpContents, hashParts, isNewBook})) return;
+
+		return this._booksHashChange_handleNotFound({wrpContents, bookId});
+	}
+
+	static async _booksHashChange_pDoLoadPrerelease ({bookId, wrpContents, hashParts, isNewBook}) {
+		return this._booksHashChange_pDoLoadPrereleaseBrew({bookId, wrpContents, hashParts, isNewBook, brewUtil: PrereleaseUtil, propIndex: "bookIndexPrerelease"});
+	}
+
+	static async _booksHashChange_pDoLoadBrew ({bookId, wrpContents, hashParts, isNewBook}) {
+		return this._booksHashChange_pDoLoadPrereleaseBrew({bookId, wrpContents, hashParts, isNewBook, brewUtil: BrewUtil2, propIndex: "bookIndexBrew"});
+	}
+
+	static async _booksHashChange_pDoLoadPrereleaseBrew ({bookId, wrpContents, hashParts, isNewBook, brewUtil, propIndex}) {
+		const fromIndexBrew = BookUtil[propIndex].find(bk => UrlUtil.encodeForHash(bk.id) === UrlUtil.encodeForHash(bookId));
+		if (!fromIndexBrew) return false;
+
+		const brew = await brewUtil.pGetBrewProcessed();
+		if (!brew[BookUtil.propHomebrewData]) return false;
+
+		const bookData = (brew[BookUtil.propHomebrewData] || [])
+			.find(bk => UrlUtil.encodeForHash(bk.id) === UrlUtil.encodeForHash(bookId));
+
+		if (!bookData) {
+			this._booksHashChange_handleNotFound({wrpContents, bookId});
+			return true; // We found the book, just not its data
+		}
+
+		await this._booksHashChange_pHandleFound({fromIndex: fromIndexBrew, homebrewData: bookData, bookId, hashParts, wrpContents, isNewBook});
+		return true;
+	}
+
+	static async _booksHashChange_pDoFetchPrereleaseBrew ({bookId, wrpContents, hashParts, isNewBook}) {
+		const {source} = await UrlUtil.pAutoDecodeHash(bookId);
+
+		const loaded = await DataLoader.pCacheAndGetHash(UrlUtil.getCurrentPage(), bookId, {isSilent: true});
+		if (!loaded) return false;
+
+		return [
+			PrereleaseUtil,
+			BrewUtil2,
+		]
+			.some(brewUtil => {
+				if (
+					brewUtil.hasSourceJson(source)
+					&& brewUtil.isReloadRequired()
+				) {
+					brewUtil.doLocationReload({isRetainHash: true});
+					return true;
+				}
+			});
+	}
+
+	static _booksHashChange_getCleanName (fromIndex) {
+		if (fromIndex.parentSource) {
+			const fullParentSource = Parser.sourceJsonToFull(fromIndex.parentSource);
+			return fromIndex.name.replace(new RegExp(`^${fullParentSource.escapeRegexp()}: `, "i"), `<span title="${Parser.sourceJsonToFull(fromIndex.parentSource).qq()}">${Parser.sourceJsonToAbv(fromIndex.parentSource).qq()}</span>: `);
+		}
+		if (fromIndex.group === "screen") {
+			return fromIndex.name
+				.replace(/^Dungeon Master's Screen([;:] )/, (...m) => `DM Screen${m[1]}`);
+		}
+		return fromIndex.name;
+	}
+
+	static async _booksHashChange_pHandleFound ({fromIndex, homebrewData, bookId, hashParts, wrpContents, isNewBook}) {
+		document.title = `${fromIndex.name} - 5etools`;
+		veEs(`#page__title`).vee.html(this._booksHashChange_getCleanName(fromIndex));
+		veEs(`#page__subtitle`).vee.html("Browse content. Press F to find, and G to go to page.");
+		await this._pLoadChapter(fromIndex, bookId, hashParts, homebrewData, wrpContents);
+		NavBar.highlightCurrentPage();
+		if (isNewBook) MiscUtil.scrollPageTop();
+	}
+
+	static _booksHashChange_noContent ({wrpContents}) {
+		this._doPopulateContents({wrpContents});
+
+		BookUtil.dispBook.vee.empty().vee.html(`<tr><th class="ve-tbl-border" colspan="6"></th></tr>
+			<tr><td colspan="6" class="initial-message initial-message--med book-loading-message">Please select ${Parser.getArticle(BookUtil.contentType)} ${BookUtil.contentType} to view!</td></tr><tr><th class="ve-tbl-border" colspan="6"></th></tr>`);
+
+		this._removeLoadingOverlay();
+	}
+
+	static _booksHashChange_handleNotFound ({wrpContents, bookId}) {
+		if (!window.location.hash) return window.history.back();
+
+		wrpContents.vee.empty();
+		BookUtil.dispBook.vee.empty().vee.html(`<tr><th class="ve-tbl-border" colspan="6"></th></tr>
+			<tr><td colspan="6" class="initial-message initial-message--med book-loading-message">Loading failed\u2014could not find ${Parser.getArticle(BookUtil.contentType)} ${BookUtil.contentType} with ID "${bookId}". You may need to add it as homebrew first.</td></tr><tr><th class="ve-tbl-border" colspan="6"></th></tr>`);
+
+		this._removeLoadingOverlay();
+
+		throw new Error(`No book with ID: ${bookId}`);
+	}
+
+	static _handlePageFromHash (pageTerm) {
+		// Find the first result, and jump to it if it exists
+		const found = BookUtil.Search.doSearch(pageTerm, true);
+		if (found.length) {
+			const firstFound = found[0];
+			const nxtHash = BookUtil.Search.getResultHash(BookUtil.curRender.curBookId, firstFound);
+			Hist.replaceHistoryHash(nxtHash);
+			return BookUtil.booksHashChange();
+		} else {
+			JqueryUtil.doToast({type: "warning", content: `Could not find page ${pageTerm}!`});
+		}
+	}
+
+	static async _pLoadChapter (fromIndex, bookId, hashParts, homebrewData, wrpContents) {
+		const data = homebrewData || (await DataUtil.loadJSON(`${BookUtil.baseDataUrl}${bookId.toLowerCase()}.json`));
+
+		const isInitialLoad = BookUtil.curRender.curBookId !== bookId;
+
+		if (isInitialLoad) this._doPopulateContents({wrpContents, book: fromIndex});
+
+		BookUtil._showBookContent(BookUtil.referenceId ? data.data[BookUtil.referenceId] : data.data, fromIndex, bookId, hashParts);
+
+		if (isInitialLoad) BookUtil._addSearch(fromIndex, bookId);
+	}
+
+	static _doPopulateContents ({wrpContents, book}) {
+		wrpContents.vee.html(BookUtil.allPageUrl ? `<div><a href="${BookUtil.allPageUrl}" class="ve-lst__row-border ve-lst__row-inner"><span class="ve-bold">\u21FD ${this._getAllTitle()}</span></a></div>` : "");
+
+		if (book) BookUtil._getRenderedContents({book}).vee.appendTo(wrpContents);
+	}
+
+	static _getAllTitle () {
+		switch (BookUtil.contentType) {
+			case "adventure": return "All Adventures";
+			case "book": return "All Books";
+			default: throw new Error(`Unhandled book content type: "${BookUtil.contentType}"`);
+		}
+	}
+
+	static _handleReNav (lnk) {
+		const hash = window.location.hash.slice(1).toLowerCase();
+		const linkHash = (lnk.vee.attr("href").split("#")[1] || "").toLowerCase();
+		if (hash !== linkHash) return;
+		BookUtil.booksHashChange().then(null);
+	}
+
+	static _addSearch (indexData, bookId) {
+		veE({ele: document.body})
+			.vee.onn("click", () => {
+				if (BookUtil._findAll) BookUtil._findAll.remove();
+			});
+
+		veE({ele: document.body})
+			.vee.onn("keypress", (evt) => {
+				const key = EventUtil.getKeyIgnoreCapsLock(evt);
+				if ((key !== "f" && key !== "g") || !EventUtil.noModifierKeys(evt)) return;
+				if (EventUtil.isInInput(evt)) return;
+				evt.preventDefault();
+				BookUtil._showSearchBox(indexData, bookId, key === "g");
+			});
+
+		// region Mobile only "open find bar" buttons
+		const btnToTop = veT`<button class="ve-btn ve-btn-default ve-btn-sm no-print ve-bbl-0" title="To Top"><span class="glyphicon glyphicon-arrow-up"></span></button>`
+			.vee.onn("click", evt => {
+				evt.stopPropagation();
+				MiscUtil.scrollPageTop();
+			});
+
+		const btnOpenFind = veT`<button class="ve-btn ve-btn-default ve-btn-sm no-print" title="Find"><kbd>F</kbd></button>`
+			.vee.onn("click", evt => {
+				evt.stopPropagation();
+				BookUtil._showSearchBox(indexData, bookId, false);
+			});
+
+		const btnOpenGoto = veT`<button class="ve-btn ve-btn-default ve-btn-sm no-print ve-bbr-0" title="Go to Page"><kbd>G</kbd></button>`
+			.vee.onn("click", evt => {
+				evt.stopPropagation();
+				BookUtil._showSearchBox(indexData, bookId, true);
+			});
+
+		veEm(`.bk__wrp-btns-open-find`)
+			.forEach(ele => ele.remove());
+		veT`<div class="ve-mobile-sm__visible bk__wrp-btns-open-find ve-btn-group">
+			${btnToTop}${btnOpenFind}${btnOpenGoto}
+		</div>`.vee.appendTo(document.body);
+	}
+
+	static _showSearchBox (indexData, bookId, isPageMode) {
+		veEm(`span.temp`)
+			.forEach(ele => {
+				const eleParent = ele.vee.parent();
+				while (ele.firstChild) eleParent.insertBefore(ele.firstChild, ele);
+				ele.remove();
+			});
+		BookUtil._lastHighlight = null;
+		if (BookUtil._findAll) BookUtil._findAll.remove();
+		BookUtil._findAll = veT`<div class="f-all-wrapper"></div>`
+			.vee.onn("click", (evt) => {
+				evt.stopPropagation();
+			});
+
+		const wrpResults = veT`<div class="f-all-out"></div>`
+			.vee.hide();
+
+		const iptSearch = veT`<input class="ve-form-control" placeholder="${isPageMode ? "Go to page number..." : "Find text..."}">`
+			.vee.onn("keydown", (evt) => {
+				evt.stopPropagation();
+
+				if (evt.key === "Escape" && EventUtil.noModifierKeys(evt)) {
+					BookUtil._findAll.remove();
+					return;
+				}
+
+				if (evt.key !== "Enter" || !EventUtil.noModifierKeys(evt)) return;
+
+				const term = iptSearch.vee.val();
+				if (isPageMode) {
+					if (!/^\d+$/.exec(term.trim())) {
+						return JqueryUtil.doToast({
+							content: `Please enter a valid page number.`,
+							type: "danger",
+						});
+					}
+				}
+
+				wrpResults.vee.html("");
+
+				const foundEntryInfos = BookUtil.Search.doSearch(term, isPageMode);
+
+				if (!foundEntryInfos.length) {
+					wrpResults.vee.hide();
+					return;
+				}
+
+				wrpResults.vee.show();
+				foundEntryInfos
+					.forEach(foundEntryInfo => {
+						const row = veT`<p class="f-result"></p>`;
+						const ptLink = veT`<span></span>`;
+						const isLitTitle = foundEntryInfo.headerMatches && !foundEntryInfo.page;
+						const link = veT`<a href="#${BookUtil.Search.getResultHash(bookId, foundEntryInfo)}">
+								<i>${Parser.bookOrdinalToAbv(indexData.contents[foundEntryInfo.ch].ordinal)} ${indexData.contents[foundEntryInfo.ch].name}${foundEntryInfo.header ? ` \u2013 ${isLitTitle ? `<span class="ve-highlight">` : ""}${foundEntryInfo.header}${isLitTitle ? `</span>` : ""}` : ""}</i>
+							</a>`
+							.vee.onn("click", () => BookUtil._handleCheckReNav(link));
+						ptLink.vee.appends(link);
+						row.vee.appends(ptLink);
+
+						if (!isPageMode && foundEntryInfo.previews) {
+							const lnkPreview = veT`<a href="#${BookUtil.Search.getResultHash(bookId, foundEntryInfo)}"></a>`
+								.vee.appendTo(row);
+
+							const re = new RegExp(foundEntryInfo.term.escapeRegexp(), "gi");
+
+							lnkPreview.vee.onn("click", () => {
+								BookUtil._handleCheckReNav(lnkPreview);
+
+								setTimeout(() => {
+									if (BookUtil._lastHighlight === null || BookUtil._lastHighlight !== foundEntryInfo.term.toLowerCase()) {
+										BookUtil._lastHighlight = foundEntryInfo.term;
+										const searchTerm = foundEntryInfo.term.toLowerCase().trim();
+										veEs(`#pagecontent`)
+											.vee.findAll(`p, li, td, a`)
+											.filter(ele => {
+												const matchingNodes = Array.from(ele.childNodes)
+													.filter(eleChild => eleChild.nodeType === Node.TEXT_NODE)
+													.filter(eleChild => eleChild.nodeValue.toLowerCase().trim().includes(`${searchTerm}`));
+												return !!matchingNodes.length;
+											})
+											.forEach(ele => {
+												ele.vee.html(
+													ele.vee.html().replace(re, "<span class='temp ve-highlight'>$&</span>"),
+												);
+											});
+									}
+								}, 15);
+							});
+
+							lnkPreview.vee.html(
+								foundEntryInfo.previews
+									.map(ptPreview => `<span>${ptPreview}</span>`)
+									.join(" ... "),
+							);
+
+							link.vee.onn("click", () => lnkPreview.vee.trigger("click"));
+						} else {
+							if (foundEntryInfo.page) {
+								const ptPage = veT`<span>Page ${foundEntryInfo.page}</span>`;
+								row.vee.appends(ptPage);
+							}
+						}
+
+						wrpResults.vee.appends(row);
+					});
+			});
+		BookUtil._findAll.vee.appends(iptSearch).vee.appends(wrpResults);
+
+		veE({ele: document.body}).vee.appends(BookUtil._findAll);
+
+		iptSearch.vee.focus();
+	}
+
+	static _getRenderedContents (options) {
+		const book = options.book;
+
+		BookUtil.curRender.btnsToggleExpand = [];
+		BookUtil.curRender.lnksChapter = [];
+		BookUtil.curRender.lnksHeader = {};
+		BookUtil.curRender.wrpLnksHeader = {};
+
+		BookUtil.curRender.btnToggleExpandAll = veT`<span title="Expand All" class="ve-px-2 ve-bold ve-py-1p ve-no-select ve-clickable ve-no-select">${BookUtil.isDefaultExpandedContents ? `[\u2212]` : `[+]`}</span>`
+			.vee.onn("click", () => {
+				const isExpanded = BookUtil.curRender.btnToggleExpandAll.vee.txt() !== `[+]`;
+				BookUtil.curRender.btnToggleExpandAll.vee.txt(isExpanded ? `[+]` : `[\u2212]`).vee.tooltip(isExpanded ? `Collapse All` : `Expand All`);
+
+				BookUtil.curRender.btnsToggleExpand.forEach(btn => {
+					if (!btn) return;
+					if (btn.vee.txt() !== BookUtil.curRender.btnToggleExpandAll.vee.txt()) btn.vee.trigger("click");
+				});
+			});
+
+		const eles = [];
+		options.book.contents.map((chapter, ixChapter) => {
+			const btnToggleExpand = !chapter.headers ? null : veT`<span class="ve-px-2 ve-bold">[\u2212]</span>`
+				.vee.onn("click", evt => {
+					BookUtil._sectToggle(evt, btnToggleExpand, chapterBlock);
+				});
+			BookUtil.curRender.btnsToggleExpand.push(btnToggleExpand);
+
+			const lnk = veT`<a href="${options.isAddPrefix || ""}#${UrlUtil.encodeForHash(options.book.id)},${ixChapter}" class="ve-lst__row-border ve-lst__row-inner ve-lst__row ve-lst__wrp-cells ve-bold">
+					<span class="ve-w-100">${Parser.bookOrdinalToAbv(chapter.ordinal)}${chapter.name}</span>
+					${btnToggleExpand}
+			</a>`
+				.vee.onn("click", () => BookUtil._scrollPageTop(ixChapter));
+			BookUtil.curRender.lnksChapter.push(lnk);
+
+			const header = veT`<div class="ve-flex-col">${lnk}</div>`;
+			eles.push(header);
+
+			const chapterBlock = BookUtil._getContentsChapterBlock({bookId: options.book.id, ixChapter, chapter, isAddPrefix: options.isAddPrefix});
+			eles.push(chapterBlock);
+
+			if (!BookUtil.isDefaultExpandedContents && btnToggleExpand) BookUtil._sectToggle(null, btnToggleExpand, chapterBlock);
+		});
+
+		return veT`<div class="contents-item" data-bookid="${UrlUtil.encodeForHash(book.id)}">
+			<div class="bk__contents-header">
+				<a href="#${UrlUtil.encodeForHash(book.id)}" class="bk__contents_header_link ve-lst__wrp-cells ve-lst__row-inner ve-bold" title="${book.name}">
+					<span class="name">${book.name}</span>
+				</a>
+				<div class="ve-flex-v-center">
+					<a href="${this._getHrefShowAll(book.id)}" class="bk__contents_show_all ve-px-2 ve-py-1p ve-flex-v-center ve-lst__wrp-cells ve-lst__row-inner" title="View Entire ${BookUtil.contentType.uppercaseFirst()} (Warning: Slow)">
+						<span class="glyphicon glyphicon glyphicon-book" style="top: 0;"></span>
+					</a>
+					${BookUtil.curRender.btnToggleExpandAll}
+				</div>
+			</div>
+			<div class="bk-contents ve-pl-4 ve-ml-2">
+				${eles}
+			</div>
+		</div>`;
+	}
+
+	static _getContentsSectionHeader (header) {
+		// handle entries with depth
+		if (header.depth) return `<span class="bk-contents__sub_spacer--1">\u2013</span>${header.header}`;
+		if (header.header) return header.header;
+		return header;
+	}
+
+	static _getContentsChapterBlock ({bookId, ixChapter, chapter, isAddPrefix = false}) {
+		const headerCounts = {};
+
+		const eles = [];
+
+		chapter.headers && chapter.headers.forEach(h => {
+			const headerText = BookUtil.getHeaderText(h);
+
+			const headerTextClean = headerText.toLowerCase().trim();
+			const headerPos = headerCounts[headerTextClean] || 0;
+			headerCounts[headerTextClean] = (headerCounts[headerTextClean] || 0) + 1;
+
+			// (Prefer the user-specified `h.index` over the auto-calculated headerPos)
+			const headerIndex = h.index ?? headerPos;
+
+			const displayText = this._getContentsSectionHeader(h);
+
+			const lnk = veT`<a href="${isAddPrefix || ""}#${UrlUtil.encodeForHash(bookId)},${ixChapter},${UrlUtil.encodeForHash(headerText)}${headerIndex > 0 ? `,${headerIndex}` : ""}" data-book="${bookId}" data-chapter="${ixChapter}" data-header="${headerText.escapeQuotes()}" class="ve-lst__row ve-lst__row-border ve-lst__row-inner ve-lst__wrp-cells">${displayText}</a>`
+				.vee.onn("click", () => {
+					BookUtil._scrollClick(ixChapter, headerText, headerIndex);
+				});
+
+			const lnkEle = veT`<div class="ve-flex-col">
+				${lnk}
+			</div>`;
+			eles.push(lnkEle);
+
+			(this.curRender.lnksHeader[ixChapter] ||= []).push(lnk);
+		});
+
+		const wrpLnksHeader = veT`<div class="ve-flex-col ve-pl-4 ve-ml-2">
+			${eles}
+		</div>`;
+
+		this.curRender.wrpLnksHeader[ixChapter] = wrpLnksHeader;
+
+		return wrpLnksHeader;
+	}
+
+	static _handleCheckReNav (lnk) {
+		BookUtil._LAST_CLICKED_LINK = lnk;
+
+		if (`#${lnk.getAttribute("href").split("#")[1] || ""}` === window.location.hash) BookUtil._handleReNav(lnk);
+	}
+
+	static _getHrefShowAll (bookId) { return `#${UrlUtil.encodeForHash(bookId)},-1`; }
+}
+// region Last render/etc
+BookUtil.curRender = {
+	curBookId: "NONE",
+	chapter: null, // -1 represents "entire book"
+	data: {},
+	fromIndex: {},
+	lastRefHeader: null,
+	controls: {},
+	headerMap: {},
+	allViewFirstTitleIndexes: [], // A list of "data-title-index"s for the first rendered title in each rendered chapter
+	btnToggleExpandAll: null,
+	btnsToggleExpand: [],
+
+	lnksChapter: [],
+	lnksHeader: {},
+	wrpLnksHeader: {},
+};
+BookUtil._LAST_CLICKED_LINK = null;
+BookUtil._isNarrow = null;
+// endregion
+
+// region Hashchange
+BookUtil.baseDataUrl = "";
+BookUtil.allPageUrl = "";
+BookUtil.bookIndex = [];
+BookUtil.bookIndexPrerelease = [];
+BookUtil.bookIndexBrew = [];
+BookUtil.propHomebrewData = null;
+BookUtil.typeTitle = null;
+BookUtil.dispBook = null;
+BookUtil.referenceId = false;
+BookUtil.contentType = null; // one of "book" "adventure" or "document"
+BookUtil.wrpFloatControls = null;
+BookUtil.isDefaultExpandedContents = false;
+// endregion
+
+BookUtil._pendingPageFromHash = null;
+
+BookUtil._renderer = new Renderer().setEnumerateTitlesRel(true).setTrackTitles(true);
+
+BookUtil._findAll = null;
+BookUtil._headerCounts = null;
+BookUtil._lastHighlight = null;
+
+BookUtil.Search = class {
+	static _EXTRA_WORDS = 2;
+
+	static getResultHash (bookId, found) {
+		return `${UrlUtil.encodeForHash(bookId)}${HASH_PART_SEP}${~BookUtil.curRender.chapter ? found.ch : -1}${found.header ? `${HASH_PART_SEP}${UrlUtil.encodeForHash(found.header)}${HASH_PART_SEP}${found.headerIndex}` : ""}`;
+	}
+
+	static doSearch (term, isPageMode) {
+		if (term == null) return;
+		term = term.trim();
+
+		if (isPageMode) {
+			if (isNaN(term)) return [];
+			else term = Number(term);
+		} else {
+			if (!term) return [];
+		}
+
+		const out = [];
+
+		const toSearch = BookUtil.curRender.data;
+		toSearch.forEach((section, i) => {
+			BookUtil._headerCounts = {};
+			BookUtil.Search._searchEntriesFor(i, out, term, section, isPageMode);
+		});
+
+		// If we're in page mode, try hard to identify _something_ to display
+		if (isPageMode && !out.length) {
+			const [closestPrevPage, closestNextPage] = BookUtil.Search._getClosestPages(toSearch, term);
+
+			toSearch.forEach((section, i) => {
+				BookUtil.Search._searchEntriesFor(i, out, closestPrevPage, section, true);
+				if (closestNextPage !== closestPrevPage) BookUtil.Search._searchEntriesFor(i, out, closestNextPage, section, true);
+			});
+		}
+
+		return out;
+	}
+
+	static _searchEntriesFor (chapterIndex, appendTo, term, obj, isPageMode) {
+		BookUtil._headerCounts = {};
+
+		const cleanTerm = isPageMode ? term : term.toLowerCase();
+
+		BookUtil.Search._searchEntriesForRecursive(chapterIndex, "", appendTo, term, cleanTerm, obj, isPageMode);
+	}
+
+	static _searchEntriesForRecursive (chapterIndex, prevLastName, appendTo, term, cleanTerm, obj, isPageMode) {
+		if (BookUtil.Search._isNamedEntry(obj)) {
+			const cleanName = Renderer.stripTags(obj.name);
+			if (BookUtil._headerCounts[cleanName] === undefined) BookUtil._headerCounts[cleanName] = 0;
+			else BookUtil._headerCounts[cleanName]++;
+		}
+
+		let lastName;
+		if (BookUtil.Search._isNamedEntry(obj)) {
+			lastName = Renderer.stripTags(obj.name);
+			const matches = isPageMode ? obj.page === cleanTerm : lastName.toLowerCase().includes(cleanTerm);
+			if (matches) {
+				appendTo.push({
+					ch: chapterIndex,
+					header: lastName,
+					headerIndex: BookUtil._headerCounts[lastName],
+					term,
+					headerMatches: true,
+					page: obj.page,
+				});
+			}
+		} else {
+			lastName = prevLastName;
+		}
+
+		if (obj.entries) {
+			obj.entries.forEach(e => BookUtil.Search._searchEntriesForRecursive(chapterIndex, lastName, appendTo, term, cleanTerm, e, isPageMode));
+		} else if (obj.items) {
+			obj.items.forEach(e => BookUtil.Search._searchEntriesForRecursive(chapterIndex, lastName, appendTo, term, cleanTerm, e, isPageMode));
+		} else if (obj.rows) {
+			obj.rows.forEach(r => {
+				const toSearch = r.row ? r.row : r;
+				toSearch.forEach(c => BookUtil.Search._searchEntriesForRecursive(chapterIndex, lastName, appendTo, term, cleanTerm, c, isPageMode));
+			});
+		} else if (obj.tables) {
+			obj.tables.forEach(t => BookUtil.Search._searchEntriesForRecursive(chapterIndex, lastName, appendTo, term, cleanTerm, t, isPageMode));
+		} else if (obj.entry) {
+			BookUtil.Search._searchEntriesForRecursive(chapterIndex, lastName, appendTo, term, cleanTerm, obj.entry, isPageMode);
+		} else if (typeof obj === "string" || typeof obj === "number") {
+			if (isPageMode) return;
+
+			const html = Renderer.get().withSetRenderHeaderIndex(false, renderer => renderer.render(obj));
+			const rendered = veT`<div>${html}</div>`.vee.txt();
+
+			const toCheck = typeof obj === "number" ? String(rendered) : rendered.toLowerCase();
+			if (toCheck.includes(cleanTerm)) {
+				if (!appendTo.length || (!(appendTo[appendTo.length - 1].header === lastName && appendTo[appendTo.length - 1].headerIndex === BookUtil._headerCounts[lastName] && appendTo[appendTo.length - 1].previews))) {
+					const first = toCheck.indexOf(cleanTerm);
+					const last = toCheck.lastIndexOf(cleanTerm);
+
+					const slices = [];
+					if (first === last) {
+						slices.push(getSubstring(rendered, first, first));
+					} else {
+						slices.push(getSubstring(rendered, first, first + `${cleanTerm}`.length));
+						slices.push(getSubstring(rendered, last, last + `${cleanTerm}`.length));
+					}
+					appendTo.push({
+						ch: chapterIndex,
+						header: lastName,
+						headerIndex: BookUtil._headerCounts[lastName],
+						previews: slices.map(s => s.preview),
+						term: term,
+						matches: slices.map(s => s.match),
+						headerMatches: lastName.toLowerCase().includes(cleanTerm),
+					});
+				} else {
+					const last = toCheck.lastIndexOf(cleanTerm);
+					const slice = getSubstring(rendered, last, last + `${cleanTerm}`.length);
+					const lastItem = appendTo[appendTo.length - 1];
+					lastItem.previews[1] = slice.preview;
+					lastItem.matches[1] = slice.match;
+				}
+			}
+		}
+
+		function getSubstring (rendered, first, last) {
+			let spaceCount = 0;
+			let braceCount = 0;
+			let pre = "";
+			let i = first - 1;
+			for (; i >= 0; --i) {
+				pre = rendered.charAt(i) + pre;
+				if (rendered.charAt(i) === " " && braceCount === 0) {
+					spaceCount++;
+				}
+				if (spaceCount > BookUtil.Search._EXTRA_WORDS) {
+					break;
+				}
+			}
+			pre = pre.trimStart();
+			const preDots = i > 0;
+
+			spaceCount = 0;
+			let post = "";
+			const start = first === last ? last + `${cleanTerm}`.length : last;
+			i = Math.min(start, rendered.length);
+			for (; i < rendered.length; ++i) {
+				post += rendered.charAt(i);
+				if (rendered.charAt(i) === " " && braceCount === 0) {
+					spaceCount++;
+				}
+				if (spaceCount > BookUtil.Search._EXTRA_WORDS) {
+					break;
+				}
+			}
+			post = post.trimEnd();
+			const postDots = i < rendered.length;
+
+			const originalTerm = rendered.substr(first, `${term}`.length);
+
+			return {
+				preview: `${preDots ? "..." : ""}${pre}<span class="ve-highlight">${originalTerm}</span>${post}${postDots ? "..." : ""}`,
+				match: `${pre}${term}${post}`,
+			};
+		}
+	}
+
+	static _isNamedEntry (obj) {
+		return obj.name && (obj.type === "entries" || obj.type === "inset" || obj.type === "section");
+	}
+
+	static _getClosestPages (toSearch, targetPage) {
+		let closestBelow = Number.MIN_SAFE_INTEGER;
+		let closestAbove = Number.MAX_SAFE_INTEGER;
+
+		const walker = MiscUtil.getWalker({keyBlocklist: MiscUtil.GENERIC_WALKER_ENTRIES_KEY_BLOCKLIST});
+		walker.walk(
+			toSearch,
+			{
+				object: (obj) => {
+					if (obj.page) {
+						if (obj.page <= targetPage) closestBelow = Math.max(closestBelow, obj.page);
+						if (obj.page >= targetPage) closestAbove = Math.min(closestAbove, obj.page);
+					}
+					return obj;
+				},
+			},
+		);
+
+		return [closestBelow, closestAbove];
+	}
+};
+
+RenderMap.BookUtil = BookUtil;
+
+globalThis.BookUtil = BookUtil;

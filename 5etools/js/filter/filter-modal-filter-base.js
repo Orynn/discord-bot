@@ -1,0 +1,351 @@
+import {EVNT_VALCHANGE} from "./filter-constants.js";
+import {UtilsBlocklist} from "../utils-blocklist/utils-blocklist.js";
+import {FilterUtils} from "./filter-utils.js";
+
+/** @abstract */
+export class ModalFilterBase {
+	static _getFilterColumnHeaders (btnMeta) {
+		return btnMeta.map((it, i) => veT`<button class="ve-col-${it.width} ${i === 0 ? "ve-pl-0" : i === btnMeta.length ? "ve-pr-0" : ""} ${it.disabled ? "" : "sort"} ve-btn ve-btn-default ve-btn-xs" ${it.disabled ? "" : `data-sort="${it.sort}"`} ${it.title ? `title="${it.title}"` : ""} ${it.disabled ? "disabled" : ""}>${it.text}</button>`);
+	}
+
+	/**
+	 * @param opts Options object.
+	 * @param opts.modalTitle
+	 * @param opts.fnSort
+	 * @param opts.pageFilter
+	 * @param opts.previewButtonHandler
+	 * @param [opts.namespace]
+	 * @param [opts.allData]
+	 * @param [opts.sortByInitial]
+	 * @param [opts.sortDirInitial]
+	 * @param [opts.isRadio]
+	 */
+	constructor (opts) {
+		this._modalTitle = opts.modalTitle;
+		this._fnSort = opts.fnSort;
+		this._sortByInitial = opts.sortByInitial;
+		this._sortDirInitial = opts.sortDirInitial;
+		this._pageFilter = opts.pageFilter;
+		this._previewButtonHandler = opts.previewButtonHandler;
+		this._namespace = opts.namespace;
+		this._allData = opts.allData || null;
+		this._isRadio = !!opts.isRadio;
+
+		this._list = null;
+		this._filterCache = null;
+	}
+
+	get pageFilter () { return this._pageFilter; }
+
+	get allData () { return this._allData; }
+
+	_getWrpList () { return veT`<div class="list ve-ui-list__wrp ve-overflow-x-hidden ve-overflow-y-scroll ve-h-100 ve-min-h-0"></div>`; }
+
+	_getColumnHeaderPreviewAll (opts) {
+		return veT`<button class="ve-btn ve-btn-default ve-btn-xs ${opts.isBuildUi ? "ve-col-1" : "ve-col-0-5"}">${ListUiPreviewButtonHandlerBase.HTML_GLYPHICON_EXPAND}</button>`;
+	}
+
+	/**
+	 * @param wrp
+	 * @param opts
+	 * @param opts.iptSearch
+	 * @param opts.btnReset
+	 * @param opts.btnOpen
+	 * @param opts.btnToggleSummaryHidden
+	 * @param opts.wrpMiniPills
+	 * @param opts.isBuildUi If an alternate UI should be used, which has "send to right" buttons.
+	 * @param opts.isNoSelect If selection UI should be disabled.
+	 */
+	async pPopulateWrapper (wrp, opts = null) {
+		opts = opts || {};
+
+		if (opts.isBuildUi && opts.isNoSelect) throw new Error(`"isBuildUi" and "isNoSelect" are mutually exclusive!`);
+
+		await this._pInit();
+
+		const ovlLoading = veT`<div class="ve-w-100 ve-h-100 ve-flex-vh-center"><i class="ve-dnd-font ve-muted">Loading...</i></div>`.vee.appendTo(wrp);
+
+		const iptSearch = (opts.iptSearch || veT`<input class="ve-form-control ve-lst__search ve-lst__search--no-border-h ve-h-100" type="search" placeholder="Search...">`).vee.disableSpellcheck();
+		const btnReset = opts.btnReset || veT`<button class="ve-btn ve-btn-default">Reset</button>`;
+		const dispNumVisible = veT`<div class="ve-lst__wrp-search-visible ve-no-events ve-flex-vh-center"></div>`;
+
+		const wrpIptSearch = veT`<div class="ve-w-100 ve-relative">
+			${iptSearch}
+			<div class="ve-lst__wrp-search-glass ve-no-events ve-flex-vh-center"><span class="glyphicon glyphicon-search"></span></div>
+			${dispNumVisible}
+		</div>`;
+
+		const wrpFormTop = veT`<div class="ve-flex ve-input-group ve-input-group--top ve-btn-group ve-w-100 ve-lst__form-top">${wrpIptSearch}${btnReset}</div>`;
+
+		const wrpFormBottom = opts.wrpMiniPills || veT`<div class="ve-w-100"></div>`;
+
+		const wrpFormHeaders = veT`<div class="ve-input-group ve-input-group--bottom ve-flex ve-no-shrink"></div>`;
+		const cbSelAll = opts.isBuildUi || opts.isNoSelect || this._isRadio ? null : veT`<input type="checkbox">`;
+		const btnSendAllToRight = opts.isBuildUi ? veT`<button class="ve-btn ve-btn-xxs ve-btn-default ve-col-1" title="Add All"><span class="glyphicon glyphicon-arrow-right"></span></button>` : null;
+
+		if (!opts.isBuildUi && !opts.isNoSelect) {
+			if (this._isRadio) wrpFormHeaders.vee.appends(`<label class="ve-btn ve-btn-default ve-btn-xs ve-col-0-5 ve-flex-vh-center" disabled></label>`);
+			else veT`<label class="ve-btn ve-btn-default ve-btn-xs ve-col-0-5 ve-flex-vh-center">${cbSelAll}</label>`.vee.appendTo(wrpFormHeaders);
+		}
+
+		const btnTogglePreviewAll = this._getColumnHeaderPreviewAll(opts)
+			.vee.appendTo(wrpFormHeaders);
+
+		this._getColumnHeaders().forEach(ele => wrpFormHeaders.vee.appends(ele));
+		if (opts.isBuildUi) btnSendAllToRight.vee.appendTo(wrpFormHeaders);
+
+		const wrpForm = veT`<div class="ve-flex-col ve-w-100 ve-mb-1">${wrpFormTop}${wrpFormBottom}${wrpFormHeaders}</div>`;
+		const wrpList = this._getWrpList();
+
+		const btnConfirm = opts.isBuildUi ? null : veT`<button class="ve-btn ve-btn-default">Confirm</button>`;
+
+		this._list = new List({
+			iptSearch,
+			wrpList,
+			fnSort: this._fnSort,
+			sortByInitial: this._sortByInitial,
+			sortDirInitial: this._sortDirInitial,
+		});
+		const listSelectClickHandler = new ListSelectClickHandler({list: this._list});
+
+		if (!opts.isBuildUi && !opts.isNoSelect && !this._isRadio) listSelectClickHandler.bindSelectAllCheckbox(cbSelAll);
+		this._previewButtonHandler.bindPreviewAllButton({btnAll: btnTogglePreviewAll, list: this._list});
+		SortUtil.initBtnSortHandlers(wrpFormHeaders, this._list);
+		this._list.on("updated", () => dispNumVisible.vee.html(`${this._list.visibleItems.length}/${this._list.items.length}`));
+
+		this._allData ||= await this._pGetBlocklistedAllData();
+
+		await this._pageFilter.pInitFilterBox({
+			wrpFormTop,
+			btnReset,
+			wrpMiniPills: wrpFormBottom,
+			namespace: this._namespace,
+			btnOpen: opts.btnOpen,
+			btnToggleSummaryHidden: opts.btnToggleSummaryHidden,
+		});
+
+		this._allData.forEach((it, i) => {
+			this._pageFilter.mutateAndAddToFilters(it);
+			const filterListItem = this._getListItem(this._pageFilter, it, i);
+			this._list.addItem(filterListItem);
+			if (!opts.isBuildUi && !opts.isNoSelect) {
+				if (this._isRadio) filterListItem.ele.addEventListener("click", evt => listSelectClickHandler.handleSelectClickRadio(filterListItem, evt));
+				else filterListItem.ele.addEventListener("click", evt => listSelectClickHandler.handleSelectClick(filterListItem, evt));
+			}
+		});
+
+		this._list.init();
+		this._list.update();
+
+		this._pageFilter.trimState();
+
+		this._pageFilter.filterBox.on(EVNT_VALCHANGE, this._handleFilterChange.bind(this));
+		this._pageFilter.filterBox.render();
+		this._handleFilterChange();
+
+		ovlLoading.remove();
+
+		const wrpInner = veT`<div class="ve-flex-col ve-h-100">
+			${wrpForm}
+			${wrpList}
+			${opts.isBuildUi || opts.isNoSelect ? null : veT`<hr class="ve-hr-1"><div class="ve-flex-vh-center">${btnConfirm}</div>`}
+		</div>`.vee.appendTo(wrp.vee.empty());
+
+		return {
+			wrpIptSearch,
+			iptSearch,
+			wrpInner,
+			btnConfirm,
+			pageFilter: this._pageFilter,
+			list: this._list,
+			cbSelAll,
+			btnSendAllToRight,
+		};
+	}
+
+	_isListItemMatchingFilter (f, li) { return this._isEntityItemMatchingFilter(f, this._allData[li.ix]); }
+	_isEntityItemMatchingFilter (f, it) { return this._pageFilter.toDisplay(f, it); }
+
+	async pPopulateHiddenWrapper () {
+		await this._pInit();
+
+		await this._pageFilter.pInitFilterBox({namespace: this._namespace});
+
+		const allData = this._allData || await this._pGetBlocklistedAllData();
+
+		this.setHiddenWrapperAllData(allData);
+
+		this._pageFilter.filterBox.render();
+	}
+
+	setHiddenWrapperAllData (allData) {
+		// See `ModalFilterEquipment` if required later
+		if (this._list) throw new Error(`Unimplemented!`);
+
+		this._allData = allData;
+
+		this._allData.forEach(ent => {
+			this._pageFilter.mutateAndAddToFilters(ent);
+		});
+
+		this._pageFilter.trimState();
+	}
+
+	_handleFilterChange () {
+		const f = this._pageFilter.filterBox.getValues();
+		this._list.filter(li => this._isListItemMatchingFilter(f, li));
+	}
+
+	handleHiddenOpenButtonClick () {
+		this._pageFilter.filterBox.show();
+	}
+
+	handleHiddenResetButtonClick (evt) {
+		this._pageFilter.filterBox.reset({isResetAll: evt.shiftKey});
+	}
+
+	_getStateFromFilterExpression (filterExpression) {
+		const filterSubhashMeta = Renderer.getFilterSubhashes(Renderer.splitTagByPipe(filterExpression).map(pt => FilterUtils.getUnescapedPipes(pt)), this._namespace);
+		const subhashes = filterSubhashMeta.subhashes.map(it => `${it.key}${HASH_SUB_KV_SEP}${it.value}`);
+		const unpackedSubhashes = this.pageFilter.filterBox.unpackSubHashes(subhashes, {force: true});
+		return this.pageFilter.filterBox.getNextStateFromSubHashes({unpackedSubhashes});
+	}
+
+	/**
+	 * N.b.: assumes any preloading has already been done
+	 * @param filterExpression
+	 */
+	getItemsMatchingFilterExpression ({filterExpression}) {
+		const f = this.getValuesFromFilterExpression({filterExpression});
+
+		const filteredItems = this._filterCache.list.getFilteredItems({
+			items: this._filterCache.list.items,
+			fnFilter: li => this._isListItemMatchingFilter(f, li),
+		});
+
+		return this._filterCache.list.getSortedItems({items: filteredItems});
+	}
+
+	getEntitiesMatchingFilterExpression ({filterExpression = null, valuesOverride = null} = {}) {
+		const f = this.getValuesFromFilterExpression({filterExpression});
+
+		if (valuesOverride) {
+			Object.entries(valuesOverride)
+				.forEach(([header, values]) => {
+					if (!f[header]) throw new Error(`Header "${header}" was not in filter values!`);
+
+					const tgt = f[header];
+					Object.entries(values)
+						.forEach(([k, v]) => {
+							if (tgt[k] == null) throw new Error(`Key "${k}" was not in "${header}" filter values!`);
+							tgt[k] = v;
+						});
+				});
+		}
+
+		return this._allData.filter(this._isEntityItemMatchingFilter.bind(this, f));
+	}
+
+	getRenderedFilterExpression ({filterExpression}) {
+		const nxtStateOuter = this._getStateFromFilterExpression(filterExpression);
+		return this._pageFilter.filterBox.getDisplayState({nxtStateOuter});
+	}
+
+	getValuesFromFilterExpression ({filterExpression = null} = {}) {
+		const nxtStateOuter = filterExpression ? this._getStateFromFilterExpression(filterExpression) : null;
+		return this._pageFilter.filterBox.getValues({nxtStateOuter});
+	}
+
+	/**
+	 * @param [opts]
+	 * @param [opts.filterExpression] A filter expression, as usually found in @filter tags, which will be applied.
+	 */
+	async pGetUserSelection ({filterExpression = null} = {}) {
+		// eslint-disable-next-line no-async-promise-executor
+		return new Promise(async resolve => {
+			const {eleModalInner, doClose} = await this._pGetShowModal(resolve);
+
+			await this.pPreloadHidden(eleModalInner);
+
+			this.doApplyFilterExpression(filterExpression);
+
+			this._filterCache.btnConfirm.vee.off("click").vee.onn("click", async () => {
+				const checked = this._filterCache.list.visibleItems.filter(it => it.data.cbSel.checked);
+				resolve(checked);
+
+				doClose(true);
+
+				// region reset selection state
+				if (this._filterCache.cbSelAll) this._filterCache.cbSelAll.vee.prop("checked", false);
+				this._filterCache.list.items.forEach(it => {
+					if (it.data.cbSel) it.data.cbSel.checked = false;
+					it.ele.classList.remove("list-multi-selected");
+				});
+				// endregion
+			});
+
+			await UiUtil.pDoForceFocus(this._filterCache.iptSearch[0]);
+		});
+	}
+
+	async _pGetShowModal (resolve) {
+		const {eleModalInner, doClose} = await UiUtil.pGetShowModal({
+			isHeight100: true,
+			isWidth100: true,
+			title: `Filter/Search for ${this._modalTitle}`,
+			cbClose: (isDataEntered) => {
+				if (this._filterCache) this._filterCache.wrpModalInner.vee.detach();
+				if (!isDataEntered) resolve([]);
+			},
+			isUncappedHeight: true,
+		});
+
+		return {eleModalInner, doClose};
+	}
+
+	doApplyFilterExpression (filterExpression) {
+		if (!filterExpression) return;
+
+		const filterSubhashMeta = Renderer.getFilterSubhashes(Renderer.splitTagByPipe(filterExpression), this._namespace);
+		const subhashes = filterSubhashMeta.subhashes.map(it => `${it.key}${HASH_SUB_KV_SEP}${it.value}`);
+		this.pageFilter.filterBox.setFromSubHashes(subhashes, {force: true, iptSearch: this._filterCache.iptSearch});
+	}
+
+	_getNameStyle () { return `ve-bold`; }
+
+	/**
+	 * Pre-heat the modal, thus allowing access to the filter box underneath.
+	 *
+	 * @param [eleModalInner]
+	 */
+	async pPreloadHidden (eleModalInner) {
+		// If we're rendering in "hidden" mode, create a dummy element to attach the UI to.
+		eleModalInner = eleModalInner || veT`<div></div>`;
+
+		if (this._filterCache) {
+			this._filterCache.wrpModalInner.vee.appendTo(eleModalInner);
+		} else {
+			const meta = await this.pPopulateWrapper(eleModalInner);
+			const {iptSearch, btnConfirm, pageFilter, list, cbSelAll} = meta;
+			const wrpModalInner = meta.wrpInner;
+
+			this._filterCache = {iptSearch, wrpModalInner, btnConfirm, pageFilter, list, cbSelAll};
+		}
+	}
+
+	async _pGetBlocklistedAllData () {
+		const allData = await this._pLoadAllData();
+		return UtilsBlocklist.getBlocklistFilteredArray(allData);
+	}
+
+	/**
+	 * Widths should total to 11/12ths, as 1/12th is set aside for the checkbox column.
+	 * @abstract
+	 */
+	_getColumnHeaders () { throw new Error(`Unimplemented!`); }
+	async _pInit () { /* Implement as required */ }
+	/** @abstract */
+	async _pLoadAllData () { throw new Error(`Unimplemented!`); }
+	/** @abstract */
+	async _getListItem () { throw new Error(`Unimplemented!`); }
+}

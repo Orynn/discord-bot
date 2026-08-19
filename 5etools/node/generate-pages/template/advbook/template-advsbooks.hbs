@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+
+{{> "head" }}
+
+<body>
+
+{{> "overlayNoise" }}
+
+{{> "adLeaderboard" }}
+
+{{> "navbar" }}
+
+{{> "adLhsScrollingPage" }}
+{{> "adRhsScrollingPage" }}
+
+<div class="container view-col-wrapper" data-cancer-id="cancer-wrapper">
+	<div class="view-col" id="listcontainer">
+		<div class="ve-lst__form-top">
+			<input type="search" id="search" autocomplete="off" autocapitalize="off" spellcheck="false" class="search ve-form-control" placeholder="Find {{searchName}}...">
+			<button class="ve-btn ve-btn-default" id="reset">Reset</button>
+		</div>
+
+		<div id="filtertools" class="ve-input-group ve-input-group--bottom ve-flex ve-no-shrink">
+			{{#each btnsList}}
+			{{{this}}}
+			{{/each}}
+			<button class="ve-btn ve-btn-default ve-btn-xs ve-w-30p ve-mobile-sm__hidden" disabled></button>
+		</div>
+
+		<div class="list list--stats books">
+			<!-- populate with JS -->
+		</div>
+
+		<div class="ve-flex-vh-center ve-mt-3 no-print">
+			{{> "btngroupManager" }}
+		</div>
+
+		<hr class="ve-hr-3 ve-mt-4">
+
+		<div class="books--alt ve-flex-h-center ve-flex-wrap bks__wrp-bookshelf">
+			<!-- populate with JS -->
+		</div>
+	</div>
+</div>
+
+{{> "adFooter" }}
+
+{{> "scripts" }}
+
+</body>
+</html>

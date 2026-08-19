@@ -1,0 +1,25 @@
+@use "vars/vars";
+@use "vars/vars-night";
+
+@layer vetools {
+	.ve-lst__ {
+		&item-group-header {
+			font-size: 14px;
+			background: vars.$rgb-bg--alt;
+		}
+	}
+
+	.ve-night-mode .ve-lst__ {
+		&item-group-header {
+			background: vars-night.$rgb-bg--alt-night;
+		}
+	}
+
+	.search-box {
+		margin-bottom: 5px;
+	}
+
+	#list .list {
+		font-size: 1em;
+	}
+}

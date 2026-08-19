@@ -1,0 +1,18 @@
+{
+  "prefix": ";",
+  "catchup_enabled": true,
+  "catchup_max_messages": 200,
+  "catchup_max_age_hours": 72,
+  "campaign_category_id": 1186287629302501429,
+  "campaign_category_name": "CAMPAIGN",
+  "campaign_cache_ttl_seconds": 900,
+  "campaign_messages_per_thread": 20,
+  "fivetools_root": "5etools",
+  "fivetools_data_dir": "5etools/data",
+  "fivetools_export_file": "5etools/5etools.json",
+  "fivetools_homebrew_file": "5etools/homebrew.json",
+  "player_category_width": 25,
+  "player_category_emoji": "🐉",
+  "player_channel_ooc": "📢blabla",
+  "player_channel_rp": "🎲roleplay"
+}

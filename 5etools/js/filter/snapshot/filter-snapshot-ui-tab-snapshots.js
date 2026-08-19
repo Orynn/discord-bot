@@ -1,0 +1,220 @@
+import {RenderableCollectionSnapshots} from "./filter-snapshot-ui-collection-snapshots.js";
+import {FilterSnapshotUiTabUtils} from "./filter-snapshot-ui-tab-utils.js";
+import {FilterSnapshotBaseSelectClickHandler} from "./filter-snapshot-ui-collection-base.js";
+
+export class FilterSnapshotUiTabSnapshots {
+	constructor (
+		{
+			filterBox,
+			compManager,
+			rdState,
+			tabMeta,
+		},
+	) {
+		this._filterBox = filterBox;
+		this._compManager = compManager;
+		this._rdState = rdState;
+		this._tabMeta = tabMeta;
+	}
+
+	async pRender () {
+		const selectClickHandler = new FilterSnapshotBaseSelectClickHandler({
+			comp: this._compManager,
+			prop: "boxSnapshots",
+		});
+
+		const {stgControls} = this._pRender_stgControls({selectClickHandler});
+		const {stgNoRows} = this._pRender_stgNoRows();
+		const {stgRows, compRows} = this._pRender_stgRows({selectClickHandler});
+
+		veT(this._tabMeta.wrpTab)`
+			${stgControls}
+			<hr class="ve-hr-2">
+			${stgNoRows}
+			${stgRows}
+		`;
+
+		const hk = this._compManager._addHookBase("boxSnapshots", () => {
+			stgNoRows.vee.toggle(!this._compManager._state.boxSnapshots.length);
+			stgRows.vee.toggle(!!this._compManager._state.boxSnapshots.length);
+
+			compRows.render();
+		});
+		this._rdState.fnsCleanup.push(() => this._compManager._removeHookBase("boxSnapshots", hk));
+		hk();
+	}
+
+	_pRender_stgControls ({selectClickHandler}) {
+		const stgControls = FilterSnapshotUiTabUtils.getStgControls();
+
+		const {menuMass} = this._pRender_stgControls_menuMass({selectClickHandler});
+
+		const btnMass = veT`<button class="ve-btn ve-btn-primary ve-btn-xs ve-mr-2">Mass...</button>`
+			.vee.onn("click", async evt => {
+				await ContextUtil.pOpenMenu(evt, menuMass);
+			});
+
+		const btnTakeSnapshot = veT`<button class="ve-btn ve-btn-primary ve-btn-xs ve-mr-2">Take Snapshot</button>`
+			.vee.onn("click", async () => {
+				await this._compManager.pHandleClick_takeSnapshot();
+			});
+
+		veT(stgControls)`<div class="ve-flex-v-center">
+			${btnMass}
+			${btnTakeSnapshot}
+		</div>`;
+
+		return {stgControls};
+	}
+
+	_pRender_stgControls_menuMass ({selectClickHandler}) {
+		const getValidAddToDeckInitial = () => {
+			const selectedSnapshotIds = selectClickHandler.getSelectedIds();
+			if (!selectedSnapshotIds.length) {
+				JqueryUtil.doToast({content: `Please select some snapshots first!`, type: "warning"});
+				return {isValid: false, selectedSnapshotIds};
+			}
+
+			if (!this._compManager._state.boxSnapshotDecks.length) {
+				JqueryUtil.doToast({content: `No snapshot decks available! Please create one first.`, type: "warning"});
+				return {isValid: false, selectedSnapshotIds};
+			}
+
+			return {isValid: true, selectedSnapshotIds};
+		};
+
+		const addSelectedSnapshotsToDeck = (
+			{
+				boxSnapshotDeck,
+				selectedSnapshotIds,
+			},
+		) => {
+			boxSnapshotDeck.entity.boxSnapshotIds = [
+				...boxSnapshotDeck.entity.boxSnapshotIds || [],
+				selectedSnapshotIds
+					.map(boxSnapshotId => this._compManager.getNewBoxSnapshotId({
+						boxSnapshotId: boxSnapshotId,
+						_manager_name: this._compManager.getBoxSnapshotName({boxSnapshotId}),
+					})),
+			]
+				.unique(entityInfo => entityInfo.entity.boxSnapshotId);
+
+			this._compManager._triggerCollectionUpdate("boxSnapshotDecks");
+
+			JqueryUtil.doToast(`Added ${selectedSnapshotIds.length} Snapshot${selectedSnapshotIds.length === 1 ? "" : "s"} to Snapshot Deck!`);
+
+			selectClickHandler.setCheckboxes({isChecked: false});
+		};
+
+		const menuMass = ContextUtil.getMenu([
+			new ContextUtil.Action(
+				"Add to Active Snapshot Deck",
+				async () => {
+					const {isValid, selectedSnapshotIds} = getValidAddToDeckInitial();
+					if (!isValid) return;
+
+					const boxSnapshotDeck = this._compManager.getActiveSnapshotDeck();
+					if (!boxSnapshotDeck) return JqueryUtil.doToast({content: `No active snapshot deck! Please active one first.`, type: "warning"});
+
+					addSelectedSnapshotsToDeck({boxSnapshotDeck, selectedSnapshotIds});
+				},
+			),
+			new ContextUtil.Action(
+				"Add to Snapshot Deck...",
+				async () => {
+					const {isValid, selectedSnapshotIds} = getValidAddToDeckInitial();
+					if (!isValid) return;
+
+					const {boxSnapshotDeck} = await this._compManager.pGetUserBoxSnapshotDeckInfo();
+					if (!boxSnapshotDeck) return;
+
+					addSelectedSnapshotsToDeck({boxSnapshotDeck, selectedSnapshotIds});
+				},
+			),
+			new ContextUtil.Action(
+				"Delete",
+				async () => {
+					const selectedSnapshotIds = selectClickHandler.getSelectedIds();
+					if (!selectedSnapshotIds.length) return JqueryUtil.doToast({content: `Please select some snapshots first!`, type: "warning"});
+
+					if (!await InputUiUtil.pGetUserBoolean({title: "Delete Snapshots", htmlDescription: `This will delete ${selectedSnapshotIds.length} snapshot${selectedSnapshotIds.length === 1 ? "" : "s"}. Are you sure?`, textYes: "Yes", textNo: "Cancel"})) return;
+
+					const toDelete = new Set(selectedSnapshotIds);
+
+					this._compManager._state.boxSnapshots = this._compManager._state.boxSnapshots
+						.filter(boxSnapshot => !toDelete.has(boxSnapshot.id));
+				},
+			),
+		]);
+		this._rdState.fnsCleanup.push(() => ContextUtil.deleteMenu(menuMass));
+
+		return {menuMass};
+	}
+
+	_pRender_stgNoRows () {
+		const stgNoRows = FilterSnapshotUiTabUtils.getStgNoRows();
+
+		const btnAddSnapshotNoRows = veT`<button class="ve-btn ve-btn-primary">Take Snapshot</button>`
+			.vee.onn("click", async () => {
+				await this._compManager.pHandleClick_takeSnapshot();
+			});
+
+		veT(stgNoRows)`<div class="ve-flex-col">
+			<div class="ve-mb-2 ve-muted"><i>No Snapshots.</i></div>
+			${btnAddSnapshotNoRows}
+		</div>`;
+
+		return {stgNoRows};
+	}
+
+	_pRender_stgRows ({selectClickHandler}) {
+		const cbMulti = veT`<input type="checkbox">`;
+		selectClickHandler.bindSelectAllCheckbox(cbMulti);
+
+		const isEveryExpanded = boxSnapshots => boxSnapshots.every(boxSnapshot => boxSnapshot.entity.manager_loader_isExpanded);
+
+		const btnExpandCollapseAll = veT`<button class="ve-btn ve-btn-default ve-btn-xs ve-px-1 ve-flex-vh-center ve-h-100 ve-no-shrink ve-col-1 ve-no-select">[+]</button>`
+			.vee.onn("click", () => {
+				if (!this._compManager._state.boxSnapshots.length) return;
+
+				const isCollapse = isEveryExpanded(this._compManager._state.boxSnapshots);
+				this._compManager._state.boxSnapshots.forEach(boxSnapshot => boxSnapshot.entity.manager_loader_isExpanded = !isCollapse);
+				this._compManager._triggerCollectionUpdate("boxSnapshots");
+			});
+
+		const hkBtnExpandCollapseAll = this._compManager._addHookBase("boxSnapshots", () => {
+			btnExpandCollapseAll.vee.txt(
+				!this._compManager._state.boxSnapshots.length
+					? `[+]`
+					: isEveryExpanded(this._compManager._state.boxSnapshots) ? `[\u2212]` : `[+]`,
+			);
+		});
+		this._rdState.fnsCleanup.push(() => this._compManager._removeHookBase("boxSnapshots", hkBtnExpandCollapseAll));
+		hkBtnExpandCollapseAll();
+
+		const wrpRowBtns = veT`<div class="ve-flex-v-center ve-my-1 ve-pl-1p ve-pr-10p ve-btn-group">
+			<label class="ve-btn ve-btn-default ve-btn-xs ve-col-0-5 ve-flex-vh-center ve-h-100">
+				${cbMulti}
+			</label>
+			${btnExpandCollapseAll}
+			<button class="ve-btn ve-btn-default ve-btn-xs ve-col-8-5" disabled>&nbsp;</button>
+			<button class="ve-btn ve-btn-default ve-btn-xs ve-grow" disabled>&nbsp;</button>
+		</div>`;
+
+		const wrpRows = veT`<div class="ve-h-100 ve-w-100 ve-overflow-y-scroll ve-flex-col"></div>`;
+
+		const compRows = new RenderableCollectionSnapshots({
+			filterBox: this._filterBox,
+			comp: this._compManager,
+			wrpRows,
+			selectClickHandler,
+		});
+
+		const stgRows = veT`<div class="ve-h-100 ve-min-h-0 ve-w-100 ve-flex-col">
+			${wrpRowBtns}
+			${wrpRows}
+		</div>`;
+
+		return {stgRows, compRows};
+	}
+}
