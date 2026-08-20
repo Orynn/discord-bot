@@ -2,6 +2,8 @@ config.json
 .env
 data/arkann.db
 data/arkann.db-*
+data/backups/
+data/hf-cache/
 data/exports/
 5etools.json
 5etools/5etools.json

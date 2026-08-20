@@ -1,0 +1,17 @@
+[Unit]
+Description=Arkann Discord D&D bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=@ROOT@
+EnvironmentFile=-@ROOT@/.env
+ExecStart=@ROOT@/.venv/bin/python -u @ROOT@/main.py
+Restart=always
+RestartSec=5
+TimeoutStopSec=25
+KillSignal=SIGINT
+
+[Install]
+WantedBy=default.target

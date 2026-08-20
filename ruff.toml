@@ -1,0 +1,6 @@
+target-version = "py311"
+extend-exclude = ["5etools", ".venv", "*.sh"]
+
+[lint]
+select = ["E", "F"]
+ignore = ["E501", "E402"]
