@@ -54,3 +54,23 @@ class TestSpellCard(unittest.TestCase):
         )
         assert card is not None
         self.assertIn("🔥 Fire damage", card.description)
+
+    def test_utility_spell_has_no_damage_dice(self) -> None:
+        sheet = CharacterSheet(name="Wiz", char_class="Wizard")
+        card = _spell_card(
+            sheet,
+            {
+                "slug": "mage-armor",
+                "name": "Mage Armor",
+                "level": 1,
+                "school": "Abjuration",
+                "desc": "You touch a willing creature who isn't wearing armor.",
+            },
+        )
+        assert card is not None
+        self.assertEqual(card.dice_count, 0)
+        self.assertTrue(card.needs_target)
+        self.assertTrue(card.target_allies_only)
+        self.assertEqual(card.buff, "mage-armor")
+        self.assertIn("1d4", card.description)
+        self.assertFalse(card.is_healing)

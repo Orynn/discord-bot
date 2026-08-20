@@ -1,6 +1,8 @@
+import unittest
+
 import discord
 
-from bot.messaging import _embed_kwargs, prepare_outgoing
+from bot.messaging import _embed_kwargs, _view_kwargs, prepare_outgoing
 from srd import glossary
 from srd.linkify import markdown_link
 
@@ -28,6 +30,18 @@ class TestEmbedKwargs:
 
     def test_returns_empty_when_no_embeds(self) -> None:
         assert _embed_kwargs(None, None) == {}
+
+
+class TestViewKwargs(unittest.TestCase):
+    def test_omits_none_for_new_messages(self) -> None:
+        assert _view_kwargs(prepared_view=None, had_view=True, edit=False) == {}
+
+    def test_keeps_none_when_editing_to_clear_view(self) -> None:
+        assert _view_kwargs(prepared_view=None, had_view=True, edit=True) == {"view": None}
+
+    def test_includes_prepared_view(self) -> None:
+        view = discord.ui.View()
+        assert _view_kwargs(prepared_view=view) == {"view": view}
 
 
 class TestPrepareOutgoing:
@@ -75,3 +89,35 @@ class TestPrepareOutgoing:
 
         content, _, _, _ = prepare_outgoing(content="Cast Fireball.", linkify=False)
         assert content == "Cast Fireball."
+
+    def test_clamps_linkified_embed_fields_to_discord_limit(self) -> None:
+        from srd.embeds import DISCORD_FIELD_LIMIT
+        from srd.linkify import linkify_embed
+
+        glossary.register_item(name="Fireball", kind="spell", slug="fireball")
+        glossary._store.loaded = True
+        glossary._store.rebuild_index()
+
+        embed = discord.Embed(title="Lich")
+        embed.add_field(name="🔮 Spellcasting", value=("Fireball " * 120).strip(), inline=False)
+        linked = linkify_embed(embed)
+        assert any(len(field.value) > DISCORD_FIELD_LIMIT for field in linked.fields)
+
+        _, prepared, _, _ = prepare_outgoing(embed=embed)
+        assert prepared is not None
+        assert prepared.fields
+        for field in prepared.fields:
+            assert len(field.value) <= DISCORD_FIELD_LIMIT
+        assert any("Fireball" in field.value for field in prepared.fields)
+
+    def test_skips_inline_code(self) -> None:
+        from srd.linkify import linkify_text
+
+        glossary.register_item(name="Fireball", kind="spell", slug="fireball")
+        glossary._store.loaded = True
+        glossary._store.rebuild_index()
+
+        text = linkify_text("Use `;srd spell fireball` then Cast Fireball.")
+        assert "`;srd spell fireball`" in text
+        assert "[Fireball]" in text
+        assert "5e.tools" in text

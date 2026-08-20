@@ -7,9 +7,9 @@ from bot.command_helpers import command_reply, delete_command
 from bot.help_text import HELP_COLOR
 from bot.messaging import send_message
 from config import PREFIX
-from sheets.context import get_sheet_for_owner, target_label
+from sheets.context import get_sheet_for_owner, resolve_guild_id, save_owner_sheet, target_label
 from sheets.currency import parse_currency
-from sheets.storage import get_sheet, save_sheet, transfer_currency
+from sheets.storage import get_sheet, transfer_currency
 
 
 def register_money_commands(sheet_group: Group) -> None:
@@ -83,7 +83,7 @@ def register_money_commands(sheet_group: Group) -> None:
             await command_reply(ctx, str(exc))
             return
 
-        save_sheet(user_id=owner_id, sheet=sheet)
+        save_owner_sheet(ctx, owner_id, sheet)
         label = target_label(member, sheet)
         await command_reply(ctx, f"{label}: wallet set to **{sheet.currency.format()}**.")
         await delete_command(ctx)
@@ -111,7 +111,7 @@ def register_money_commands(sheet_group: Group) -> None:
             await command_reply(ctx, str(exc))
             return
 
-        save_sheet(user_id=owner_id, sheet=sheet)
+        save_owner_sheet(ctx, owner_id, sheet)
         label = target_label(member, sheet)
         await command_reply(
             ctx,
@@ -149,7 +149,7 @@ def register_money_commands(sheet_group: Group) -> None:
             )
             return
 
-        save_sheet(user_id=owner_id, sheet=sheet)
+        save_owner_sheet(ctx, owner_id, sheet)
         label = target_label(member, sheet)
         await command_reply(
             ctx,
@@ -184,20 +184,30 @@ def register_money_commands(sheet_group: Group) -> None:
             await command_reply(ctx, "You cannot pay yourself.")
             return
 
-        recipient_sheet = get_sheet(user_id=recipient.id)
+        guild_id = resolve_guild_id(ctx)
+        if guild_id is None:
+            await command_reply(ctx, "This command can only be used in a server.")
+            return
+
+        recipient_sheet = get_sheet(user_id=recipient.id, guild_id=guild_id)
         if recipient_sheet is None:
             await command_reply(ctx, f"**{recipient.display_name}** has no character sheet.")
             return
 
         try:
             payment = parse_currency(amount)
-            transfer_currency(payer_id=payer_id, recipient_id=recipient.id, payment=payment)
+            transfer_currency(
+                guild_id=guild_id,
+                payer_id=payer_id,
+                recipient_id=recipient.id,
+                payment=payment,
+            )
         except ValueError as exc:
             await command_reply(ctx, str(exc))
             return
 
-        payer_sheet = get_sheet(user_id=payer_id)
-        recipient_sheet = get_sheet(user_id=recipient.id)
+        payer_sheet = get_sheet(user_id=payer_id, guild_id=guild_id)
+        recipient_sheet = get_sheet(user_id=recipient.id, guild_id=guild_id)
         if payer_sheet is None or recipient_sheet is None:
             await command_reply(ctx, "Could not load updated wallets.")
             return

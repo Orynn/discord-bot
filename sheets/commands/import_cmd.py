@@ -4,9 +4,9 @@ from discord.ext.commands.context import Context
 
 from bot.command_helpers import command_reply, delete_command
 from config import PREFIX
-from sheets.context import resolve_owner, target_label
-from sheets.ddb_pdf import format_import_summary, parse_ddb_pdf
-from sheets.storage import get_sheet, save_sheet, set_character_name
+from sheets.context import resolve_guild_id, resolve_owner, save_owner_sheet, target_label
+from sheets.ddb_pdf import fill_sheet_equipment, format_import_summary, parse_ddb_pdf
+from sheets.storage import get_sheet, set_character_name
 from srd import fivetools
 
 
@@ -27,7 +27,12 @@ def register_import_commands(sheet_group: Group) -> None:
         if owner_id is None:
             return
 
-        if get_sheet(user_id=owner_id) is not None:
+        guild_id = resolve_guild_id(ctx)
+        if guild_id is None:
+            await command_reply(ctx, "This command can only be used in a server.")
+            return
+
+        if get_sheet(user_id=owner_id, guild_id=guild_id) is not None:
             target = member.display_name if member else "You"
             await command_reply(
                 ctx,
@@ -78,14 +83,22 @@ def register_import_commands(sheet_group: Group) -> None:
                 continue
             sheet.add_spell(slug=spell["slug"])
 
-        save_sheet(user_id=owner_id, sheet=sheet)
-        set_character_name(user_id=owner_id, name=sheet.name)
+        matched_gear, custom_gear = await fill_sheet_equipment(
+            sheet,
+            entries=imported.equipment_entries,
+            equipped_names=imported.equipped_names,
+        )
+
+        save_owner_sheet(ctx, owner_id, sheet)
+        set_character_name(user_id=owner_id, guild_id=guild_id, name=sheet.name)
 
         label = target_label(member, sheet)
         summary = format_import_summary(
             sheet=sheet,
             spell_count=len(sheet.spells),
             homebrew_count=homebrew_count,
+            gear_count=matched_gear + custom_gear,
+            custom_gear_count=custom_gear,
             warnings=imported.warnings,
         )
         await command_reply(ctx, f"{label}\n{summary}")

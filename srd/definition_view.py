@@ -1,5 +1,6 @@
 import discord
 
+from bot.selects import replace_message_view, select_menus_from_message, fresh_component_id
 from srd import fivetools
 from srd.embeds import (
     armor_embed,
@@ -15,6 +16,8 @@ from srd.embeds import (
     weapon_embed,
 )
 from srd.glossary import GlossaryEntry
+
+DEFINITION_SELECT_ID = "arkann:definition"
 
 _KIND_GETTERS = {
     "spell": (lambda entry: fivetools.get_spell(slug=entry.slug), spell_embed),
@@ -85,7 +88,8 @@ class DefinitionSelect(discord.ui.Select):
             min_values=1,
             max_values=1,
             options=options,
-            custom_id="arkann:definition",
+            custom_id=DEFINITION_SELECT_ID,
+            id=fresh_component_id(),
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -97,59 +101,101 @@ class DefinitionSelect(discord.ui.Select):
             return
 
         await interaction.response.defer(ephemeral=True)
-
-        kind, slug, parent_slug, name = raw.split("|", 3)
-        entry = GlossaryEntry(
-            name=name,
-            kind=kind,
-            slug=slug,
-            url="",
-            parent_slug=parent_slug or None,
-        )
         try:
-            view = None
-            if entry.kind == "class":
-                from srd.class_view import class_lookup_message
+            kind, slug, parent_slug, name = raw.split("|", 3)
+            entry = GlossaryEntry(
+                name=name,
+                kind=kind,
+                slug=slug,
+                url="",
+                parent_slug=parent_slug or None,
+            )
+            try:
+                view = None
+                if entry.kind == "class":
+                    from srd.class_view import class_lookup_message
 
-                embed, view = class_lookup_message(await fivetools.get_class(slug=entry.slug))
-            elif entry.kind == "subclass" and entry.parent_slug:
-                from srd.class_view import class_lookup_message
+                    embed, view = class_lookup_message(await fivetools.get_class(slug=entry.slug))
+                elif entry.kind == "subclass" and entry.parent_slug:
+                    from srd.class_view import class_lookup_message
 
-                char_class = await fivetools.get_class(slug=entry.parent_slug)
-                subclass = fivetools.find_subclass(char_class=char_class, query=entry.name)
-                embed, view = class_lookup_message(char_class, subclass=subclass)
-            else:
-                embed = await build_definition_embed(entry=entry)
-        except fivetools.Open5eError as exc:
+                    char_class = await fivetools.get_class(slug=entry.parent_slug)
+                    subclass = fivetools.find_subclass(char_class=char_class, query=entry.name)
+                    embed, view = class_lookup_message(char_class, subclass=subclass)
+                else:
+                    embed = await build_definition_embed(entry=entry)
+            except fivetools.Open5eError as exc:
+                await send_interaction_message(
+                    interaction,
+                    content=str(exc),
+                    ephemeral=True,
+                    definition_menu=False,
+                )
+                return
+            except Exception:
+                await send_interaction_message(
+                    interaction,
+                    content="Could not load that definition.",
+                    ephemeral=True,
+                    definition_menu=False,
+                )
+                return
+
             await send_interaction_message(
                 interaction,
-                content=str(exc),
+                embed=embed,
+                view=view,
                 ephemeral=True,
                 definition_menu=False,
             )
-            return
-        except Exception:
-            await send_interaction_message(
-                interaction,
-                content="Could not load that definition.",
-                ephemeral=True,
-                definition_menu=False,
-            )
-            return
-
-        await send_interaction_message(
-            interaction,
-            embed=embed,
-            view=view,
-            ephemeral=True,
-            definition_menu=False,
-        )
+        finally:
+            await reset_definition_select(interaction)
 
 
 class DefinitionSelectView(discord.ui.View):
     def __init__(self, entries: list[GlossaryEntry] | None = None) -> None:
         super().__init__(timeout=None)
         self.add_item(DefinitionSelect(entries=entries))
+
+
+def entries_from_select_options(options) -> list[GlossaryEntry]:
+    entries: list[GlossaryEntry] = []
+    for option in options:
+        value = getattr(option, "value", "")
+        if not value or value == "noop":
+            continue
+        parts = value.split("|")
+        if len(parts) < 4:
+            continue
+        kind, slug, parent_slug, name = parts[0], parts[1], parts[2], "|".join(parts[3:])
+        entries.append(
+            GlossaryEntry(
+                name=name,
+                kind=kind,
+                slug=slug,
+                url="",
+                parent_slug=parent_slug or None,
+            )
+        )
+    return entries
+
+
+def definition_view_from_message(message: discord.Message | None) -> DefinitionSelectView | None:
+    for menu in select_menus_from_message(message):
+        if getattr(menu, "custom_id", None) != DEFINITION_SELECT_ID:
+            continue
+        entries = entries_from_select_options(menu.options)
+        if not entries:
+            return None
+        return DefinitionSelectView(entries)
+    return None
+
+
+async def reset_definition_select(interaction: discord.Interaction) -> None:
+    view = definition_view_from_message(interaction.message)
+    if view is None:
+        return
+    await replace_message_view(interaction, view)
 
 
 def build_definition_view(entries: list[GlossaryEntry]) -> DefinitionSelectView | None:

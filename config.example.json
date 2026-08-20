@@ -14,5 +14,14 @@
   "player_category_width": 25,
   "player_category_emoji": "🐉",
   "player_channel_ooc": "📢blabla",
-  "player_channel_rp": "🎲roleplay"
+  "player_channel_rp": "🎲roleplay",
+  "staff_usernames": ["Orynn"],
+  "image_provider": "auto",
+  "image_local_url": "http://127.0.0.1:7860",
+  "image_model": "flux",
+  "image_width": 1024,
+  "image_height": 1024,
+  "image_timeout_seconds": 180,
+  "image_cooldown_seconds": 20,
+  "image_history_limit": 1000
 }

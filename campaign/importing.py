@@ -13,6 +13,7 @@ from campaign.forums import (
     list_campaign_forums,
 )
 from campaign.wiki import (
+    MAX_FOLLOWUPS,
     MAX_IMPORT_PAGES,
     ProgressCallback,
     WikiError,
@@ -26,6 +27,7 @@ from campaign.wiki import (
 )
 
 IMPORT_PLACEHOLDER = "_Import des liens…_"
+WIKI_CONTINUATION = "suite sur le wiki"
 _FILL_DELAY = 0.2
 _WIKI_DELAY = 0.3
 _guild_locks: dict[int, asyncio.Lock] = {}
@@ -88,6 +90,28 @@ def has_import_placeholder(content: str | None) -> bool:
     return "import des liens" in content.casefold()
 
 
+def has_wiki_continuation(content: str | None) -> bool:
+    if not content:
+        return False
+    return WIKI_CONTINUATION in content.casefold()
+
+
+def needs_wiki_fill(content: str | None) -> bool:
+    return has_import_placeholder(content) or has_wiki_continuation(content)
+
+
+async def thread_needs_wiki_fill(
+    thread: discord.Thread,
+    starter: discord.Message | None,
+) -> bool:
+    if needs_wiki_fill(starter.content if starter else None):
+        return True
+    for message in await _collect_followups(thread, starter):
+        if needs_wiki_fill(message.content):
+            return True
+    return False
+
+
 async def resolve_starter(thread: discord.Thread) -> discord.Message | None:
     starter = getattr(thread, "starter_message", None)
     if starter is not None:
@@ -137,13 +161,13 @@ async def _collect_followups(
 ) -> list[discord.Message]:
     found: list[discord.Message] = []
     try:
-        async for message in thread.history(limit=10, oldest_first=True):
+        async for message in thread.history(limit=MAX_FOLLOWUPS + 5, oldest_first=True):
             if starter is not None and message.id == starter.id:
                 continue
             if not _authored_by_bot(message, thread):
                 continue
             found.append(message)
-            if len(found) >= 5:
+            if len(found) >= MAX_FOLLOWUPS:
                 break
     except (discord.Forbidden, discord.HTTPException):
         return found
@@ -155,7 +179,7 @@ async def _has_foreign_followups(
     starter: discord.Message | None,
 ) -> bool:
     try:
-        async for message in thread.history(limit=10, oldest_first=True):
+        async for message in thread.history(limit=MAX_FOLLOWUPS + 5, oldest_first=True):
             if starter is not None and message.id == starter.id:
                 continue
             if _authored_by_bot(message, thread):
@@ -277,7 +301,7 @@ async def _import_wiki_cluster(
         existing = await locate_campaign_thread(forums, page.title)
         if existing is not None:
             starter = await resolve_starter(existing)
-            needs_fill = has_import_placeholder(starter.content if starter else None)
+            needs_fill = await thread_needs_wiki_fill(existing, starter)
             posts.append(
                 ImportedPost(
                     page=page,
@@ -397,7 +421,7 @@ async def _repair_placeholder_posts(
             if thread.archived and getattr(thread, "locked", False):
                 continue
             starter = await resolve_starter(thread)
-            if starter is not None and has_import_placeholder(starter.content):
+            if starter is not None and await thread_needs_wiki_fill(thread, starter):
                 pending.append((thread, starter))
 
     repaired: list[discord.Thread] = []

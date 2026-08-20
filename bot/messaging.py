@@ -4,6 +4,7 @@ from discord.ext.commands.context import Context
 import discord
 
 from srd.definition_view import build_definition_view
+from srd.embeds import clamp_embed_limits
 from srd.glossary import is_loaded
 from srd.linkify import linkify_embed, linkify_embeds, linkify_text, mentioned_entries
 
@@ -30,6 +31,11 @@ def prepare_outgoing(
         if prepared_embeds:
             prepared_embeds = linkify_embeds(prepared_embeds)
 
+    if prepared_embed is not None:
+        prepared_embed = clamp_embed_limits(prepared_embed)
+    if prepared_embeds is not None:
+        prepared_embeds = [clamp_embed_limits(item) for item in prepared_embeds]
+
     if definition_menu and is_loaded() and prepared_view is None:
         entries = mentioned_entries(
             content=content,
@@ -49,6 +55,19 @@ def _embed_kwargs(
         return {"embeds": embeds}
     if embed is not None:
         return {"embed": embed}
+    return {}
+
+
+def _view_kwargs(
+    *,
+    prepared_view: discord.ui.View | None,
+    had_view: bool = False,
+    edit: bool = False,
+) -> dict[str, discord.ui.View | None]:
+    if prepared_view is not None:
+        return {"view": prepared_view}
+    if edit and had_view:
+        return {"view": None}
     return {}
 
 
@@ -73,8 +92,7 @@ async def send_message(
 
     send_kwargs = dict(kwargs)
     send_kwargs.pop("view", None)
-    if prepared_view is not None:
-        send_kwargs["view"] = prepared_view
+    send_kwargs.update(_view_kwargs(prepared_view=prepared_view))
 
     if isinstance(target, Context):
         return await target.send(
@@ -113,8 +131,13 @@ async def send_interaction_message(
 
     send_kwargs = dict(kwargs)
     send_kwargs.pop("view", None)
-    if prepared_view is not None:
-        send_kwargs["view"] = prepared_view
+    send_kwargs.update(
+        _view_kwargs(
+            prepared_view=prepared_view,
+            had_view="view" in kwargs,
+            edit=edit,
+        )
+    )
     if ephemeral:
         send_kwargs["ephemeral"] = True
 

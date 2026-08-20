@@ -10,8 +10,10 @@ from bot.help_text import (
     HELP_COLOR,
     build_combat_help_sections,
     build_help_sections,
+    build_hunger_help_sections,
     build_sheet_help_sections,
     build_simple_help_embed,
+    build_srd_help_sections,
 )
 from bot.help_view import HelpView
 from bot.messaging import send_message
@@ -38,6 +40,7 @@ async def _send_sectioned_help(
         ctx,
         embed=view.current_embed(),
         view=view,
+        linkify=False,
         definition_menu=False,
     )
     view.message = message
@@ -45,8 +48,16 @@ async def _send_sectioned_help(
 
 
 async def _send_help_embed(ctx: Context, embed: discord.Embed) -> None:
-    await send_message(ctx, embeds=[embed], definition_menu=False)
+    await send_message(ctx, embeds=[embed], linkify=False, definition_menu=False)
     await delete_command(ctx)
+
+
+async def send_srd_help(ctx: Context) -> None:
+    await _send_sectioned_help(
+        ctx,
+        title="Rules lookup",
+        sections=build_srd_help_sections(prefix=PREFIX),
+    )
 
 
 class ArkannHelpCommand(MinimalHelpCommand):
@@ -76,6 +87,21 @@ class ArkannHelpCommand(MinimalHelpCommand):
                 ctx,
                 title="Card combat",
                 sections=build_combat_help_sections(
+                    prefix=PREFIX,
+                    is_admin=is_admin(ctx),
+                ),
+            )
+            return
+
+        if group.qualified_name == "srd":
+            await send_srd_help(ctx)
+            return
+
+        if group.qualified_name == "hunger":
+            await _send_sectioned_help(
+                ctx,
+                title="Hunger",
+                sections=build_hunger_help_sections(
                     prefix=PREFIX,
                     is_admin=is_admin(ctx),
                 ),
@@ -134,7 +160,7 @@ class ArkannHelpCommand(MinimalHelpCommand):
             for page in self.paginator.pages
         ]
         if embeds:
-            await send_message(ctx, embeds=embeds, definition_menu=False)
+            await send_message(ctx, embeds=embeds, linkify=False, definition_menu=False)
             await delete_command(ctx)
 
     async def send_error_message(self, error: str) -> None:
@@ -142,6 +168,7 @@ class ArkannHelpCommand(MinimalHelpCommand):
         await send_message(
             self.context,
             embeds=[embed],
+            linkify=False,
             definition_menu=False,
         )
 
@@ -162,7 +189,7 @@ def setup_help(bot: Bot) -> None:
         )
 
     @bot.tree.command(name="help", description="Show Arkann commands")
-    @app_commands.describe(topic="Optional topic: sheet, combat, or a command name")
+    @app_commands.describe(topic="Optional topic: sheet, combat, srd, hunger, or a command name")
     async def slash_help(interaction: discord.Interaction, topic: str | None = None) -> None:
         ctx = await bot.get_context(interaction)
         query = (topic or "").strip().lower()
@@ -185,6 +212,19 @@ def setup_help(bot: Bot) -> None:
                 ctx,
                 title="Card combat",
                 sections=build_combat_help_sections(prefix=PREFIX, is_admin=is_admin(ctx)),
+            )
+            return
+        if query in {"srd", "lookup", "5etools"}:
+            await send_srd_help(ctx)
+            return
+        if query in {"hunger", "faim", "food"}:
+            await _send_sectioned_help(
+                ctx,
+                title="Hunger",
+                sections=build_hunger_help_sections(
+                    prefix=PREFIX,
+                    is_admin=is_admin(ctx),
+                ),
             )
             return
         await ctx.send_help(query)

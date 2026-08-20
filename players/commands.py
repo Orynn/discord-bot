@@ -5,6 +5,7 @@ from discord.ext.commands.context import Context
 from bot.checks import admin_only, guild_only
 from bot.command_helpers import command_reply, delete_command
 from config import PREFIX
+from players.discover import sync_guild_player_sections
 from players.setup import PlayerSetupError, create_player_section, remove_player_section
 from players.storage import get_player_section, list_player_sections
 from sheets.storage import get_character_name
@@ -25,6 +26,7 @@ def setup_player(bot: Bot) -> None:
             "**Player sections (admin):**\n"
             f"`{PREFIX}player setup @member [name]` — category + channels + sheet\n"
             f"`{PREFIX}player list` — registered player sections\n"
+            f"`{PREFIX}player sync` — remap sections from Discord\n"
             f"`{PREFIX}player remove @member` — delete section (keeps sheet)\n\n"
             f"• Category: `🐉-----------NAME-----------🐉`\n"
             f"• Channels: `📢blabla` · `🎲roleplay` + welcome message\n"
@@ -56,7 +58,9 @@ def setup_player(bot: Bot) -> None:
             await delete_command(ctx)
             return
 
-        display_name = (name or get_character_name(user_id=member.id) or member.display_name).strip()
+        display_name = (
+            name or get_character_name(user_id=member.id, guild_id=ctx.guild.id) or member.display_name
+        ).strip()
         if not display_name:
             await command_reply(ctx, "Provide a name or set the player's character name with `;pcname`.")
             await delete_command(ctx)
@@ -129,6 +133,21 @@ def setup_player(bot: Bot) -> None:
         if len(body) > 1900:
             body = f"{body[:1897]}..."
         await command_reply(ctx, f"**Player sections ({len(entries)}):**\n{body}")
+        await delete_command(ctx)
+
+    @player_group.command(
+        name="sync",
+        help=f"Remap player sections from Discord. Usage: `{PREFIX}player sync`",
+    )
+    @guild_only
+    @admin_only
+    async def player_sync(ctx: Context) -> None:
+        assert ctx.guild is not None
+        mapped = sync_guild_player_sections(ctx.guild)
+        if mapped:
+            await command_reply(ctx, f"Mapped **{mapped}** player section(s) from Discord.")
+        else:
+            await command_reply(ctx, "No player sections found on Discord.")
         await delete_command(ctx)
 
     @player_group.command(

@@ -5,6 +5,7 @@ from bot.command_helpers import command_reply, delete_command
 from bot.messaging import send_message
 from bot.speech import format_npc_speech, parse_dialogue
 from config import PREFIX
+from sheets.context import resolve_guild_id, resolve_owner
 from sheets.storage import get_character_name, set_character_name
 
 
@@ -19,7 +20,16 @@ def setup_pc(bot: Bot) -> None:
             await command_reply(ctx, f"Character name cannot be empty. Usage: `{PREFIX}pcname <name>`")
             return
 
-        set_character_name(user_id=ctx.author.id, name=name)
+        guild_id = resolve_guild_id(ctx)
+        if guild_id is None:
+            await command_reply(ctx, "This command can only be used in a server.")
+            return
+
+        owner_id = await resolve_owner(ctx, None)
+        if owner_id is None:
+            return
+
+        set_character_name(user_id=owner_id, guild_id=guild_id, name=name)
         await command_reply(ctx, f"Character name set to **{name}**.")
         await delete_command(ctx)
 
@@ -29,7 +39,16 @@ def setup_pc(bot: Bot) -> None:
         help="Speak in character. Optional (action) before dialogue.",
     )
     async def pc_command(ctx: Context, *, dialogue: str) -> None:
-        character_name = get_character_name(user_id=ctx.author.id)
+        guild_id = resolve_guild_id(ctx)
+        if guild_id is None:
+            await command_reply(ctx, "This command can only be used in a server.")
+            return
+
+        owner_id = await resolve_owner(ctx, None)
+        if owner_id is None:
+            return
+
+        character_name = get_character_name(user_id=owner_id, guild_id=guild_id)
         if character_name is None:
             await command_reply(
                 ctx,
@@ -45,5 +64,7 @@ def setup_pc(bot: Bot) -> None:
                 dialogue=dialogue,
                 action=action,
             ),
+            linkify=False,
+            definition_menu=False,
         )
         await delete_command(ctx)

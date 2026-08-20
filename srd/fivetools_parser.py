@@ -380,10 +380,57 @@ def format_cost(value: int | None) -> str:
     return f"{value / 100:.2f}".rstrip("0").rstrip(".") + " gp"
 
 
+_WEIGHT_TEXT = re.compile(
+    r"^[\s—\-]*(\d+(?:[.,]\d+)?)\s*(?:lb|lbs|pounds?)?\.?\s*$",
+    re.IGNORECASE,
+)
+
+# French PHB: 1 lb = 0.5 kg, so STR × 15 lb = STR × 7.5 kg.
+KG_PER_LB = 0.5
+
+
+def lb_to_kg(pounds: float | int) -> float:
+    return float(pounds) * KG_PER_LB
+
+
+def kg_to_lb(kilos: float | int) -> float:
+    return float(kilos) / KG_PER_LB
+
+
+def format_weight_from_lb(pounds: float | int) -> str:
+    kg = lb_to_kg(pounds)
+    if abs(kg - round(kg)) < 1e-9:
+        return f"{int(round(kg))} kg"
+    text = f"{round(kg, 2):.2f}".rstrip("0").rstrip(".")
+    return f"{text} kg"
+
+
+def parse_weight_lb(value: Any) -> float | None:
+    if value in (None, "", "—", "-", False):
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        if value < 0:
+            return None
+        return float(value)
+    if isinstance(value, str):
+        match = _WEIGHT_TEXT.match(value.strip())
+        if not match:
+            return None
+        return float(match.group(1).replace(",", "."))
+    if isinstance(value, dict):
+        return parse_weight_lb(
+            value.get("number") or value.get("lb") or value.get("weight")
+        )
+    return None
+
+
 def format_weight(value: Any) -> str:
-    if value in (None, "", 0):
+    parsed = value if isinstance(value, (int, float)) else parse_weight_lb(value)
+    if parsed in (None, "") or parsed == 0:
         return "—"
-    return f"{value} lb."
+    return format_weight_from_lb(parsed)
 
 
 def slugify(name: str) -> str:

@@ -21,17 +21,19 @@ class TestSpellSlugMigration(unittest.TestCase):
     def test_save_sheet_normalizes_legacy_slugs(self) -> None:
         save_sheet(
             user_id=1,
+            guild_id=1,
             sheet=CharacterSheet(name="Mage", spells=["srd-2024_fireball", "wotc-srd_shield"]),
         )
-        loaded = get_sheet(user_id=1)
+        loaded = get_sheet(user_id=1, guild_id=1)
         assert loaded is not None
         self.assertEqual(loaded.spells, ["fireball", "shield"])
 
     def test_update_sheet_persists_migrated_slugs(self) -> None:
         with db_module.db_connection() as connection:
             connection.execute(
-                "INSERT INTO sheets (user_id, data) VALUES (?, ?)",
+                "INSERT INTO sheets (user_id, guild_id, data) VALUES (?, ?, ?)",
                 (
+                    "1",
                     "1",
                     '{"name": "Mage", "spells": ["srd-2024_fireball"]}',
                 ),
@@ -40,8 +42,8 @@ class TestSpellSlugMigration(unittest.TestCase):
         def _touch(sheet: CharacterSheet) -> None:
             sheet.notes = "updated"
 
-        update_sheet(user_id=1, updater=_touch)
-        loaded = get_sheet(user_id=1)
+        update_sheet(user_id=1, guild_id=1, updater=_touch)
+        loaded = get_sheet(user_id=1, guild_id=1)
         assert loaded is not None
         self.assertEqual(loaded.spells, ["fireball"])
         self.assertEqual(loaded.notes, "updated")

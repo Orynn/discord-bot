@@ -101,6 +101,12 @@ class TestFiveToolsSearch(unittest.IsolatedAsyncioTestCase):
         entry = await fivetools.search_equipment("Long Sword")
         self.assertEqual(entry["name"], "Long Sword")
 
+    async def test_search_equipment_shield_is_the_basic_shield(self) -> None:
+        entry = await fivetools.search_equipment("shield")
+        self.assertEqual(entry["name"], "Shield")
+        self.assertEqual(entry["kind"], "armor")
+        self.assertEqual(entry["ac"], "2")
+
     async def test_search_class_has_subclasses(self) -> None:
         char_class = await fivetools.search_class("Kindred")
         self.assertGreaterEqual(len(char_class["archetypes"]), 1)
@@ -174,10 +180,58 @@ class TestMonstersAndCache(unittest.IsolatedAsyncioTestCase):
         self.assertIn("🟢 CR", goblin_embed.description or "")
         self.assertIn("⚔️ Actions", [field.name for field in goblin_embed.fields])
 
+    async def test_monster_embed_fields_fit_discord_after_linkify(self) -> None:
+        from bot.messaging import prepare_outgoing
+        from srd import glossary
+        from srd.embeds import DISCORD_FIELD_LIMIT, MAX_EMBED_FIELDS, monster_embed
+
+        await glossary.load()
+        tarrasque = await fivetools.search_monster("Tarrasque")
+        embed = monster_embed(tarrasque)
+        _, prepared, _, _ = prepare_outgoing(embed=embed)
+        assert prepared is not None
+        self.assertLessEqual(len(prepared.fields), MAX_EMBED_FIELDS)
+        for field in prepared.fields:
+            self.assertLessEqual(len(field.name), 256, field.name)
+            self.assertLessEqual(len(field.value), DISCORD_FIELD_LIMIT, field.name)
+        self.assertTrue(any(field.name.startswith("⚔️ Actions") for field in prepared.fields))
+
     async def test_search_monster_partial(self) -> None:
         monster = await fivetools.search_monster("Goblin")
         self.assertTrue(monster["name"].lower().startswith("goblin"))
         self.assertEqual(monster["document__slug"], "XMM")
+
+    async def test_search_weapon_fuzzy_missing_space(self) -> None:
+        weapon = await fivetools.search_weapon("longsword")
+        self.assertEqual(_compact(weapon["name"]), "longsword")
+
+    async def test_search_monster_fuzzy_typo(self) -> None:
+        monster = await fivetools.search_monster("goblin warroir")
+        self.assertIn("goblin", monster["name"].lower())
+        self.assertIn("warrior", monster["name"].lower())
+
+    async def test_collect_search_matches_lists_similar_monsters(self) -> None:
+        matches = fivetools.collect_search_matches("monster", "goblin")
+        names = [item["name"].lower() for item in matches]
+        self.assertGreater(len(matches), 1)
+        self.assertTrue(any("goblin" in name for name in names))
+
+    async def test_partial_item_query_is_ambiguous(self) -> None:
+        self.assertTrue(fivetools.has_exact_name_match("item", "bag of holding"))
+        self.assertIsNone(fivetools.lookup_candidates("item", "bag of holding"))
+        self.assertIsNone(fivetools.lookup_candidates("spell", "fire"))
+
+        candidates = fivetools.lookup_candidates("item", "bag")
+        self.assertIsNotNone(candidates)
+        assert candidates is not None
+        self.assertGreater(len(candidates), 1)
+        names = [item["name"].lower() for item in candidates]
+        self.assertTrue(any("bag" in name for name in names))
+
+        forced = fivetools.lookup_candidates("monster", "goblin", force_list=True)
+        self.assertIsNotNone(forced)
+        assert forced is not None
+        self.assertGreater(len(forced), 1)
 
     async def test_render_cache_reuses_spell(self) -> None:
         first = await fivetools.search_spell("Fireball")
@@ -199,6 +253,17 @@ class TestMonstersAndCache(unittest.IsolatedAsyncioTestCase):
         pages = build_class_pages(wizard)
         self.assertGreater(len(pages), 1)
         self.assertIn("1/", pages[0].footer.text or "")
+
+
+def _compact(value: str) -> str:
+    return "".join(value.lower().split())
+
+
+class TestSearchQuery(unittest.TestCase):
+    def test_parse_search_query_detects_tilde(self) -> None:
+        self.assertEqual(fivetools.parse_search_query("  longsword "), ("longsword", False))
+        self.assertEqual(fivetools.parse_search_query("~goblin"), ("goblin", True))
+        self.assertEqual(fivetools.parse_search_query("~ Goblin Warrior"), ("Goblin Warrior", True))
 
 
 if __name__ == "__main__":

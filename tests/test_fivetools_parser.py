@@ -1,6 +1,13 @@
 import unittest
 
-from srd.fivetools_parser import clean_tags, damage_type, format_damage_type_label, render_entries
+from srd.fivetools_parser import (
+    clean_tags,
+    damage_type,
+    format_damage_type_label,
+    format_weight,
+    parse_weight_lb,
+    render_entries,
+)
 
 
 class TestFiveToolsParser(unittest.TestCase):
@@ -76,6 +83,23 @@ class TestFiveToolsParser(unittest.TestCase):
         )
         self.assertIn("**Scimitar.**", rendered)
         self.assertIn("Melee Attack Roll:", rendered)
+
+    def test_parse_weight_lb(self) -> None:
+        self.assertEqual(parse_weight_lb(3), 3.0)
+        self.assertEqual(parse_weight_lb("8 lb."), 8.0)
+        self.assertEqual(parse_weight_lb("0.05"), 0.05)
+        self.assertIsNone(parse_weight_lb(None))
+        self.assertIsNone(parse_weight_lb("—"))
+        self.assertEqual(format_weight(3), "1.5 kg")
+        self.assertEqual(format_weight("8 lb."), "4 kg")
+        self.assertEqual(format_weight(0), "—")
+
+    def test_lb_kg_conversion(self) -> None:
+        from srd.fivetools_parser import kg_to_lb, lb_to_kg
+
+        self.assertEqual(lb_to_kg(2), 1.0)
+        self.assertEqual(kg_to_lb(1), 2.0)
+        self.assertEqual(lb_to_kg(15), 7.5)
 
 
 if __name__ == "__main__":

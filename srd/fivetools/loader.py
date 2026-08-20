@@ -13,11 +13,24 @@ from srd.fivetools_parser import slugify
 
 _index: FiveToolsIndex | None = None
 _index_lock = asyncio.Lock()
+_ARMOR_TYPES = frozenset({"LA", "MA", "HA", "S"})
 
 
 def _load_json(path: Path) -> dict[str, Any]:
     with path.open(encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def _type_code(raw: dict[str, Any]) -> str:
+    return str(raw.get("type") or "").split("|", 1)[0].upper()
+
+
+def _baseitem_kind(raw: dict[str, Any]) -> str:
+    if raw.get("weapon"):
+        return "weapon"
+    if raw.get("armor") or _type_code(raw) in _ARMOR_TYPES:
+        return "armor"
+    return "item"
 
 
 class FiveToolsIndex:
@@ -206,12 +219,17 @@ class FiveToolsIndex:
             self._register({**raw, "slug": slug}, by_slug=self.skills_by_slug, by_name=self.skills_by_name)
 
         for raw in body.get("baseitem", []):
+            if not raw.get("name"):
+                continue
             slug = slugify(raw["name"])
             item = {**raw, "slug": slug}
-            if raw.get("weapon"):
+            kind = _baseitem_kind(raw)
+            if kind == "weapon":
                 self._register(item, by_slug=self.weapons_by_slug, by_name=self.weapons_by_name)
-            elif raw.get("armor"):
+            elif kind == "armor":
                 self._register(item, by_slug=self.armor_by_slug, by_name=self.armor_by_name)
+            else:
+                self._register(item, by_slug=self.items_by_slug, by_name=self.items_by_name)
 
         for raw in body.get("item", []):
             if raw.get("weapon") or raw.get("armor"):

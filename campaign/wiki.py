@@ -6,7 +6,7 @@ import re
 from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
-from urllib.parse import quote, unquote
+from urllib.parse import quote, unquote, urlparse
 
 import aiohttp
 import discord
@@ -265,10 +265,15 @@ _INFOBOX_FIELDS = (
 
 _STARTER_LIMIT = 1900
 _FOLLOWUP_LIMIT = 1900
-_MAX_FOLLOWUPS = 5
+MAX_FOLLOWUPS = 40
 MAX_RELATED_PAGES = 40
 MAX_IMPORT_PAGES = 400
 _WIKI_FETCH_DELAY = 0.3
+_ALLOWED_THUMB_HOSTS = (
+    "fandom.com",
+    "wikia.com",
+    "nocookie.net",
+)
 
 ProgressCallback = Callable[[str], Awaitable[None]]
 
@@ -443,8 +448,8 @@ class WikiPage:
         extra: list[str] = []
         if len(chunks) > 1:
             remainder = "\n\n".join(chunks[1:])
-            extra = _chunk_text(remainder, limit=_FOLLOWUP_LIMIT)[:_MAX_FOLLOWUPS]
-            if len(_chunk_text(remainder, limit=_FOLLOWUP_LIMIT)) > _MAX_FOLLOWUPS:
+            extra = _chunk_text(remainder, limit=_FOLLOWUP_LIMIT)[:MAX_FOLLOWUPS]
+            if len(_chunk_text(remainder, limit=_FOLLOWUP_LIMIT)) > MAX_FOLLOWUPS:
                 extra[-1] = f"{extra[-1].rstrip()}\n\n_… suite sur le wiki._"
         return [chunks[0], *extra]
 
@@ -1080,7 +1085,19 @@ async def fetch_wiki_cluster(
     )
 
 
+def is_allowed_thumbnail_url(url: str) -> bool:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    host = (parsed.hostname or "").casefold()
+    if not host:
+        return False
+    return any(host == domain or host.endswith(f".{domain}") for domain in _ALLOWED_THUMB_HOSTS)
+
+
 async def download_thumbnail(url: str) -> discord.File | None:
+    if not is_allowed_thumbnail_url(url):
+        return None
     session = await _get_session()
     try:
         async with session.get(url) as response:

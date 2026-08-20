@@ -5,7 +5,11 @@ import discord
 
 from srd.glossary import GlossaryEntry, find_mentions, is_loaded, iter_mention_spans
 
-MARKDOWN_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
+_PROTECTED = re.compile(
+    r"```[\s\S]*?```"
+    r"|`[^`]+`"
+    r"|\[[^\]]+\]\([^)]+\)"
+)
 
 
 def markdown_link(label: str, url: str) -> str:
@@ -34,7 +38,7 @@ def linkify_text(text: str) -> str:
 
     parts: list[str] = []
     last = 0
-    for match in MARKDOWN_LINK.finditer(text):
+    for match in _PROTECTED.finditer(text):
         parts.append(_linkify_plain(text[last : match.start()]))
         parts.append(match.group(0))
         last = match.end()

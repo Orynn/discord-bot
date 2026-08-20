@@ -16,6 +16,7 @@ from bot.command_log import log_command
 from bot.views import register_persistent_views
 from campaign.forums import CampaignForumError, ensure_default_campaign_forums
 from config import PREFIX
+from players.discover import refresh_guild_player_sections, sync_guild_player_sections
 from srd import fivetools, glossary
 from srd.fivetools.paths import is_available
 
@@ -40,6 +41,12 @@ def register_events(bot: Bot) -> None:
         async def _startup() -> None:
             for guild in bot.guilds:
                 try:
+                    mapped = sync_guild_player_sections(guild)
+                    if mapped:
+                        logger.info("Mapped %s player section(s) in %s.", mapped, guild.name)
+                except Exception:
+                    logger.exception("Could not map player sections in %s", guild.name)
+                try:
                     forums = await ensure_default_campaign_forums(guild)
                     logger.info(
                         "Campaign forums ready in %s (%s).",
@@ -56,19 +63,17 @@ def register_events(bot: Bot) -> None:
                     "5etools data missing — bundle official JSON under 5etools/data/ "
                     "and/or export homebrew to 5etools/homebrew.json before using ;srd."
                 )
-                return
-
-            try:
-                index = await fivetools.ensure_index_loaded()
-                logger.info("5etools index loaded from %s.", ", ".join(index.loaded_sources))
-            except Exception:
-                logger.exception("5etools index load failed")
-                return
-
-            try:
-                await glossary.load()
-            except Exception:
-                logger.exception("Rules glossary load failed")
+            else:
+                try:
+                    index = await fivetools.ensure_index_loaded()
+                    logger.info("5etools index loaded from %s.", ", ".join(index.loaded_sources))
+                except Exception:
+                    logger.exception("5etools index load failed")
+                else:
+                    try:
+                        await glossary.load()
+                    except Exception:
+                        logger.exception("Rules glossary load failed")
 
             try:
                 await catch_up_missed_commands(bot=bot)
@@ -77,14 +82,51 @@ def register_events(bot: Bot) -> None:
 
         bot.loop.create_task(_startup())
 
+    def _refresh_sections(guild: discord.Guild | None) -> None:
+        if guild is None:
+            return
+        try:
+            refresh_guild_player_sections(guild)
+        except Exception:
+            logger.exception("Could not refresh player sections in %s", getattr(guild, "name", guild))
+
+    @bot.event
+    async def on_guild_available(guild: discord.Guild) -> None:
+        _refresh_sections(guild)
+
+    @bot.event
+    async def on_guild_join(guild: discord.Guild) -> None:
+        _refresh_sections(guild)
+
+    @bot.event
+    async def on_guild_channel_create(channel: discord.abc.GuildChannel) -> None:
+        _refresh_sections(getattr(channel, "guild", None))
+
+    @bot.event
+    async def on_guild_channel_update(
+        before: discord.abc.GuildChannel,
+        after: discord.abc.GuildChannel,
+    ) -> None:
+        _refresh_sections(getattr(after, "guild", None) or getattr(before, "guild", None))
+
+    @bot.event
+    async def on_guild_channel_delete(channel: discord.abc.GuildChannel) -> None:
+        _refresh_sections(getattr(channel, "guild", None))
+
     @bot.event
     async def on_command_error(ctx: Context, error: commands.CommandError) -> None:
         if isinstance(error, commands.CommandNotFound):
             return
 
+        if is_catchup_invoke(ctx):
+            return
+
+        if isinstance(error, commands.CommandOnCooldown):
+            wait = max(1, int(error.retry_after + 0.999))
+            await _error_reply(ctx, f"That command is on cooldown. Try again in {wait}s.")
+            return
+
         if isinstance(error, commands.UserInputError):
-            if is_catchup_invoke(ctx):
-                return
             help_text = ctx.command.help if ctx.command and ctx.command.help else ""
             if isinstance(error, commands.MissingRequiredArgument):
                 usage = ""

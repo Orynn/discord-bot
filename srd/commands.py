@@ -19,6 +19,8 @@ from srd.embeds import (
     spell_embed,
     weapon_embed,
 )
+from srd.fivetools.lookup import lookup_candidates, parse_search_query
+from srd.search_view import SrdMatchView, build_match_prompt
 
 
 async def _send_lookup(
@@ -41,24 +43,12 @@ def setup_srd(bot: Bot) -> None:
     @bot.group(
         name="srd",
         invoke_without_command=True,
-        help=f"Look up D&D rules content via 5etools. Usage: `{PREFIX}srd <type> <name>`",
+        help=f"Look up D&D rules. `{PREFIX}srd spell fireball` · `{PREFIX}help srd`",
     )
     async def srd_group(ctx: Context) -> None:
-        await command_reply(
-            ctx,
-            "**Rules lookups (5etools):**\n"
-            f"`{PREFIX}srd spell <name>` — spell details\n"
-            f"`{PREFIX}srd species <name>` — species traits\n"
-            f"`{PREFIX}srd class <name>` — class features\n"
-            f"`{PREFIX}srd background <name>` — background\n"
-            f"`{PREFIX}srd feat <name>` — feat\n"
-            f"`{PREFIX}srd condition <name>` — condition\n"
-            f"`{PREFIX}srd monster <name>` — statblock\n"
-            f"`{PREFIX}srd weapon <name>` — weapon\n"
-            f"`{PREFIX}srd armor <name>` — armor\n"
-            f"`{PREFIX}srd item <name>` — adventuring gear",
-        )
-        await delete_command(ctx)
+        from bot.help_commands import send_srd_help
+
+        await send_srd_help(ctx)
 
     lookups = (
         ("spell", (), fivetools.search_spell, spell_embed, "Look up a spell"),
@@ -88,7 +78,26 @@ def setup_srd(bot: Bot) -> None:
             _kind=name,
         ) -> None:
             try:
-                item = await _search(query=query.strip())
+                text, force_fuzzy = parse_search_query(query)
+                if not text:
+                    await _handle_lookup_error(ctx, fivetools.FiveToolsNotFoundError("Missing search text."))
+                    return
+                candidates = lookup_candidates(_kind, text, force_list=force_fuzzy)
+                if candidates is not None:
+                    if not candidates:
+                        raise fivetools.FiveToolsNotFoundError(f"No {_kind} found matching '{text}'.")
+                    if len(candidates) > 1:
+                        await send_message(
+                            ctx,
+                            embed=build_match_prompt(query=text, matches=candidates),
+                            view=SrdMatchView(kind=_kind, matches=candidates),
+                            definition_menu=False,
+                        )
+                        await delete_command(ctx)
+                        return
+                    item = await _search(query=str(candidates[0].get("name") or text))
+                else:
+                    item = await _search(query=text)
                 if _kind == "class":
                     embed, view = class_lookup_message(item)
                     await _send_lookup(ctx, embed, view=view)

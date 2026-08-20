@@ -219,25 +219,22 @@ def _visible_overwrite(*, manage: bool = False) -> discord.PermissionOverwrite:
     return discord.PermissionOverwrite(**kwargs)
 
 
-def campaign_category_overwrites(
+def add_staff_channel_overwrites(
     guild: discord.Guild,
+    overwrites: dict[discord.abc.Snowflake, discord.PermissionOverwrite],
+    visibility: discord.PermissionOverwrite,
     *,
     include_admin_roles: bool = True,
 ) -> dict[discord.abc.Snowflake, discord.PermissionOverwrite]:
-    overwrites: dict[discord.abc.Snowflake, discord.PermissionOverwrite] = {
-        guild.default_role: discord.PermissionOverwrite(view_channel=False),
-    }
     me = guild.me
     me_id = getattr(me, "id", None) if me is not None else None
-    if me is not None:
-        overwrites[me] = _visible_overwrite(manage=True)
     owner = guild.owner
     if owner is None:
         owner_id = getattr(guild, "owner_id", None)
         if owner_id is not None and owner_id != me_id:
             owner = discord.Object(id=owner_id)
     if owner is not None and getattr(owner, "id", None) != me_id:
-        overwrites[owner] = _visible_overwrite()
+        overwrites[owner] = visibility
     if not include_admin_roles:
         return overwrites
     for role in guild.roles:
@@ -253,8 +250,37 @@ def campaign_category_overwrites(
         if perms is None:
             continue
         if perms.administrator or perms.manage_guild:
-            overwrites[role] = _visible_overwrite()
+            overwrites[role] = visibility
     return overwrites
+
+
+def campaign_category_overwrites(
+    guild: discord.Guild,
+    *,
+    include_admin_roles: bool = True,
+) -> dict[discord.abc.Snowflake, discord.PermissionOverwrite]:
+    overwrites: dict[discord.abc.Snowflake, discord.PermissionOverwrite] = {
+        guild.default_role: discord.PermissionOverwrite(view_channel=False),
+    }
+    me = guild.me
+    if me is not None:
+        overwrites[me] = _visible_overwrite(manage=True)
+    return add_staff_channel_overwrites(
+        guild,
+        overwrites,
+        _visible_overwrite(),
+        include_admin_roles=include_admin_roles,
+    )
+
+
+def _may_persist_campaign_home(guild: discord.Guild) -> bool:
+    home_id = app_config.CAMPAIGN_GUILD_ID
+    return home_id is None or home_id == guild.id
+
+
+def _persist_campaign_home(guild: discord.Guild, category_id: int) -> None:
+    if _may_persist_campaign_home(guild):
+        app_config.set_campaign_category_id(category_id, guild_id=guild.id)
 
 
 async def ensure_campaign_category(guild: discord.Guild) -> discord.CategoryChannel:
@@ -264,7 +290,7 @@ async def ensure_campaign_category(guild: discord.Guild) -> discord.CategoryChan
             app_config.CAMPAIGN_CATEGORY_ID != existing.id
             or app_config.CAMPAIGN_GUILD_ID != guild.id
         ):
-            app_config.set_campaign_category_id(existing.id, guild_id=guild.id)
+            _persist_campaign_home(guild, existing.id)
         return existing
 
     require_manage_channels(guild)
@@ -287,7 +313,7 @@ async def ensure_campaign_category(guild: discord.Guild) -> discord.CategoryChan
             overwrites=campaign_category_overwrites(guild, include_admin_roles=False),
             reason=reason,
         )
-    app_config.set_campaign_category_id(created.id, guild_id=guild.id)
+    _persist_campaign_home(guild, created.id)
     logger.info("Recreated private CAMPAIGN category in %s (%s).", guild.name, created.id)
     return created
 
@@ -316,11 +342,12 @@ async def ensure_campaign_forum(guild: discord.Guild, name: str) -> discord.Foru
 
 
 async def ensure_default_campaign_forums(guild: discord.Guild) -> list[discord.ForumChannel]:
+    home_id = app_config.CAMPAIGN_GUILD_ID
+    if home_id is not None and home_id != guild.id:
+        return list_campaign_forums(guild)
+
     existing = find_campaign_category(guild)
     if existing is None:
-        home_id = app_config.CAMPAIGN_GUILD_ID
-        if home_id is not None and home_id != guild.id:
-            return []
         if not has_manage_channels(guild):
             logger.warning(
                 "Skipping campaign setup in %s: no CAMPAIGN category and no Manage Channels.",

@@ -1,5 +1,5 @@
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields
 
 HAND_SIZE = 5
 DRAW_PER_TURN = 1
@@ -56,13 +56,15 @@ class CardSnapshot:
     uses_proficiency: bool = False
     ability: str | None = None
     damage_type_label: str | None = None
+    buff: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, data: dict) -> "CardSnapshot":
-        return cls(**data)
+        allowed = {item.name for item in fields(cls)}
+        return cls(**{key: value for key, value in data.items() if key in allowed})
 
 
 def parse_damage_roll(notation: str | None) -> tuple[int, int, int]:
@@ -96,6 +98,42 @@ def card_description(card: CardSnapshot) -> str:
 
 def lookup_card(catalog: dict[str, CardSnapshot], card_id: str) -> CardSnapshot | None:
     return catalog.get(card_id)
+
+
+def is_spellbook_card(card: CardSnapshot) -> bool:
+    return card.card_type in {"spell", "homebrew"}
+
+
+def card_requires_target(card: CardSnapshot) -> bool:
+    return card.needs_target or is_spellbook_card(card)
+
+
+AUTO_HIT_SLUGS = frozenset({"magic-missile"})
+
+
+def card_makes_attack_roll(card: CardSnapshot) -> bool:
+    if card.is_healing or card.dice_count <= 0 or card.card_type == "dodge":
+        return False
+    slug = (card.spell_slug or "").lower()
+    if slug in AUTO_HIT_SLUGS:
+        return False
+    return True
+
+
+BUFF_BY_SLUG: dict[str, str] = {
+    "shield": "shield",
+    "mage-armor": "mage-armor",
+    "bless": "bless",
+}
+
+
+def card_buff(card: CardSnapshot) -> str | None:
+    if card.buff:
+        return card.buff
+    if card.card_type == "dodge":
+        return "dodge"
+    slug = (card.spell_slug or "").lower()
+    return BUFF_BY_SLUG.get(slug)
 
 
 def is_healing_spell(*, damage_types: list[str] | None, desc: str) -> bool:

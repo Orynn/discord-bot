@@ -17,6 +17,8 @@ from srd.embeds import (
     spell_embed,
     weapon_embed,
 )
+from srd.fivetools.lookup import lookup_candidates, parse_search_query
+from srd.search_view import SrdMatchView, build_match_prompt
 
 SRD_LOOKUPS = {
     "spell": (fivetools.search_spell, spell_embed),
@@ -50,7 +52,7 @@ SRD_TYPE_CHOICES = [
 
 def setup_slash(bot: Bot) -> None:
     @bot.tree.command(name="srd", description="Look up rules content from your 5etools export")
-    @app_commands.describe(content_type="Type of content", name="Name to search")
+    @app_commands.describe(content_type="Type of content", name="Name to search. Prefix ~ to list close matches")
     @app_commands.choices(content_type=SRD_TYPE_CHOICES)
     async def slash_srd(
         interaction: discord.Interaction,
@@ -58,11 +60,28 @@ def setup_slash(bot: Bot) -> None:
         name: str,
     ) -> None:
         await interaction.response.defer(ephemeral=True)
-        query = name.strip()
-        search, embed_fn = SRD_LOOKUPS[content_type.value]
+        text, force_fuzzy = parse_search_query(name)
+        kind = content_type.value
+        search, embed_fn = SRD_LOOKUPS[kind]
         try:
-            item = await search(query=query)
-            if content_type.value == "class":
+            if not text:
+                raise fivetools.FiveToolsNotFoundError("Missing search text.")
+            candidates = lookup_candidates(kind, text, force_list=force_fuzzy)
+            if candidates is not None:
+                if not candidates:
+                    raise fivetools.FiveToolsNotFoundError(f"No {kind} found matching '{text}'.")
+                if len(candidates) > 1:
+                    await send_interaction_message(
+                        interaction,
+                        embed=build_match_prompt(query=text, matches=candidates),
+                        view=SrdMatchView(kind=kind, matches=candidates),
+                        ephemeral=True,
+                    )
+                    return
+                item = await search(query=str(candidates[0].get("name") or text))
+            else:
+                item = await search(query=text)
+            if kind == "class":
                 embed, view = class_lookup_message(item)
                 await send_interaction_message(interaction, embed=embed, view=view, ephemeral=True)
                 return
@@ -82,7 +101,8 @@ def setup_slash(bot: Bot) -> None:
             kind = kind.value
         if not kind:
             return []
+        text, _force = parse_search_query(current)
         return [
             app_commands.Choice(name=option[:100], value=option[:100])
-            for option in fivetools.suggest_names(str(kind), current)
+            for option in fivetools.suggest_names(str(kind), text)
         ]

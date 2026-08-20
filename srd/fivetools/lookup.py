@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
+from difflib import SequenceMatcher
 from typing import Any
 from urllib.parse import quote
 
@@ -17,6 +19,7 @@ from srd.fivetools_parser import (
     format_spell_level,
     format_time,
     format_weight,
+    parse_weight_lb,
     render_entries,
     slugify,
     spell_school,
@@ -70,6 +73,10 @@ _KIND_NAME_STORES = {
     "monster": "monsters_by_name",
     "skill": "skills_by_name",
 }
+
+FUZZY_PREFIX = "~"
+FUZZY_KINDS = frozenset({"item", "weapon", "armor", "monster", "species"})
+_FUZZY_RATIO = 0.72
 
 
 def clear_render_cache() -> None:
@@ -146,6 +153,12 @@ def entry_url_for_item(kind: str, item: dict[str, Any]) -> str:
     return page_url(_page_for_kind(kind), name, source=source)
 
 
+def _contains_as_word(haystack: str, needle: str) -> bool:
+    if not needle or not haystack:
+        return False
+    return re.search(rf"(?<![a-z0-9]){re.escape(needle)}(?![a-z0-9])", haystack) is not None
+
+
 def _pick_best_match(items: Iterable[dict[str, Any]], query: str) -> dict[str, Any] | None:
     query_lower = query.lower().strip()
     if not query_lower:
@@ -158,7 +171,7 @@ def _pick_best_match(items: Iterable[dict[str, Any]], query: str) -> dict[str, A
         if name == query_lower:
             if exact is None or edition_rank(item) > edition_rank(exact):
                 exact = item
-        elif query_lower in name or name in query_lower:
+        elif _contains_as_word(name, query_lower) or _contains_as_word(query_lower, name):
             partial.append(item)
     if exact is not None:
         return exact
@@ -167,7 +180,7 @@ def _pick_best_match(items: Iterable[dict[str, Any]], query: str) -> dict[str, A
 
     def rank(item: dict[str, Any]) -> tuple[int, int]:
         name = item.get("name", "").lower()
-        if query_lower in name:
+        if _contains_as_word(name, query_lower):
             return (1, len(name))
         return (2, len(name))
 
@@ -175,6 +188,101 @@ def _pick_best_match(items: Iterable[dict[str, Any]], query: str) -> dict[str, A
     if rank(best)[0] >= 2:
         return None
     return best
+
+
+def parse_search_query(raw: str) -> tuple[str, bool]:
+    text = (raw or "").strip()
+    if text.startswith(FUZZY_PREFIX):
+        return text[len(FUZZY_PREFIX) :].strip(), True
+    return text, False
+
+
+def _compact(text: str) -> str:
+    return "".join(text.lower().split())
+
+
+def _fuzzy_score(name: str, query: str) -> tuple[int, float] | None:
+    n = name.lower().strip()
+    q = query.lower().strip()
+    if not q or not n:
+        return None
+    if n == q:
+        return (0, 0.0)
+    if n.startswith(q):
+        return (1, float(len(n)))
+    if _contains_as_word(n, q):
+        return (2, float(len(n)))
+    tokens = [token for token in q.replace("-", " ").split() if token]
+    haystack = n.replace("-", " ")
+    if tokens and all(_contains_as_word(haystack, token) for token in tokens):
+        return (3, float(len(n)))
+    ratio = SequenceMatcher(None, q, n).ratio()
+    compact_ratio = SequenceMatcher(None, _compact(q), _compact(n)).ratio()
+    best = max(ratio, compact_ratio)
+    if best >= _FUZZY_RATIO:
+        return (4, 1.0 - best)
+    return None
+
+
+def collect_name_matches(
+    store: dict[str, dict[str, Any]],
+    query: str,
+    *,
+    limit: int = 25,
+) -> list[dict[str, Any]]:
+    text = query.lower().strip()
+    if len(text) < 2:
+        return []
+    best_by_name: dict[str, tuple[tuple[int, float], int, dict[str, Any]]] = {}
+    for item in store.values():
+        name = str(item.get("name") or "")
+        score = _fuzzy_score(name, text)
+        if score is None:
+            continue
+        key = name.lower()
+        rank = edition_rank(item)
+        current = best_by_name.get(key)
+        if current is None or score < current[0] or (score == current[0] and rank > current[1]):
+            best_by_name[key] = (score, rank, item)
+    ordered = sorted(best_by_name.values(), key=lambda row: (row[0], -row[1]))
+    return [row[2] for row in ordered[:limit]]
+
+
+def collect_search_matches(kind: str, query: str, *, limit: int = 25) -> list[dict[str, Any]]:
+    store_name = _KIND_NAME_STORES.get(kind)
+    if not store_name:
+        return []
+    index = get_index()
+    store: dict[str, dict[str, Any]] = getattr(index, store_name)
+    return collect_name_matches(store, query, limit=limit)
+
+
+def has_exact_name_match(kind: str, query: str) -> bool:
+    store_name = _KIND_NAME_STORES.get(kind)
+    if not store_name:
+        return False
+    index = get_index()
+    store: dict[str, dict[str, Any]] = getattr(index, store_name)
+    return query.lower().strip() in store
+
+
+def lookup_candidates(
+    kind: str,
+    query: str,
+    *,
+    force_list: bool = False,
+) -> list[dict[str, Any]] | None:
+    """Return name candidates when a unique exact hit should not be used.
+
+    ``None`` means the caller should run a unique name search.
+    An empty list means nothing matched. One item is a unique candidate;
+    two or more should be shown as a picker.
+    """
+    if kind not in FUZZY_KINDS:
+        return None
+    if not force_list and has_exact_name_match(kind, query):
+        return None
+    return collect_search_matches(kind, query)
 
 
 def _lookup_by_slug(index: FiveToolsIndex, slug: str, store: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -206,13 +314,20 @@ def _lookup_by_slug(index: FiveToolsIndex, slug: str, store: dict[str, dict[str,
 
 
 def _lookup_by_query(store_by_name: dict[str, dict[str, Any]], query: str, *, label: str) -> dict[str, Any]:
-    exact = store_by_name.get(query.lower().strip())
+    text, _force_fuzzy = parse_search_query(query)
+    if not text:
+        raise FiveToolsNotFoundError(f"No {label} found matching '{query}'.")
+    exact = store_by_name.get(text.lower())
     if exact is not None:
         return exact
-    match = _pick_best_match(store_by_name.values(), query)
-    if match is None:
-        raise FiveToolsNotFoundError(f"No {label} found matching '{query}'.")
-    return match
+    match = _pick_best_match(store_by_name.values(), text)
+    if match is not None:
+        return match
+    if label in FUZZY_KINDS:
+        fuzzy = collect_name_matches(store_by_name, text, limit=1)
+        if fuzzy:
+            return fuzzy[0]
+    raise FiveToolsNotFoundError(f"No {label} found matching '{query}'.")
 
 
 def normalize_spell(item: dict[str, Any]) -> dict[str, Any]:
@@ -421,6 +536,8 @@ def normalize_weapon(item: dict[str, Any]) -> dict[str, Any]:
         "damage_type": damage_type(item.get("dmgType")),
         "range": range_text,
         "properties": ", ".join(prop_names) if prop_names else "—",
+        "weight_lb": parse_weight_lb(item.get("weight")),
+        "weight": format_weight(item.get("weight")),
     }
 
 
@@ -437,6 +554,25 @@ def normalize_armor(item: dict[str, Any]) -> dict[str, Any]:
         "category": category,
         "stealth_disadvantage": bool(item.get("stealth")),
         "strength_required": item.get("strength"),
+        "weight_lb": parse_weight_lb(item.get("weight")),
+        "weight": format_weight(item.get("weight")),
+    }
+
+
+def _container_fields(item: dict[str, Any]) -> dict[str, Any]:
+    capacity = item.get("containerCapacity")
+    if not isinstance(capacity, dict):
+        return {"container_capacity_lb": None, "container_weightless": False}
+    weights = capacity.get("weight") or []
+    pounds = None
+    if weights:
+        try:
+            pounds = float(weights[0])
+        except (TypeError, ValueError):
+            pounds = None
+    return {
+        "container_capacity_lb": pounds,
+        "container_weightless": bool(capacity.get("weightless")),
     }
 
 
@@ -453,8 +589,10 @@ def normalize_item(item: dict[str, Any]) -> dict[str, Any]:
         "kind": "item",
         "desc": render_entries(item.get("entries")),
         "category": item_type,
+        "weight_lb": parse_weight_lb(item.get("weight")),
         "weight": format_weight(item.get("weight")),
         "cost": format_cost(item.get("value")),
+        **_container_fields(item),
     }
 
 

@@ -70,6 +70,7 @@ class HelpView(discord.ui.View):
         self._rebuild_buttons()
         _, prepared_embed, _, _ = prepare_outgoing(
             embed=self.current_embed(),
+            linkify=False,
             definition_menu=False,
         )
         await interaction.response.edit_message(embed=prepared_embed, view=self)

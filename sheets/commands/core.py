@@ -5,11 +5,11 @@ from discord.ext.commands.context import Context
 from bot.command_helpers import command_reply, delete_command
 from bot.messaging import send_message
 from config import PREFIX
-from sheets.context import get_sheet_for_owner, resolve_owner, target_label
+from sheets.context import get_sheet_for_owner, resolve_guild_id, resolve_owner, save_owner_sheet, target_label
 from sheets.data import CharacterSheet
 from sheets.embeds import build_sheet_embed, sheet_info_embeds
 from sheets.handlers import apply_hp
-from sheets.storage import delete_sheet, get_sheet, save_sheet, set_character_name
+from sheets.storage import delete_sheet, get_sheet, set_character_name
 from srd import fivetools
 
 
@@ -36,7 +36,12 @@ def register_core_commands(sheet_group: Group) -> None:
         if owner_id is None:
             return
 
-        if get_sheet(user_id=owner_id) is not None:
+        guild_id = resolve_guild_id(ctx)
+        if guild_id is None:
+            await command_reply(ctx, "This command can only be used in a server.")
+            return
+
+        if get_sheet(user_id=owner_id, guild_id=guild_id) is not None:
             target = member.display_name if member else "You"
             await command_reply(
                 ctx,
@@ -45,8 +50,8 @@ def register_core_commands(sheet_group: Group) -> None:
             return
 
         sheet = CharacterSheet(name=name)
-        save_sheet(user_id=owner_id, sheet=sheet)
-        set_character_name(user_id=owner_id, name=name)
+        save_owner_sheet(ctx, owner_id, sheet)
+        set_character_name(user_id=owner_id, guild_id=guild_id, name=name)
         label = target_label(member, sheet)
         await command_reply(
             ctx,
@@ -66,7 +71,9 @@ def register_core_commands(sheet_group: Group) -> None:
         result = await get_sheet_for_owner(ctx, member)
         if result is None:
             return
-        _, sheet = result
+        owner_id, sheet = result
+        sheet.equipment.stow_unassigned()
+        save_owner_sheet(ctx, owner_id, sheet)
 
         await send_message(ctx, embed=build_sheet_embed(sheet=sheet))
         await delete_command(ctx)
@@ -105,9 +112,10 @@ def register_core_commands(sheet_group: Group) -> None:
             await command_reply(ctx, str(exc))
             return
 
-        save_sheet(user_id=owner_id, sheet=sheet)
-        if field_name == "name":
-            set_character_name(user_id=owner_id, name=sheet.name)
+        save_owner_sheet(ctx, owner_id, sheet)
+        guild_id = resolve_guild_id(ctx)
+        if field_name == "name" and guild_id is not None:
+            set_character_name(user_id=owner_id, guild_id=guild_id, name=sheet.name)
 
         label = target_label(member, sheet)
         await command_reply(ctx, f"{label}: **{field_name}** set to **{value.strip()}**.")
@@ -141,7 +149,7 @@ def register_core_commands(sheet_group: Group) -> None:
             await command_reply(ctx, str(exc))
             return
 
-        save_sheet(user_id=owner_id, sheet=sheet)
+        save_owner_sheet(ctx, owner_id, sheet)
         label = target_label(member, sheet)
         await command_reply(ctx, f"{label}: HP set to **{sheet.hp_current}/{sheet.hp_max}**.")
         await delete_command(ctx)
@@ -220,8 +228,13 @@ def register_core_commands(sheet_group: Group) -> None:
         if owner_id is None:
             return
 
-        sheet = get_sheet(user_id=owner_id)
-        if not delete_sheet(user_id=owner_id):
+        guild_id = resolve_guild_id(ctx)
+        if guild_id is None:
+            await command_reply(ctx, "This command can only be used in a server.")
+            return
+
+        sheet = get_sheet(user_id=owner_id, guild_id=guild_id)
+        if not delete_sheet(user_id=owner_id, guild_id=guild_id):
             target = member.display_name if member else "You"
             await command_reply(ctx, f"{target} have no character sheet.")
             return

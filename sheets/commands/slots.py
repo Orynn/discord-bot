@@ -7,9 +7,8 @@ from bot.command_helpers import command_reply, delete_command
 from bot.help_text import HELP_MAGIC_COLOR
 from bot.messaging import send_message
 from config import PREFIX
-from sheets.context import get_sheet_for_owner, target_label
+from sheets.context import get_sheet_for_owner, save_owner_sheet, target_label
 from sheets.spell_slots import level_label, parse_slot_level, slots_table_for_class
-from sheets.storage import save_sheet
 
 
 def _slots_help_embed(*, label: str, slots_text: str, admin_hint: str) -> discord.Embed:
@@ -107,7 +106,7 @@ def register_slot_commands(sheet_group: Group) -> None:
             await command_reply(ctx, str(exc))
             return
 
-        save_sheet(user_id=owner_id, sheet=sheet)
+        save_owner_sheet(ctx, owner_id, sheet)
         label = target_label(member, sheet)
         await command_reply(
             ctx,
@@ -146,7 +145,7 @@ def register_slot_commands(sheet_group: Group) -> None:
             await command_reply(ctx, str(exc))
             return
 
-        save_sheet(user_id=owner_id, sheet=sheet)
+        save_owner_sheet(ctx, owner_id, sheet)
         label = target_label(member, sheet)
         await command_reply(
             ctx,
@@ -187,7 +186,7 @@ def register_slot_commands(sheet_group: Group) -> None:
             await command_reply(ctx, str(exc))
             return
 
-        save_sheet(user_id=owner_id, sheet=sheet)
+        save_owner_sheet(ctx, owner_id, sheet)
         label = target_label(member, sheet)
         await command_reply(
             ctx,
@@ -228,7 +227,7 @@ def register_slot_commands(sheet_group: Group) -> None:
             return
 
         sheet.spell_slots.apply_table(table, fill=True)
-        save_sheet(user_id=owner_id, sheet=sheet)
+        save_owner_sheet(ctx, owner_id, sheet)
         label = target_label(member, sheet)
         await command_reply(
             ctx,
@@ -247,7 +246,7 @@ def register_slot_commands(sheet_group: Group) -> None:
             return
         owner_id, sheet = result
         sheet.spell_slots.clear()
-        save_sheet(user_id=owner_id, sheet=sheet)
+        save_owner_sheet(ctx, owner_id, sheet)
         label = target_label(member, sheet)
         await command_reply(ctx, f"{label}: spell slots cleared.")
         await delete_command(ctx)

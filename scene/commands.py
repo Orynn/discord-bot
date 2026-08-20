@@ -7,7 +7,7 @@ from discord.ext.commands.context import Context
 from bot.command_helpers import delete_command
 from bot.messaging import send_message
 from bot.names import get_known_character_names
-from config import PREFIX
+from sheets.context import resolve_guild_id
 
 _ENDING_PUNCTUATION: FrozenSet[str] = frozenset(".!?,;:")
 
@@ -20,8 +20,8 @@ def _is_already_bold(text: str, start: int, end: int) -> bool:
     )
 
 
-def _format_known_names(text: str) -> str:
-    known_names = get_known_character_names()
+def _format_known_names(text: str, *, guild_id: int) -> str:
+    known_names = get_known_character_names(guild_id=guild_id)
     if not known_names:
         return text
 
@@ -49,8 +49,8 @@ def _format_known_names(text: str) -> str:
     return result
 
 
-def _format_description(text: str) -> str:
-    text = _format_known_names(text=text.rstrip())
+def _format_description(text: str, *, guild_id: int) -> str:
+    text = _format_known_names(text=text.rstrip(), guild_id=guild_id)
     if not text or text[-1] not in _ENDING_PUNCTUATION:
         text = f"{text}."
     return f"*{text}*"
@@ -59,5 +59,11 @@ def _format_description(text: str) -> str:
 def setup_desc(bot: Bot) -> None:
     @bot.hybrid_command(name="desc", help="Post a scene description in italics.")
     async def desc_command(ctx: Context, *, text: str) -> None:
-        await send_message(ctx, content=_format_description(text=text))
+        guild_id = resolve_guild_id(ctx) or 0
+        await send_message(
+            ctx,
+            content=_format_description(text, guild_id=guild_id),
+            linkify=False,
+            definition_menu=False,
+        )
         await delete_command(ctx)

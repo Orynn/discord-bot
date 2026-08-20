@@ -5,9 +5,8 @@ from discord.ext.commands.context import Context
 from bot.checks import is_admin
 from bot.command_helpers import command_reply, delete_command
 from config import PREFIX
-from sheets.context import format_skill_name, get_sheet_for_owner, target_label
-from sheets.data import ABILITIES, SKILL_ABILITIES
-from sheets.storage import save_sheet
+from sheets.context import format_skill_name, get_sheet_for_owner, save_owner_sheet, target_label
+from sheets.data import ABILITIES, lookup_skill
 
 
 def register_proficiency_commands(sheet_group: Group) -> None:
@@ -56,7 +55,7 @@ def register_proficiency_commands(sheet_group: Group) -> None:
             return
 
         added = sheet.toggle_save_proficiency(ability=ability)
-        save_sheet(user_id=owner_id, sheet=sheet)
+        save_owner_sheet(ctx, owner_id, sheet)
         status = "added" if added else "removed"
         label = target_label(member, sheet)
         await command_reply(ctx, f"{label}: save proficiency for **{ability.upper()}** {status}.")
@@ -87,11 +86,14 @@ def register_proficiency_commands(sheet_group: Group) -> None:
             )
             return
 
-        skill = skill.lower().replace(" ", "_")
-        if skill not in SKILL_ABILITIES:
-            valid = ", ".join(sorted(SKILL_ABILITIES))
-            await command_reply(ctx, f"Unknown skill. Choose from: {valid}")
+        matched = lookup_skill(skill)
+        if matched is None:
+            await command_reply(
+                ctx,
+                "Unknown skill. Use English (`stealth`) or French (`discrétion`).",
+            )
             return
+        skill = matched
 
         label = target_label(member, sheet)
         skill_label = format_skill_name(skill)
@@ -108,5 +110,5 @@ def register_proficiency_commands(sheet_group: Group) -> None:
             status = "added" if added else "removed"
             await command_reply(ctx, f"{label}: proficiency for **{skill_label}** {status}.")
 
-        save_sheet(user_id=owner_id, sheet=sheet)
+        save_owner_sheet(ctx, owner_id, sheet)
         await delete_command(ctx)

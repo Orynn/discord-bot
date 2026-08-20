@@ -23,11 +23,15 @@ class InitiativeState:
     order: list[InitiativeEntry]
 
 
-def get_initiative(guild_id: int) -> InitiativeState | None:
+def get_initiative(*, guild_id: int, scope_id: int) -> InitiativeState | None:
     with db_connection() as connection:
         row = connection.execute(
-            "SELECT channel_id, active_index, order_json FROM initiative WHERE guild_id = ?",
-            (str(guild_id),),
+            """
+            SELECT channel_id, active_index, order_json
+            FROM initiative
+            WHERE guild_id = ? AND scope_id = ?
+            """,
+            (str(guild_id), str(scope_id)),
         ).fetchone()
     if row is None:
         return None
@@ -39,7 +43,7 @@ def get_initiative(guild_id: int) -> InitiativeState | None:
     )
 
 
-def save_initiative(guild_id: int, state: InitiativeState) -> None:
+def save_initiative(*, guild_id: int, scope_id: int, state: InitiativeState) -> None:
     payload = json.dumps(
         [{"name": entry.name, "total": entry.total, "user_id": entry.user_id} for entry in state.order],
         ensure_ascii=False,
@@ -47,13 +51,19 @@ def save_initiative(guild_id: int, state: InitiativeState) -> None:
     with db_connection() as connection:
         connection.execute(
             """
-            INSERT OR REPLACE INTO initiative (guild_id, channel_id, active_index, order_json)
-            VALUES (?, ?, ?, ?)
+            INSERT OR REPLACE INTO initiative (guild_id, scope_id, channel_id, active_index, order_json)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (str(guild_id), str(state.channel_id), state.active_index, payload),
+            (str(guild_id), str(scope_id), str(state.channel_id), state.active_index, payload),
         )
 
 
-def clear_initiative(guild_id: int) -> None:
+def clear_initiative(*, guild_id: int, scope_id: int | None = None) -> None:
     with db_connection() as connection:
-        connection.execute("DELETE FROM initiative WHERE guild_id = ?", (str(guild_id),))
+        if scope_id is None:
+            connection.execute("DELETE FROM initiative WHERE guild_id = ?", (str(guild_id),))
+            return
+        connection.execute(
+            "DELETE FROM initiative WHERE guild_id = ? AND scope_id = ?",
+            (str(guild_id), str(scope_id)),
+        )

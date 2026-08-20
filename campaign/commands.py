@@ -1,3 +1,5 @@
+import asyncio
+
 import discord
 from discord import app_commands
 from discord.ext.commands.bot import Bot
@@ -31,6 +33,7 @@ from campaign.lore import (
     filter_campaign_entries,
 )
 from campaign.moving import forum_for_thread, move_campaign_post
+from campaign.parchment import ParchmentError, parse_document_text, render_parchment
 from campaign.wiki import (
     WikiError,
     WikiNotFoundError,
@@ -390,6 +393,38 @@ def setup_campaign(bot: Bot) -> None:
                 title="📂 Campaign forum created",
                 description=f"{forum.mention}\nAdd posts with `{PREFIX}campaign post {name.strip()} <title>`.",
             ),
+            definition_menu=False,
+        )
+        await delete_command(ctx)
+
+    @campaign_group.command(
+        name="document",
+        aliases=["parchemin"],
+        help=f"Génère un parchemin. `{PREFIX}campaign document Texte` ou `Titre -- texte`",
+    )
+    @app_commands.describe(text="Texte du parchemin. Utilise `Titre -- corps` pour un titre.")
+    @guild_only
+    @admin_only
+    async def campaign_document(ctx: Context, *, text: str | None = None) -> None:
+        if not text or not text.strip():
+            await command_reply(
+                ctx,
+                f"Texte manquant. Exemple : `{PREFIX}campaign document Par ordre du roi…`",
+            )
+            await delete_command(ctx)
+            return
+        try:
+            title, body = parse_document_text(text)
+            png = await asyncio.to_thread(render_parchment, title=title, body=body)
+        except ParchmentError as exc:
+            await command_reply(ctx, str(exc))
+            await delete_command(ctx)
+            return
+
+        await send_message(
+            ctx,
+            file=discord.File(png, filename="parchemin.png"),
+            linkify=False,
             definition_menu=False,
         )
         await delete_command(ctx)
@@ -844,7 +879,7 @@ def setup_campaign(bot: Bot) -> None:
 
     @campaign_group.command(
         name="repair",
-        help="Remplit les posts restés sur « Import des liens… ».",
+        help="Remplit les posts « Import des liens… » et « … suite sur le wiki. ».",
     )
     @guild_only
     @admin_only
@@ -908,7 +943,7 @@ def setup_campaign(bot: Bot) -> None:
             suffix = f" … +{leftover} de plus" if leftover > 0 else ""
             lines.append(f"**Mis à jour :** {linked}{suffix}")
         elif result.scanned == 0:
-            lines.append("_Aucun post avec « Import des liens… »._")
+            lines.append("_Aucun post incomplet (« Import des liens… » ou « … suite sur le wiki. »)._")
         embed = _created_embed(title="🔧 Repair CAMPAIGN", description="\n".join(lines))
         if status is not None:
             try:

@@ -195,6 +195,12 @@ class SpellSlots:
                 raise ValueError("Current slots cannot be negative.")
             self.current[level] = min(current, maximum)
 
+    def lowest_available(self, min_level: int) -> int | None:
+        for level in SPELL_LEVELS:
+            if level >= min_level and self.get_current(level) > 0:
+                return level
+        return None
+
     def use(self, level: int, count: int = 1) -> None:
         if level not in SPELL_LEVELS:
             raise ValueError("Spell slot level must be between 1 and 9.")

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import discord
 
-from sheets.data import ABILITIES, SKILL_ABILITIES, CharacterSheet, format_modifier
+from sheets.data import ABILITIES, CharacterSheet, fold_lookup_key, format_modifier, lookup_skill
 
 DICE_PATTERN = re.compile(
     r"^(\d+)d(\d+)(?:(kh|kl)(\d+))?([+-]\d+)?$",
@@ -17,6 +17,7 @@ ABILITY_ALIASES: dict[str, str] = {
     "force": "str",
     "dex": "dex",
     "dexterity": "dex",
+    "dexterite": "dex",
     "agi": "dex",
     "agilite": "dex",
     "con": "con",
@@ -55,6 +56,8 @@ class RollResult:
     total: int
     advantage: bool | None
     d20_pair: tuple[int, int] | None = None
+    spent_inspiration: bool = False
+    condition_note: str | None = None
 
 
 @dataclass(frozen=True)
@@ -97,10 +100,11 @@ def parse_roll_args(args: str) -> ParsedRollRequest:
         raise ValueError("Missing roll. Example: `1d20`, `adv 1d20 athletics`, `2d6+3`")
 
     advantage: bool | None = None
-    if tokens[0].lower() in {"adv", "advantage"}:
+    first = fold_lookup_key(tokens[0])
+    if first in {"adv", "advantage", "avantage"}:
         advantage = True
         tokens = tokens[1:]
-    elif tokens[0].lower() in {"dis", "disadvantage"}:
+    elif first in {"dis", "disadvantage", "desavantage", "desav"}:
         advantage = False
         tokens = tokens[1:]
 
@@ -132,19 +136,11 @@ def _format_skill_name(skill: str) -> str:
 
 
 def _match_skill(text: str) -> str | None:
-    normalized = text.lower().replace("-", " ").strip()
-    underscored = normalized.replace(" ", "_")
-    if underscored in SKILL_ABILITIES:
-        return underscored
-
-    for skill in SKILL_ABILITIES:
-        if skill.replace("_", " ") == normalized:
-            return skill
-    return None
+    return lookup_skill(text)
 
 
 def _match_ability(text: str) -> str | None:
-    token = text.lower().strip()
+    token = fold_lookup_key(text)
     if token in ABILITIES:
         return token
     return ABILITY_ALIASES.get(token)
@@ -161,7 +157,7 @@ def resolve_sheet_modifier(sheet: CharacterSheet | None, tokens: list[str]) -> t
         )
 
     text = " ".join(tokens).lower().strip()
-    normalized = text.replace("-", " ").replace(" ", "_")
+    normalized = fold_lookup_key(text)
 
     if "save" in normalized or "sauvegarde" in normalized:
         for ability in ABILITIES:
@@ -196,9 +192,24 @@ def resolve_sheet_modifier(sheet: CharacterSheet | None, tokens: list[str]) -> t
         modifier = (score - 10) // 2
         return modifier, f"{ability.upper()} ({format_modifier(modifier)})"
 
-    raise ValueError(
-        "Unknown modifier. Use an ability (`str`), skill (`athletics`) or save (`dex save`)."
-    )
+        raise ValueError(
+            "Unknown modifier. Use an ability (`str` / `force`), a skill (`athletics` / `discrétion`) "
+            "or a save (`dex save` / `sauvegarde sag`)."
+        )
+
+
+def _is_saving_throw(tokens: list[str]) -> bool:
+    if not tokens:
+        return False
+    normalized = fold_lookup_key(" ".join(tokens))
+    return "save" in normalized or "sauvegarde" in normalized
+
+
+def _is_ability_check(tokens: list[str]) -> bool:
+    if not tokens or _is_saving_throw(tokens):
+        return False
+    text = " ".join(tokens)
+    return _match_skill(text) is not None or _match_ability(text.replace("_", " ")) is not None
 
 
 def execute_roll(
@@ -208,8 +219,37 @@ def execute_roll(
     modifier_tokens: list[str],
     advantage: bool | None,
 ) -> RollResult:
+    from sheets.conditions import ability_check_disadvantage_source
+
     sheet_modifier, modifier_label = resolve_sheet_modifier(sheet, modifier_tokens)
     total_modifier = dice.flat_modifier + sheet_modifier
+    requested = advantage
+    condition_note: str | None = None
+    spent_inspiration = False
+
+    if sheet is not None and _is_ability_check(modifier_tokens):
+        source = ability_check_disadvantage_source(sheet)
+        if source:
+            condition_note = source
+            if advantage is True:
+                advantage = None
+            elif advantage is False:
+                advantage = False
+            else:
+                advantage = False
+
+    is_d20 = dice.count == 1 and dice.sides == 20
+    if sheet is not None and sheet.inspired and is_d20:
+        if requested is True:
+            pass
+        elif advantage is False:
+            advantage = None
+            spent_inspiration = True
+            sheet.inspired = False
+        elif advantage is None:
+            advantage = True
+            spent_inspiration = True
+            sheet.inspired = False
 
     dice_notation = f"{dice.count}d{dice.sides}"
     if dice.keep_mode:
@@ -247,6 +287,8 @@ def execute_roll(
         total=total,
         advantage=advantage,
         d20_pair=d20_pair,
+        spent_inspiration=spent_inspiration,
+        condition_note=condition_note,
     )
 
 
@@ -342,10 +384,17 @@ def format_roll_embed(result: RollResult, *, roller_label: str) -> discord.Embed
         embed.add_field(name="🧮 Breakdown", value=breakdown, inline=False)
 
     d20 = _effective_d20(result)
+    footer_parts: list[str] = []
+    if result.condition_note:
+        footer_parts.append(f"⬇️ {result.condition_note}")
+    if result.spent_inspiration:
+        footer_parts.append("✨ Spent inspiration")
     if d20 == 20:
-        embed.set_footer(text="🌟 Natural 20!")
+        footer_parts.append("🌟 Natural 20!")
     elif d20 == 1:
-        embed.set_footer(text="💀 Natural 1!")
+        footer_parts.append("💀 Natural 1!")
+    if footer_parts:
+        embed.set_footer(text=" · ".join(footer_parts))
     return embed
 
 

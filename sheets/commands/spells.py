@@ -5,9 +5,8 @@ from discord.ext.commands.context import Context
 from bot.command_helpers import command_reply, delete_command
 from bot.messaging import send_message
 from config import PREFIX
-from sheets.context import get_sheet_for_owner, target_label
+from sheets.context import get_sheet_for_owner, save_owner_sheet, target_label
 from sheets.spell_view import build_sheet_spell_view, build_spell_list_embed, homebrew_slug
-from sheets.storage import save_sheet
 from srd import fivetools
 from srd.spell_slugs import find_spell_slug_on_sheet
 from srd.embeds import kind_embed_color, spell_embed, titled
@@ -81,7 +80,7 @@ def register_spell_commands(sheet_group: Group) -> None:
             if not sheet.add_homebrew_spell(cleaned):
                 await command_reply(ctx, f"**{cleaned}** is already on this sheet (homebrew).")
                 return
-            save_sheet(user_id=owner_id, sheet=sheet)
+            save_owner_sheet(ctx, owner_id, sheet)
             label = target_label(member, sheet)
             await command_reply(ctx, f"{label}: added homebrew spell **{cleaned}**.")
             await delete_command(ctx)
@@ -91,7 +90,7 @@ def register_spell_commands(sheet_group: Group) -> None:
             await command_reply(ctx, f"**{spell['name']}** is already on this sheet.")
             return
 
-        save_sheet(user_id=owner_id, sheet=sheet)
+        save_owner_sheet(ctx, owner_id, sheet)
         label = target_label(member, sheet)
         await command_reply(ctx, f"{label}: added **{spell['name']}** ({spell.get('level', '?')}).")
         await delete_command(ctx)
@@ -119,7 +118,7 @@ def register_spell_commands(sheet_group: Group) -> None:
                 None,
             )
             if homebrew_match and sheet.remove_homebrew_spell(homebrew_match):
-                save_sheet(user_id=owner_id, sheet=sheet)
+                save_owner_sheet(ctx, owner_id, sheet)
                 label = target_label(member, sheet)
                 await command_reply(ctx, f"{label}: removed homebrew spell **{homebrew_match}**.")
                 await delete_command(ctx)
@@ -137,7 +136,7 @@ def register_spell_commands(sheet_group: Group) -> None:
             await command_reply(ctx, f"**{name.strip()}** is not on this sheet.")
             return
 
-        save_sheet(user_id=owner_id, sheet=sheet)
+        save_owner_sheet(ctx, owner_id, sheet)
         label = target_label(member, sheet)
         await command_reply(ctx, f"{label}: removed **{name.strip()}**.")
         await delete_command(ctx)

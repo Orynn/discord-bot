@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 import discord
 
 from bot.catchup import CATCHUP_BLOCKED_COMMANDS, _is_catchup_allowed
-from bot.checks import is_admin
+from bot.checks import is_admin, is_admin_member
 from sheets.data import CharacterSheet, hit_die_sides
 from sheets.dice import parse_roll_args, validate_roll_request
 
@@ -45,6 +45,19 @@ class TestIsAdmin(unittest.TestCase):
         ctx.author.guild_permissions.administrator = False
         ctx.author.guild_permissions.manage_guild = True
         self.assertTrue(is_admin(ctx))
+
+    def test_resolves_user_to_cached_member(self) -> None:
+        guild = MagicMock()
+        guild.owner_id = 999
+        member = MagicMock(spec=discord.Member)
+        member.id = 7
+        member.guild_permissions.administrator = True
+        member.guild_permissions.manage_guild = False
+        guild.get_member.return_value = member
+        user = MagicMock(spec=discord.User)
+        user.id = 7
+        self.assertTrue(is_admin_member(guild, user))
+        guild.get_member.assert_called_with(7)
 
 
 class TestCatchupAllowlist(unittest.TestCase):
@@ -90,8 +103,30 @@ class TestCatchupAllowlist(unittest.TestCase):
         ctx.command.qualified_name = "init add"
         self.assertFalse(_is_catchup_allowed(ctx))
 
+    def test_blocks_combat_play(self) -> None:
+        ctx = MagicMock()
+        ctx.message.attachments = []
+        ctx.command = MagicMock()
+        ctx.command.qualified_name = "combat play"
+        self.assertFalse(_is_catchup_allowed(ctx))
+
+    def test_blocks_sheet_gear_add(self) -> None:
+        ctx = MagicMock()
+        ctx.message.attachments = []
+        ctx.command = MagicMock()
+        ctx.command.qualified_name = "sheet gear add"
+        self.assertFalse(_is_catchup_allowed(ctx))
+
     def test_blocks_sheet_create(self) -> None:
         self.assertIn("sheet create", CATCHUP_BLOCKED_COMMANDS)
+
+    def test_blocks_image_generation(self) -> None:
+        ctx = MagicMock()
+        ctx.message.attachments = []
+        ctx.command = MagicMock()
+        ctx.command.qualified_name = "image"
+        self.assertFalse(_is_catchup_allowed(ctx))
+        self.assertIn("image", CATCHUP_BLOCKED_COMMANDS)
 
 
 class TestRollValidation(unittest.TestCase):

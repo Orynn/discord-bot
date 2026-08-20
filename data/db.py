@@ -58,11 +58,15 @@ def init_db() -> None:
         connection.executescript(
             """
             CREATE TABLE IF NOT EXISTS sheets (
-                user_id TEXT PRIMARY KEY,
-                data TEXT NOT NULL
+                user_id TEXT NOT NULL,
+                guild_id TEXT NOT NULL,
+                data TEXT NOT NULL,
+                PRIMARY KEY (user_id, guild_id)
             );
             CREATE TABLE IF NOT EXISTS npc_names (
-                name TEXT PRIMARY KEY
+                guild_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                PRIMARY KEY (guild_id, name)
             );
             CREATE TABLE IF NOT EXISTS kv_store (
                 key TEXT PRIMARY KEY,
@@ -73,18 +77,124 @@ def init_db() -> None:
                 currency TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS initiative (
-                guild_id TEXT PRIMARY KEY,
+                guild_id TEXT NOT NULL,
+                scope_id TEXT NOT NULL,
                 channel_id TEXT NOT NULL,
                 active_index INTEGER NOT NULL DEFAULT 0,
-                order_json TEXT NOT NULL
+                order_json TEXT NOT NULL,
+                PRIMARY KEY (guild_id, scope_id)
             );
             CREATE TABLE IF NOT EXISTS combat (
-                guild_id TEXT PRIMARY KEY,
-                state_json TEXT NOT NULL
+                guild_id TEXT NOT NULL,
+                scope_id TEXT NOT NULL,
+                state_json TEXT NOT NULL,
+                PRIMARY KEY (guild_id, scope_id)
+            );
+            CREATE TABLE IF NOT EXISTS stashed_gear (
+                guild_id TEXT NOT NULL,
+                place_key TEXT NOT NULL,
+                place_name TEXT NOT NULL,
+                items_json TEXT NOT NULL,
+                PRIMARY KEY (guild_id, place_key)
             );
             """
         )
+    _migrate_guild_scoped_tables()
     _migrate_json_files()
+
+
+def _table_columns(connection: sqlite3.Connection, table: str) -> set[str]:
+    rows = connection.execute(f"PRAGMA table_info({table})").fetchall()
+    return {str(row[1]) for row in rows}
+
+
+def _legacy_guild_id() -> str:
+    from config import CAMPAIGN_GUILD_ID
+
+    return str(CAMPAIGN_GUILD_ID) if CAMPAIGN_GUILD_ID is not None else "0"
+
+
+def _migrate_guild_scoped_tables() -> None:
+    with db_connection() as connection:
+        _migrate_sheets_guild(connection)
+        _migrate_npc_names_guild(connection)
+        _migrate_player_scoped_combat(connection)
+
+
+def _migrate_sheets_guild(connection: sqlite3.Connection) -> None:
+    columns = _table_columns(connection, "sheets")
+    if not columns or "guild_id" in columns:
+        return
+    default_guild = _legacy_guild_id()
+    connection.execute(
+        """
+        CREATE TABLE sheets_v2 (
+            user_id TEXT NOT NULL,
+            guild_id TEXT NOT NULL,
+            data TEXT NOT NULL,
+            PRIMARY KEY (user_id, guild_id)
+        )
+        """
+    )
+    connection.execute(
+        "INSERT INTO sheets_v2 (user_id, guild_id, data) SELECT user_id, ?, data FROM sheets",
+        (default_guild,),
+    )
+    connection.execute("DROP TABLE sheets")
+    connection.execute("ALTER TABLE sheets_v2 RENAME TO sheets")
+
+
+def _migrate_npc_names_guild(connection: sqlite3.Connection) -> None:
+    columns = _table_columns(connection, "npc_names")
+    if not columns or "guild_id" in columns:
+        return
+    default_guild = _legacy_guild_id()
+    connection.execute(
+        """
+        CREATE TABLE npc_names_v2 (
+            guild_id TEXT NOT NULL,
+            name TEXT NOT NULL,
+            PRIMARY KEY (guild_id, name)
+        )
+        """
+    )
+    connection.execute(
+        "INSERT OR IGNORE INTO npc_names_v2 (guild_id, name) SELECT ?, name FROM npc_names",
+        (default_guild,),
+    )
+    connection.execute("DROP TABLE npc_names")
+    connection.execute("ALTER TABLE npc_names_v2 RENAME TO npc_names")
+
+
+def _migrate_player_scoped_combat(connection: sqlite3.Connection) -> None:
+    combat_cols = _table_columns(connection, "combat")
+    if combat_cols and "scope_id" not in combat_cols:
+        connection.execute("DROP TABLE combat")
+        connection.execute(
+            """
+            CREATE TABLE combat (
+                guild_id TEXT NOT NULL,
+                scope_id TEXT NOT NULL,
+                state_json TEXT NOT NULL,
+                PRIMARY KEY (guild_id, scope_id)
+            )
+            """
+        )
+    initiative_cols = _table_columns(connection, "initiative")
+    if initiative_cols and "scope_id" not in initiative_cols:
+        connection.execute("DROP TABLE initiative")
+        connection.execute(
+            """
+            CREATE TABLE initiative (
+                guild_id TEXT NOT NULL,
+                scope_id TEXT NOT NULL,
+                channel_id TEXT NOT NULL,
+                active_index INTEGER NOT NULL DEFAULT 0,
+                order_json TEXT NOT NULL,
+                PRIMARY KEY (guild_id, scope_id)
+            )
+            """
+        )
 
 
 def _migrate_json_files() -> None:
@@ -98,33 +208,33 @@ def _migrate_json_files() -> None:
             sheets = json.loads(sheets_file.read_text(encoding="utf-8"))
             for user_id, data in sheets.items():
                 connection.execute(
-                    "INSERT OR REPLACE INTO sheets (user_id, data) VALUES (?, ?)",
-                    (user_id, json.dumps(data, ensure_ascii=False)),
+                    "INSERT OR REPLACE INTO sheets (user_id, guild_id, data) VALUES (?, ?, ?)",
+                    (user_id, _legacy_guild_id(), json.dumps(data, ensure_ascii=False)),
                 )
 
         if pc_file.exists():
             pcs = json.loads(pc_file.read_text(encoding="utf-8"))
             for user_id, name in pcs.items():
                 row = connection.execute(
-                    "SELECT data FROM sheets WHERE user_id = ?",
-                    (user_id,),
+                    "SELECT data FROM sheets WHERE user_id = ? AND guild_id = ?",
+                    (user_id, _legacy_guild_id()),
                 ).fetchone()
                 if row is None and name:
                     from sheets.data import CharacterSheet
 
                     sheet = CharacterSheet(name=name)
                     connection.execute(
-                        "INSERT OR REPLACE INTO sheets (user_id, data) VALUES (?, ?)",
-                        (user_id, json.dumps(sheet.to_dict(), ensure_ascii=False)),
+                        "INSERT OR REPLACE INTO sheets (user_id, guild_id, data) VALUES (?, ?, ?)",
+                        (user_id, _legacy_guild_id(), json.dumps(sheet.to_dict(), ensure_ascii=False)),
                     )
 
         if npc_file.exists() and connection.execute("SELECT COUNT(*) FROM npc_names").fetchone()[0] == 0:
             names = json.loads(npc_file.read_text(encoding="utf-8"))
             for name in names:
-                connection.execute(
-                    "INSERT OR IGNORE INTO npc_names (name) VALUES (?)",
-                    (name,),
-                )
+                    connection.execute(
+                        "INSERT OR IGNORE INTO npc_names (guild_id, name) VALUES (?, ?)",
+                        (_legacy_guild_id(), name),
+                    )
 
         if state_file.exists():
             row = connection.execute(

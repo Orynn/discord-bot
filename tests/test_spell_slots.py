@@ -68,6 +68,15 @@ class TestSpellSlots(unittest.TestCase):
         sheet.short_rest(dice_spent=0, healing=0)
         self.assertEqual(sheet.spell_slots.get_current(3), 2)
 
+    def test_lowest_available_upcasts(self) -> None:
+        slots = SpellSlots.from_dict({"maximum": {"3": 2}, "current": {"3": 2}})
+        self.assertEqual(slots.lowest_available(1), 3)
+        self.assertIsNone(slots.lowest_available(4))
+        slots.use(3)
+        self.assertEqual(slots.lowest_available(1), 3)
+        slots.use(3)
+        self.assertIsNone(slots.lowest_available(1))
+
     def test_sheet_serialization_keeps_slots(self) -> None:
         sheet = CharacterSheet(name="Lyra", char_class="Cleric", level=3)
         sheet.spell_slots.set_level(1, 4, 2)

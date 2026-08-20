@@ -28,10 +28,10 @@ def build_initiative_embed(
     return embed
 
 
-def advance_turn(guild_id: int) -> tuple[InitiativeState, InitiativeEntry] | None:
-    state = get_initiative(guild_id=guild_id)
+def advance_turn(*, guild_id: int, scope_id: int) -> tuple[InitiativeState, InitiativeEntry] | None:
+    state = get_initiative(guild_id=guild_id, scope_id=scope_id)
     if not state or not state.order:
         return None
     state.active_index = (state.active_index + 1) % len(state.order)
-    save_initiative(guild_id=guild_id, state=state)
+    save_initiative(guild_id=guild_id, scope_id=scope_id, state=state)
     return state, state.order[state.active_index]

@@ -41,3 +41,34 @@ def delete_player_section(*, guild_id: int, user_id: int) -> dict[str, Any] | No
     store[str(guild_id)] = guild_store
     set_json(_STORE_KEY, store)
     return removed if isinstance(removed, dict) else None
+
+
+def _as_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def find_player_id_for_channel(
+    *,
+    guild_id: int,
+    channel_id: int | None,
+    category_id: int | None = None,
+) -> int | None:
+    for user_id, record in list_player_sections(guild_id=guild_id):
+        recorded = {
+            _as_int(record.get("ooc_channel_id")),
+            _as_int(record.get("roleplay_channel_id")),
+            _as_int(record.get("category_id")),
+        }
+        recorded.discard(None)
+        if channel_id is not None and channel_id in recorded:
+            return user_id
+        if category_id is not None and category_id in recorded:
+            return user_id
+    return None
+
+
+def list_player_user_ids(*, guild_id: int) -> list[int]:
+    return [user_id for user_id, _ in list_player_sections(guild_id=guild_id)]

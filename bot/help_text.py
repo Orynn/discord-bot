@@ -99,7 +99,7 @@ def build_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
                 ),
                 (
                     "📚 Guides",
-                    f"`{prefix}help sheet` · `{prefix}help combat` · `/help`",
+                    f"`{prefix}help sheet` · `{prefix}help combat` · `{prefix}help srd` · `{prefix}help hunger` · `/help`",
                 ),
             ),
             footer="Tip: /help and ;help are the same · ;aide works too",
@@ -119,10 +119,15 @@ def build_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
                 ),
                 (
                     "🎬 Narration",
-                    f"`{prefix}desc <text>` — narrate a scene (italic)",
+                    f"`{prefix}desc <text>` — narrate a scene (italic)\n"
+                    f"`{prefix}image [prompt]` · `{prefix}dessine` — illustrate this channel's RP\n"
+                    f"`{prefix}image` — local CPU model when ready, otherwise Pollinations\n"
+                    f"`{prefix}get naked` — a gif of dismay\n"
+                    f"`{prefix}time` — your campaign date (Calendar of Harptos)\n"
+                    f"`{prefix}hunger` · `{prefix}faim` — hunger follows that clock",
                 ),
             ),
-            footer=f"Tip: {prefix}help sheet",
+            footer=f"Tip: {prefix}help hunger",
             color=HELP_ROLEPLAY_COLOR,
         ),
         _section(
@@ -135,7 +140,7 @@ def build_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
                 (
                     "🧰 Setup",
                     f"`{prefix}sheet create <name>` · `show` · `set` · `delete`\n"
-                    f"`{prefix}sheet import` — D&D Beyond PDF *(attach file)*",
+                    f"`{prefix}sheet import` — D&D Beyond PDF *(attach file; fills spells + gear)*",
                 ),
                 (
                     "❤️ Play",
@@ -196,8 +201,10 @@ def build_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
             fields=(
                 (
                     "🎲 Rolls",
-                    f"`{prefix}roll` · `{prefix}r` — `1d20`, `athletics`, `dex save`\n"
-                    f"`adv` / `dis` · `2d20kh1`",
+                    f"`{prefix}roll` · `{prefix}r` — `1d20`, `athletics`, `discrétion`\n"
+                    f"`adv` / `avantage` · `dis` / `désavantage` · `2d20kh1`\n"
+                    "Heroic inspiration on the sheet is spent automatically on a 1d20 "
+                    "(unless you already asked for advantage).",
                 ),
                 (
                     "💻 Slash commands",
@@ -213,13 +220,19 @@ def build_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
             emoji="🔎",
             label="Lookup",
             button="SRD",
+            intro=f"Full guide: `{prefix}help srd`",
             fields=(
                 (
                     "📖 5etools",
-                    f"`{prefix}srd spell|species|class|background|feat|condition|monster|weapon|armor|item <name>`",
+                    f"`{prefix}srd <type> <name>` — spell, monster, class, item…\n"
+                    f"`/srd` — pick a type, then a name",
+                ),
+                (
+                    "💻 Slash",
+                    "`/srd` — pick a type, then a name",
                 ),
             ),
-            footer=f"Tip: {prefix}srd spell fireball",
+            footer=f"Also: background, feat, armor, item · {prefix}help srd",
             color=HELP_LOOKUP_COLOR,
         ),
     ]
@@ -237,11 +250,12 @@ def build_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
                         f"`{prefix}npc <name> <text>` · `{prefix}say` — make an NPC speak\n"
                         f"`{prefix}campaign [query]` · `{prefix}lore` — browse CAMPAIGN forums\n"
                         f"`{prefix}campaign post lieux <title> -- <text>` — new post *(attach an image)*\n"
+                        f"`{prefix}campaign document Titre -- texte` — parchemin illustré\n"
                         f"`{prefix}campaign forum lieux` — extra forum (defaults are created on startup)\n"
                         f"`{prefix}campaign channels` — file of every channel + category\n"
                         f"`{prefix}campaign wiki Eauprofonde` — aperçu du wiki FR des Royaumes Oubliés\n"
                         f"`{prefix}campaign import Padhiver` — cette page · `import Padhiver --liens` — + infobox\n"
-                        f"`{prefix}campaign repair` — remplit les posts restés sur « Import des liens… »\n"
+                        f"`{prefix}campaign repair` — remplit « Import des liens… » et « … suite sur le wiki. »\n"
                         f"`{prefix}campaign move pnj Padhiver` — déplace un post et met à jour les liens\n"
                         f"`{prefix}campaign audit` — vérifie le forum de chaque post wiki (`audit fix` pour corriger)",
                     ),
@@ -261,7 +275,20 @@ def build_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
                         "💰 Party & players",
                         f"`{prefix}party money set|add|spend <amount>`\n"
                         f"`{prefix}player setup @member [name]` — category + sheet + welcome\n"
-                        f"`{prefix}player list` · `{prefix}player remove @member`",
+                        f"`{prefix}player list` · `{prefix}player sync` · `{prefix}player remove @member`",
+                    ),
+                    (
+                        "⏳ Campaign time",
+                        f"In a player section, omit @player — the channel picks the target\n"
+                        f"`{prefix}time advance 2h` — every sheet · `{prefix}time advance @player 2h`\n"
+                        f"`{prefix}time set 12 Hammer 1492 14:00` · `{prefix}time dawn|noon|dusk|midnight`\n"
+                        "Each new calendar day ticks that player's hunger",
+                    ),
+                    (
+                        "🍖 Hunger",
+                        f"`{prefix}hunger all` — party status\n"
+                        f"`{prefix}hunger eat @player` · `half` — stamp a meal on that clock\n"
+                        f"`{prefix}hunger skip @player` — clock +1 day, no meal · `{prefix}hunger set @player 2`",
                     ),
                 ),
                 footer="Only visible to server administrators",
@@ -288,6 +315,7 @@ def build_combat_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSecti
                 ),
                 (
                     "⚔️ Set up the fight",
+                    "Run these in that player's OOC or roleplay channel — each section has its own fight.\n"
                     f"`{prefix}init add @player` · `{prefix}init add Goblin 2`\n"
                     f"`{prefix}combat start` — deal decks *(admin)*\n"
                     f"`{prefix}combat board` — open the play table",
@@ -304,7 +332,7 @@ def build_combat_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSecti
             fields=(
                 (
                     "🖥️ Board",
-                    f"`{prefix}combat board` — card dropdown, End turn, View hand",
+                    f"`{prefix}combat board` — card dropdown, spell pages, End turn, View hand",
                 ),
                 (
                     "⌨️ Commands",
@@ -330,18 +358,34 @@ def build_combat_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSecti
             fields=(
                 (
                     "⚔️ Always included",
-                    "• **Weapon Attack** — class hit die + ability + proficiency\n"
-                    "• **Dodge** — halve the next damage you take",
+                    "• **Weapon Attack** — equipped weapon dice + ability + proficiency\n"
+                    "• **Dodge** — halve all damage until your next turn",
                 ),
                 (
                     "✨ From your sheet",
                     f"• Spells listed in `{prefix}sheet spells`\n"
-                    "• Cantrips appear more often · leveled spells use slots\n"
+                    "• Every known spell is always in the play menu — pick a target when you cast\n"
+                    "• One legal target skips the picker · extra spells paginate past Discord's 25-option cap\n"
+                    "• Weapon and damaging spells roll d20 vs AC (conditions can grant adv/dis)\n"
+                    "• Shield negates the next hit · Mage Armor −1d4 · Bless +1d4 damage\n"
+                    "• Cantrips also appear in the draw · leveled spells use slots\n"
+                    "• Attacks, heals, Dodge, and buffs (Shield, Mage Armor, Bless…)\n"
                     "• Homebrew spells get a generic attack card",
                 ),
                 (
+                    "♻️ Discard",
+                    "Played cards go to a discard pile. When the deck is empty, it is shuffled back in.",
+                ),
+                (
+                    "🏁 Victory",
+                    "Players vs monsters. Combat ends when one side is down. Attacks target the other side.",
+                ),
+                (
                     "❤️ HP",
-                    f"Damage and healing update `{prefix}sheet hp` automatically.",
+                    "Player HP is shown on the board. Monster HP stays hidden. "
+                    "Players at 0 HP stay in the fight and roll death saves (already on the sheet). "
+                    f"`{prefix}combat add Wolf` loads the SRD profile (attack, AC, 1–2 traits). "
+                    f"Damage and healing still update `{prefix}sheet hp` for players.",
                 ),
             ),
             footer=f"Tip: {prefix}srd spell fireball to preview a spell",
@@ -352,14 +396,15 @@ def build_combat_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSecti
             emoji="⚡",
             label="Initiative",
             button="Init",
-            intro=f"Card combat uses the same turn order as `{prefix}init`.",
+            intro=f"Card combat uses the same turn order as `{prefix}init`. One tracker per player section.",
             fields=(
                 (
                     "⚡ Commands",
                     f"`{prefix}init add @player` — rolls d20 + DEX from sheet\n"
                     f"`{prefix}init add Name 2` — NPC with a fixed bonus\n"
                     f"`{prefix}init next` — advance turn manually\n"
-                    f"`{prefix}init show` — display the order",
+                    f"`{prefix}init show` — display the order\n"
+                    f"`{prefix}init clear` — this player's section only",
                 ),
             ),
             footer=f"Tip: {prefix}init next also works outside card combat",
@@ -377,10 +422,11 @@ def build_combat_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSecti
                 fields=(
                     (
                         "🃏 Combat",
-                        f"`{prefix}combat start` — start card combat from initiative\n"
-                        f"`{prefix}combat end` — stop the current fight\n"
-                        f"`{prefix}combat add Name 30` — add a combatant mid-fight\n"
-                        f"`{prefix}combat add @player 30` — add a linked player",
+                        f"Only in a player OOC/roleplay channel — FOX and MAX can fight at the same time.\n"
+                        f"`{prefix}combat start` — start card combat from this section's initiative\n"
+                        f"`{prefix}combat end` — stop this section's fight\n"
+                        f"`{prefix}combat add Goblin` — add a monster from the SRD (HP stays hidden)\n"
+                        f"`{prefix}combat add Name 30` — custom HP · `{prefix}combat add @player` — linked player",
                     ),
                     (
                         "⚡ Initiative",
@@ -395,6 +441,58 @@ def build_combat_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSecti
     return sections
 
 
+def build_srd_help_sections(*, prefix: str) -> list[HelpSection]:
+    return [
+        _section(
+            key="lookup",
+            emoji="🔎",
+            label="Look up rules",
+            button="Lookup",
+            intro="Official 2024 rules and your 5etools homebrew.",
+            fields=(
+                (
+                    "📖 Command",
+                    f"`{prefix}srd <type> <name>`",
+                ),
+                (
+                    "✨ Magic & characters",
+                    "`spell` · `class` · `species` · `background` · `feat`",
+                ),
+                (
+                    "⚔️ Combat & gear",
+                    "`monster` · `condition` · `weapon` · `armor` · `item`",
+                ),
+            ),
+            footer=f"Example: {prefix}srd spell fireball",
+            color=HELP_LOOKUP_COLOR,
+        ),
+        _section(
+            key="search",
+            emoji="💻",
+            label="Search tips",
+            button="Tips",
+            fields=(
+                (
+                    "💻 Slash",
+                    "`/srd` — choose a type, then start typing a name",
+                ),
+                (
+                    "🏷️ Shortcuts",
+                    f"`{prefix}srd race` → species · `{prefix}srd cond` → condition\n"
+                    f"`{prefix}srd creature` → monster · `{prefix}srd gear` → item",
+                ),
+                (
+                    "🔎 Approximate",
+                    f"Partial names open a list: `{prefix}srd item potion`\n"
+                    f"`{prefix}srd monster ~goblin` — list close names even if **Goblin** exists",
+                ),
+            ),
+            footer="Partial names work · 2024 rules win over 2014 reprints",
+            color=HELP_LOOKUP_COLOR,
+        ),
+    ]
+
+
 def build_sheet_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
     sections = [
         _section(
@@ -406,7 +504,7 @@ def build_sheet_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSectio
                 (
                     "📋 Character",
                     f"`{prefix}sheet create <name>` — create\n"
-                    f"`{prefix}sheet import` — D&D Beyond PDF *(attach file)*\n"
+                    f"`{prefix}sheet import` — D&D Beyond PDF *(attach file; fills spells + gear)*\n"
                     f"`{prefix}sheet show` — display\n"
                     f"`{prefix}sheet delete` — delete",
                 ),
@@ -432,7 +530,14 @@ def build_sheet_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSectio
                 (
                     "🎒 Equipment & skills",
                     f"`{prefix}sheet gear` — equipment from your 5etools export\n"
-                    f"`{prefix}sheet gear add|remove|equip|show <name>`\n"
+                    f"`{prefix}sheet gear add <name> [qty] [2kg]` · `remove` · `equip` · `show`\n"
+                    f"`{prefix}sheet gear equip` updates AC from armor, shield, and Dex\n"
+                    f"`{prefix}sheet gear put <item|all> in <bag|belt>` · `hold` · `belt` · `stow`\n"
+                    f"`{prefix}sheet gear let <item> [qty] [at <place>] [-- note]` — leave gear\n"
+                    f"`{prefix}sheet gear take <item> [qty] [at <place>]` — pick it up\n"
+                    f"`{prefix}sheet gear weight <name> <kg>` — custom item weight (STR × 7.5 kg)\n"
+                    f"`{prefix}sheet gear bag <name> [kg]` — mark a custom item as a bag (default 15 kg)\n"
+                    "Over capacity slows speed (does not block carrying)\n"
                     f"`{prefix}sheet prof save <ability>` — save proficiency\n"
                     f"`{prefix}sheet prof skill <skill> [expertise]` — skill proficiency",
                 ),
@@ -472,13 +577,22 @@ def build_sheet_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSectio
                     f"`{prefix}sheet deathsave success|failure`",
                 ),
                 (
+                    "🍖 Hunger",
+                    f"Tied to that player's `{prefix}time` clock · a meal covers that calendar day\n"
+                    f"`{prefix}hunger` · `{prefix}faim` — status (3 + Con days, then 1 exhaustion/day)\n"
+                    f"`{prefix}hunger eat` — consume a ration · `half` — half rations\n"
+                    f"`{prefix}time advance 1d` — ticks hunger at midnight *(DM)*",
+                ),
+                (
                     "🏕️ Rest",
                     f"`{prefix}sheet rest short [dice]` — warlock pact slots recover\n"
-                    f"`{prefix}sheet rest long` — HP, hit dice, spell slots",
+                    f"`{prefix}sheet rest long` — HP, hit dice, spell slots, and +8h on that player's `{prefix}time`\n"
+                    f"`{prefix}time rest long [@player]` — that player's clock +8 hours *(DM)*\n"
+                    f"`{prefix}time rest long` — every character sheet *(DM)*",
                 ),
                 (
                     "🔎 Lookup",
-                    f"`{prefix}srd spell|species|class|background|feat|condition|monster|weapon|armor|item <name>`",
+                    f"`{prefix}help srd` — spells, monsters, items, conditions…",
                 ),
             ),
             color=HELP_STATUS_COLOR,
@@ -492,7 +606,7 @@ def build_sheet_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSectio
                 emoji="🛡️",
                 label="Admin",
                 button="Admin",
-                intro="Put `@player` before arguments to manage another sheet.",
+                intro="Put `@player` before arguments, or run the command in that player's section.",
                 fields=(
                     (
                         "👤 Other players",
@@ -507,6 +621,44 @@ def build_sheet_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSectio
         )
 
     return sections
+
+
+def build_hunger_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
+    fields: list[tuple[str, str]] = [
+        (
+            "🍖 Your character",
+            "Hunger follows this player's campaign clock. A meal covers that calendar day; "
+            "the next midnight starts a missed day.\n"
+            f"`{prefix}hunger` · `{prefix}faim` — status (last meal + days without food)\n"
+            f"`{prefix}hunger eat` · `manger` — eat a ration (resets hunger)\n"
+            f"`{prefix}hunger half` · `demi` — half rations (counts as 0.5 day)",
+        ),
+        (
+            "📜 PHB",
+            "You can go **3 + Constitution modifier** days without food (minimum 1).\n"
+            "Each day past that limit adds 1 exhaustion.",
+        ),
+    ]
+    if is_admin:
+        fields.append(
+            (
+                "🛡️ DM",
+                f"`{prefix}time advance 1d` — ticks hunger at each new calendar day\n"
+                f"`{prefix}hunger skip @player` — clock +1 day, no meal\n"
+                f"`{prefix}hunger set @player 2` · `{prefix}hunger all` · `{prefix}hunger eatall`",
+            )
+        )
+    return [
+        _section(
+            key="hunger",
+            emoji="🍖",
+            label="Hunger",
+            button="Hunger",
+            fields=tuple(fields),
+            footer=f"Tip: {prefix}time shows hunger on the same clock",
+            color=HELP_STATUS_COLOR,
+        )
+    ]
 
 
 def build_help_embed(

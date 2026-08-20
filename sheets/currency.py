@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 COIN_TYPES: tuple[str, ...] = ("cp", "sp", "ep", "gp", "pp")
 COIN_VALUES: dict[str, int] = {"cp": 1, "sp": 10, "ep": 50, "gp": 100, "pp": 1000}
+COINS_PER_POUND = 50
 COIN_PATTERN = re.compile(r"(\d+)\s*(cp|sp|ep|gp|pp)\b", re.IGNORECASE)
 
 
@@ -34,6 +35,12 @@ class Currency:
             value = COIN_VALUES[coin]
             coins[coin], remaining = divmod(remaining, value)
         return Currency(**coins)
+
+    def coin_count(self) -> int:
+        return sum(getattr(self, coin) for coin in COIN_TYPES)
+
+    def weight_lb(self) -> float:
+        return self.coin_count() / COINS_PER_POUND
 
     def format(self) -> str:
         total = self.total_cp()

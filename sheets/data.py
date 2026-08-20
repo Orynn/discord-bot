@@ -1,8 +1,9 @@
+import unicodedata
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from sheets.currency import Currency
-from sheets.equipment import Equipment
+from sheets.equipment import CARRY_CAPACITY_PER_STR, Equipment, encumbered_speed, format_load_line
 from sheets.spell_slots import SpellSlots
 from srd.spell_slugs import migrate_spell_slugs, normalize_stored_spell_slug
 
@@ -28,6 +29,40 @@ SKILL_ABILITIES: dict[str, str] = {
     "stealth": "dex",
     "survival": "wis",
 }
+
+SKILL_ALIASES: dict[str, str] = {
+    "acrobaties": "acrobatics",
+    "acrobatie": "acrobatics",
+    "dressage": "animal_handling",
+    "dressage_d_animaux": "animal_handling",
+    "dressage_animaux": "animal_handling",
+    "arcanes": "arcana",
+    "arcane": "arcana",
+    "athletisme": "athletics",
+    "tromperie": "deception",
+    "histoire": "history",
+    "intuition": "insight",
+    "medecine": "medicine",
+    "representation": "performance",
+    "escamotage": "sleight_of_hand",
+    "discretion": "stealth",
+    "survie": "survival",
+}
+
+
+def fold_lookup_key(text: str) -> str:
+    cleaned = text.lower().replace("-", " ").replace("'", " ").replace("’", " ").strip()
+    stripped = "".join(
+        ch for ch in unicodedata.normalize("NFKD", cleaned) if not unicodedata.combining(ch)
+    )
+    return "_".join(stripped.split())
+
+
+def lookup_skill(text: str) -> str | None:
+    key = fold_lookup_key(text)
+    if key in SKILL_ABILITIES:
+        return key
+    return SKILL_ALIASES.get(key)
 
 SETTABLE_FIELDS: frozenset[str] = frozenset(
     {
@@ -109,6 +144,11 @@ class CharacterSheet:
     death_save_successes: int = 0
     death_save_failures: int = 0
     hit_dice_remaining: int = 0
+    hunger_days: float = 0.0
+    fed_today: str = ""
+    hunger_meal_year: int | None = None
+    hunger_meal_day: int | None = None
+    hunger_meal_kind: str = ""
     notes: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -148,6 +188,15 @@ class CharacterSheet:
             death_save_successes=int(data.get("death_save_successes", 0)),
             death_save_failures=int(data.get("death_save_failures", 0)),
             hit_dice_remaining=int(data.get("hit_dice_remaining", data.get("level", 1))),
+            hunger_days=float(data.get("hunger_days", 0) or 0),
+            fed_today=str(data.get("fed_today", "") or ""),
+            hunger_meal_year=(
+                int(data["hunger_meal_year"]) if data.get("hunger_meal_year") is not None else None
+            ),
+            hunger_meal_day=(
+                int(data["hunger_meal_day"]) if data.get("hunger_meal_day") is not None else None
+            ),
+            hunger_meal_kind=str(data.get("hunger_meal_kind", "") or ""),
             notes=data.get("notes", ""),
         )
 
@@ -157,6 +206,43 @@ class CharacterSheet:
 
     def get_prof_bonus(self) -> int:
         return proficiency_bonus(self.level)
+
+    def carrying_capacity_lb(self) -> int:
+        strength = self.abilities.get("str", 10)
+        if strength is None:
+            strength = 10
+        return max(0, int(strength)) * CARRY_CAPACITY_PER_STR
+
+    def carried_weight_lb(self) -> float:
+        return self.equipment.carried_weight_lb(coin_lb=self.currency.weight_lb())
+
+    def is_overloaded(self) -> bool:
+        return self.carried_weight_lb() > self.carrying_capacity_lb()
+
+    def effective_speed(self) -> int:
+        return encumbered_speed(
+            base_speed=int(self.speed or 0),
+            carried_lb=self.carried_weight_lb(),
+            capacity_lb=self.carrying_capacity_lb(),
+        )
+
+    def format_speed(self) -> str:
+        current = self.effective_speed()
+        base = int(self.speed or 0)
+        if current < base:
+            return f"**{current} ft.** (base {base})"
+        return f"{base} ft."
+
+    def format_load(self) -> str:
+        coin_lb = self.currency.weight_lb()
+        counted_coins = coin_lb if self.equipment.coins_count_toward_load(coin_lb) else 0
+        return format_load_line(
+            gear_lb=self.equipment.carried_weight_lb(coin_lb=0),
+            coin_lb=counted_coins,
+            capacity_lb=self.carrying_capacity_lb(),
+            speed_ft=self.effective_speed(),
+            base_speed=int(self.speed or 0),
+        )
 
     def get_hit_die_sides(self) -> int:
         return hit_die_sides(self.char_class)
@@ -209,6 +295,10 @@ class CharacterSheet:
             if not 1 <= score <= 30:
                 raise ValueError("Ability scores must be between 1 and 30.")
             self.abilities[field_name] = score
+            if field_name in {"dex", "con", "wis"}:
+                from sheets.armor import apply_armor_ac
+
+                apply_armor_ac(self)
             return
 
         if field_name == "level":

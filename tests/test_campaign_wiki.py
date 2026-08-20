@@ -235,6 +235,34 @@ class TestCampaignWiki(unittest.TestCase):
         self.assertIn("le-monde-des-royaumes-oublies.fandom.com", chunks[0])
         self.assertIn("Royaumes Oubliés", chunks[0])
 
+    def test_discord_chunks_keep_long_articles_without_truncation_note(self) -> None:
+        page = WikiPage(
+            title="Padhiver",
+            url="https://le-monde-des-royaumes-oublies.fandom.com/fr/wiki/Padhiver",
+            summary="**Padhiver**",
+            body="\n\n".join(f"Paragraphe {index} de lore détaillé." for index in range(80)),
+            section="lieux",
+        )
+        chunks = page.discord_chunks()
+        joined = "\n\n".join(chunks)
+        self.assertGreaterEqual(len(chunks), 2)
+        self.assertNotIn("suite sur le wiki", joined)
+        self.assertIn("Paragraphe 79", joined)
+
+    def test_discord_chunks_mark_only_when_followup_cap_is_hit(self) -> None:
+        from campaign import wiki as wiki_mod
+
+        page = WikiPage(
+            title="Huge",
+            url="https://le-monde-des-royaumes-oublies.fandom.com/fr/wiki/Huge",
+            summary="**Huge**",
+            body="x" * 200_000,
+            section="lieux",
+        )
+        with patch.object(wiki_mod, "MAX_FOLLOWUPS", 2):
+            chunks = page.discord_chunks()
+        self.assertIn("suite sur le wiki", chunks[-1])
+
     def test_preview_embeds_respect_discord_limit(self) -> None:
         from campaign.commands import _EMBED_DESCRIPTION_LIMIT, _wiki_preview_embeds
 
@@ -463,3 +491,25 @@ class TestFetchWikiPageSuggestions(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([page.title for page in cluster.pages], ["Padhiver"])
         self.assertEqual(cluster.failed, ("Tymora",))
         self.assertEqual(cluster.missing, ())
+
+
+class TestThumbnailAllowlist(unittest.TestCase):
+    def test_allows_fandom_hosts(self) -> None:
+        from campaign.wiki import is_allowed_thumbnail_url
+
+        self.assertTrue(
+            is_allowed_thumbnail_url("https://static.wikia.nocookie.net/foo/thumb.png")
+        )
+        self.assertTrue(
+            is_allowed_thumbnail_url("https://vignette.wikia.nocookie.net/foo.png")
+        )
+        self.assertTrue(
+            is_allowed_thumbnail_url("https://le-monde-des-royaumes-oublies.fandom.com/fr/wiki/File:Foo.png")
+        )
+
+    def test_rejects_unexpected_hosts(self) -> None:
+        from campaign.wiki import is_allowed_thumbnail_url
+
+        self.assertFalse(is_allowed_thumbnail_url("http://127.0.0.1/secret"))
+        self.assertFalse(is_allowed_thumbnail_url("file:///etc/passwd"))
+        self.assertFalse(is_allowed_thumbnail_url("https://evil.example/img.png"))

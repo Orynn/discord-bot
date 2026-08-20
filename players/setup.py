@@ -11,6 +11,7 @@ from config import (
     PLAYER_CHANNEL_RP,
     PREFIX,
 )
+from campaign.forums import add_staff_channel_overwrites
 from players.format import format_player_category_name
 from players.storage import delete_player_section, save_player_section
 from sheets.data import CharacterSheet
@@ -21,23 +22,23 @@ class PlayerSetupError(Exception):
     pass
 
 
-def ensure_player_sheet(*, user_id: int, name: str) -> tuple[CharacterSheet, bool]:
+def ensure_player_sheet(*, user_id: int, guild_id: int, name: str) -> tuple[CharacterSheet, bool]:
     """Create or update the player's sheet and speaking name. Returns (sheet, created)."""
     cleaned = name.strip()
     if not cleaned:
         raise PlayerSetupError("Character name cannot be empty.")
 
-    existing = get_sheet(user_id=user_id)
+    existing = get_sheet(user_id=user_id, guild_id=guild_id)
     if existing is not None:
         if existing.name != cleaned:
             existing.name = cleaned
-            save_sheet(user_id=user_id, sheet=existing)
-        set_character_name(user_id=user_id, name=cleaned)
+            save_sheet(user_id=user_id, guild_id=guild_id, sheet=existing)
+        set_character_name(user_id=user_id, guild_id=guild_id, name=cleaned)
         return existing, False
 
     sheet = CharacterSheet(name=cleaned)
-    save_sheet(user_id=user_id, sheet=sheet)
-    set_character_name(user_id=user_id, name=cleaned)
+    save_sheet(user_id=user_id, guild_id=guild_id, sheet=sheet)
+    set_character_name(user_id=user_id, guild_id=guild_id, name=cleaned)
     return sheet, True
 
 
@@ -94,6 +95,15 @@ def _member_overwrites(
             manage_messages=True,
             read_message_history=True,
         )
+    staff_visibility = discord.PermissionOverwrite(
+        view_channel=True,
+        send_messages=True,
+        read_message_history=True,
+        manage_messages=True,
+        attach_files=True,
+        embed_links=True,
+    )
+    add_staff_channel_overwrites(guild, overwrites, staff_visibility)
     return overwrites
 
 
@@ -110,7 +120,7 @@ async def create_player_section(
     if not character_name:
         raise PlayerSetupError("Character name cannot be empty.")
 
-    _, sheet_created = ensure_player_sheet(user_id=member.id, name=character_name)
+    _, sheet_created = ensure_player_sheet(user_id=member.id, guild_id=guild.id, name=character_name)
 
     category_name = format_player_category_name(
         character_name,

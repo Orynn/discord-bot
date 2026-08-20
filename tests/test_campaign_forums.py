@@ -187,6 +187,7 @@ class TestEnsureCampaignCategory(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("campaign.forums.find_campaign_category", return_value=None),
+            patch("campaign.forums.app_config.CAMPAIGN_GUILD_ID", 11),
             patch("campaign.forums.app_config.set_campaign_category_id") as persist,
         ):
             category = await ensure_campaign_category(guild)
@@ -222,6 +223,7 @@ class TestEnsureCampaignCategory(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("campaign.forums.find_campaign_category", return_value=None),
+            patch("campaign.forums.app_config.CAMPAIGN_GUILD_ID", 11),
             patch("campaign.forums.app_config.set_campaign_category_id") as persist,
         ):
             category = await ensure_campaign_category(guild)
@@ -249,6 +251,43 @@ class TestEnsureCampaignCategory(unittest.IsolatedAsyncioTestCase):
         self.assertIs(category, existing)
         guild.create_category.assert_not_called()
         persist.assert_not_called()
+
+    async def test_does_not_persist_other_guild_campaign_category(self) -> None:
+        existing = SimpleNamespace(id=88, name="CAMPAIGN")
+        guild = MagicMock()
+        guild.id = 22
+        guild.create_category = AsyncMock()
+
+        with (
+            patch("campaign.forums.find_campaign_category", return_value=existing),
+            patch("campaign.forums.app_config.CAMPAIGN_CATEGORY_ID", 7),
+            patch("campaign.forums.app_config.CAMPAIGN_GUILD_ID", 11),
+            patch("campaign.forums.app_config.set_campaign_category_id") as persist,
+        ):
+            category = await ensure_campaign_category(guild)
+
+        self.assertIs(category, existing)
+        guild.create_category.assert_not_called()
+        persist.assert_not_called()
+
+    async def test_skips_creating_forums_on_other_guild(self) -> None:
+        existing = SimpleNamespace(id=88, name="CAMPAIGN")
+        guild = MagicMock()
+        guild.id = 22
+        guild.name = "Other"
+        guild.create_forum = AsyncMock()
+
+        with (
+            patch("campaign.forums.app_config.CAMPAIGN_GUILD_ID", 11),
+            patch("campaign.forums.find_campaign_category", return_value=existing),
+            patch("campaign.forums.list_campaign_forums", return_value=["existing"]),
+            patch("campaign.forums.ensure_campaign_category") as ensure_category,
+        ):
+            forums = await ensure_default_campaign_forums(guild)
+
+        self.assertEqual(forums, ["existing"])
+        ensure_category.assert_not_called()
+        guild.create_forum.assert_not_called()
 
     async def test_skips_other_guild_without_permission(self) -> None:
         guild = MagicMock()

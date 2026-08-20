@@ -1,6 +1,8 @@
 import discord
 
+from sheets.armor import format_ac_field
 from sheets.data import ABILITIES, CharacterSheet, ability_modifier, format_modifier
+from sheets.hunger import format_hunger_line, hunger_state
 from sheets.skills import format_skills_block
 from srd.embeds import SHEET_COLOR, background_embed, class_embed, species_embed, titled, truncate
 
@@ -52,18 +54,25 @@ def build_sheet_embed(sheet: CharacterSheet) -> discord.Embed:
         inline=False,
     )
 
-    embed.add_field(name="🛡️ AC", value=str(sheet.ac), inline=True)
+    embed.add_field(name="🛡️ AC", value=format_ac_field(sheet), inline=True)
     embed.add_field(
         name="❤️ HP",
         value=f"{sheet.hp_current}/{sheet.hp_max}" if sheet.hp_max else "—",
         inline=True,
     )
-    embed.add_field(name="👟 Speed", value=f"{sheet.speed} ft.", inline=True)
-    embed.add_field(name="💰 Money", value=sheet.currency.format(), inline=False)
+    embed.add_field(name="👟 Speed", value=sheet.format_speed(), inline=True)
+    hands_name, hands_value = sheet.equipment.format_hands_field()
+    embed.add_field(name=hands_name, value=hands_value, inline=True)
+    belt_name, belt_value = sheet.equipment.format_belt_field()
+    embed.add_field(name=belt_name, value=belt_value, inline=True)
+    embed.add_field(name="💰 Money", value=sheet.currency.format(), inline=True)
+    embed.add_field(name="⚖️ Load", value=sheet.format_load(), inline=True)
 
     status_bits: list[str] = []
     if sheet.inspired:
         status_bits.append("✨ **Heroic Inspiration**")
+    if hunger_state(sheet) != "fed" or sheet.fed_today:
+        status_bits.append(f"🍖 {format_hunger_line(sheet)}")
     if sheet.conditions:
         status_bits.append("Conditions: " + ", ".join(c.title() for c in sheet.conditions))
     if sheet.death_save_successes or sheet.death_save_failures:

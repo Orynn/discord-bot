@@ -24,6 +24,10 @@ class TestCurrency(unittest.TestCase):
         wallet.add(parse_currency("1 sp"))
         self.assertEqual(wallet.gp, 1)
 
+    def test_coin_weight(self) -> None:
+        self.assertEqual(Currency(gp=50).weight_lb(), 1)
+        self.assertEqual(Currency().weight_lb(), 0)
+
 
 class TestDice(unittest.TestCase):
     def test_parse_dice_with_modifier(self) -> None:
@@ -60,6 +64,38 @@ class TestDice(unittest.TestCase):
         self.assertIn("Athletics", result.modifier_label)
         self.assertEqual(result.sheet_modifier, 6)
 
+    def test_french_skill_and_advantage_aliases(self) -> None:
+        sheet = CharacterSheet(
+            name="Test",
+            level=5,
+            abilities={"str": 10, "dex": 16, "con": 10, "int": 10, "wis": 10, "cha": 10},
+            skill_proficiencies=["stealth"],
+        )
+        request = parse_roll_args("discrétion")
+        self.assertEqual(request.dice.sides, 20)
+        self.assertIsNone(request.advantage)
+        result = execute_roll(
+            dice=request.dice,
+            sheet=sheet,
+            modifier_tokens=request.modifier_tokens,
+            advantage=request.advantage,
+        )
+        self.assertIn("Stealth", result.modifier_label)
+        self.assertEqual(result.sheet_modifier, 6)
+
+        adv = parse_roll_args("avantage discrétion")
+        self.assertTrue(adv.advantage)
+        self.assertEqual(adv.modifier_tokens, ["discrétion"])
+
+        dis = parse_roll_args("désavantage tromperie")
+        self.assertFalse(dis.advantage)
+        from sheets.dice import resolve_sheet_modifier
+
+        modifier, label = resolve_sheet_modifier(sheet, ["acrobaties"])
+        self.assertIn("Acrobatics", label)
+        modifier, label = resolve_sheet_modifier(sheet, ["escamotage"])
+        self.assertIn("Sleight Of Hand", label)
+
     def test_format_roll_embed_nat20(self) -> None:
         result = RollResult(
             dice_notation="1d20+5",
@@ -95,6 +131,62 @@ class TestDice(unittest.TestCase):
         rolls_field = next(field for field in embed.fields if field.name == "🎲 Rolls")
         self.assertIn("⬆️ Advantage", rolls_field.value)
         self.assertIn("~~8~~", rolls_field.value)
+
+    def test_inspiration_grants_advantage_on_d20(self) -> None:
+        from unittest.mock import patch
+
+        sheet = CharacterSheet(name="Test", inspired=True)
+        request = parse_roll_args("1d20")
+        with patch("sheets.dice.random.randint", side_effect=[4, 18]):
+            result = execute_roll(
+                dice=request.dice,
+                sheet=sheet,
+                modifier_tokens=request.modifier_tokens,
+                advantage=None,
+            )
+        self.assertTrue(result.spent_inspiration)
+        self.assertTrue(result.advantage)
+        self.assertFalse(sheet.inspired)
+        self.assertEqual(result.dice_rolls, (18,))
+
+    def test_inspiration_cancels_condition_disadvantage(self) -> None:
+        from unittest.mock import patch
+
+        sheet = CharacterSheet(
+            name="Test",
+            inspired=True,
+            conditions=["poisoned"],
+            abilities={"str": 16, "dex": 10, "con": 10, "int": 10, "wis": 10, "cha": 10},
+            skill_proficiencies=["athletics"],
+        )
+        request = parse_roll_args("athletics")
+        with patch("sheets.dice.random.randint", return_value=11):
+            result = execute_roll(
+                dice=request.dice,
+                sheet=sheet,
+                modifier_tokens=request.modifier_tokens,
+                advantage=None,
+            )
+        self.assertTrue(result.spent_inspiration)
+        self.assertIsNone(result.advantage)
+        self.assertEqual(result.condition_note, "poisoned")
+        self.assertFalse(sheet.inspired)
+
+    def test_requested_advantage_keeps_inspiration(self) -> None:
+        from unittest.mock import patch
+
+        sheet = CharacterSheet(name="Test", inspired=True)
+        request = parse_roll_args("adv 1d20")
+        with patch("sheets.dice.random.randint", side_effect=[4, 18]):
+            result = execute_roll(
+                dice=request.dice,
+                sheet=sheet,
+                modifier_tokens=request.modifier_tokens,
+                advantage=request.advantage,
+            )
+        self.assertFalse(result.spent_inspiration)
+        self.assertTrue(sheet.inspired)
+        self.assertTrue(result.advantage)
 
 
 if __name__ == "__main__":

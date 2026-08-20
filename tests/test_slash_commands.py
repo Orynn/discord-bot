@@ -9,7 +9,10 @@ from bot.help_commands import setup_help
 from bot.slash import setup_slash
 from bot.tree_utils import clamp_app_command_descriptions
 from campaign.commands import setup_campaign
+from campaign.time_commands import setup_time
 from combat.commands import setup_combat
+from fun.commands import setup_fun
+from image.commands import setup_image
 from initiative.commands import setup_initiative
 from npc.commands import setup_npc
 from party.commands import setup_party
@@ -25,6 +28,8 @@ def _register_commands(bot: commands.Bot) -> None:
     for setup in (
         setup_npc,
         setup_desc,
+        setup_fun,
+        setup_image,
         setup_pc,
         setup_roll,
         setup_sheet,
@@ -33,6 +38,7 @@ def _register_commands(bot: commands.Bot) -> None:
         setup_player,
         setup_srd,
         setup_campaign,
+        setup_time,
         setup_combat,
         setup_help,
         setup_slash,
@@ -61,12 +67,12 @@ class TestSlashRegistration(unittest.TestCase):
     def test_registers_player_facing_slash_commands(self) -> None:
         names = {command.name for command in self.bot.tree.get_commands()}
         self.assertTrue(
-            {"help", "aide", "roll", "sheet", "combat", "init", "srd", "pc", "desc", "campaign"}.issubset(names)
+            {"help", "aide", "roll", "sheet", "combat", "init", "srd", "pc", "desc", "campaign", "time", "get", "image"}.issubset(names)
         )
         campaign = next(command for command in self.bot.tree.get_commands() if command.name == "campaign")
         child_names = {child.name for child in campaign.commands}
         self.assertTrue(
-            {"search", "post", "forum", "wiki", "import", "channels", "audit", "move", "repair"}.issubset(
+            {"search", "post", "forum", "document", "wiki", "import", "channels", "audit", "move", "repair"}.issubset(
                 child_names
             )
         )

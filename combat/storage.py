@@ -1,3 +1,4 @@
+import asyncio
 import json
 from dataclasses import dataclass, field
 
@@ -13,8 +14,14 @@ class CombatantState:
     max_hp: int
     hand: list[str]
     deck: list[str]
+    discard: list[str] = field(default_factory=list)
     card_catalog: dict[str, CardSnapshot] = field(default_factory=dict)
     effects: list[str] = field(default_factory=list)
+    traits: list[str] = field(default_factory=list)
+    ac: int = 10
+    attack_bonus: int = 4
+    death_save_successes: int = 0
+    death_save_failures: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -24,8 +31,14 @@ class CombatantState:
             "max_hp": self.max_hp,
             "hand": self.hand,
             "deck": self.deck,
+            "discard": self.discard,
             "card_catalog": {key: card.to_dict() for key, card in self.card_catalog.items()},
             "effects": self.effects,
+            "traits": self.traits,
+            "ac": self.ac,
+            "attack_bonus": self.attack_bonus,
+            "death_save_successes": self.death_save_successes,
+            "death_save_failures": self.death_save_failures,
         }
 
     @classmethod
@@ -41,8 +54,14 @@ class CombatantState:
             max_hp=int(data["max_hp"]),
             hand=list(data.get("hand", [])),
             deck=list(data.get("deck", [])),
+            discard=list(data.get("discard", [])),
             card_catalog=catalog,
             effects=list(data.get("effects", [])),
+            traits=list(data.get("traits", [])),
+            ac=int(data.get("ac", 10)),
+            attack_bonus=int(data.get("attack_bonus", 4)),
+            death_save_successes=int(data.get("death_save_successes", 0)),
+            death_save_failures=int(data.get("death_save_failures", 0)),
         )
 
 
@@ -54,11 +73,13 @@ class CombatState:
     active_index: int
     combatants: dict[str, CombatantState]
     log: list[str] = field(default_factory=list)
+    scope_id: int = 0
 
     def to_dict(self) -> dict:
         return {
             "guild_id": self.guild_id,
             "channel_id": self.channel_id,
+            "scope_id": self.scope_id,
             "turn_order": self.turn_order,
             "active_index": self.active_index,
             "combatants": {key: combatant.to_dict() for key, combatant in self.combatants.items()},
@@ -74,6 +95,7 @@ class CombatState:
         return cls(
             guild_id=int(data["guild_id"]),
             channel_id=int(data["channel_id"]),
+            scope_id=int(data.get("scope_id") or 0),
             turn_order=list(data.get("turn_order", [])),
             active_index=int(data.get("active_index", 0)),
             combatants=combatants,
@@ -110,11 +132,11 @@ class CombatState:
         return None
 
 
-def get_combat(guild_id: int) -> CombatState | None:
+def get_combat(*, guild_id: int, scope_id: int) -> CombatState | None:
     with db_connection() as connection:
         row = connection.execute(
-            "SELECT state_json FROM combat WHERE guild_id = ?",
-            (str(guild_id),),
+            "SELECT state_json FROM combat WHERE guild_id = ? AND scope_id = ?",
+            (str(guild_id), str(scope_id)),
         ).fetchone()
     if row is None:
         return None
@@ -126,13 +148,31 @@ def save_combat(state: CombatState) -> None:
     with db_connection() as connection:
         connection.execute(
             """
-            INSERT OR REPLACE INTO combat (guild_id, state_json)
-            VALUES (?, ?)
+            INSERT OR REPLACE INTO combat (guild_id, scope_id, state_json)
+            VALUES (?, ?, ?)
             """,
-            (str(state.guild_id), payload),
+            (str(state.guild_id), str(state.scope_id), payload),
         )
 
 
-def clear_combat(guild_id: int) -> None:
+def clear_combat(*, guild_id: int, scope_id: int | None = None) -> None:
     with db_connection() as connection:
-        connection.execute("DELETE FROM combat WHERE guild_id = ?", (str(guild_id),))
+        if scope_id is None:
+            connection.execute("DELETE FROM combat WHERE guild_id = ?", (str(guild_id),))
+            return
+        connection.execute(
+            "DELETE FROM combat WHERE guild_id = ? AND scope_id = ?",
+            (str(guild_id), str(scope_id)),
+        )
+
+
+_locks: dict[tuple[int, int], asyncio.Lock] = {}
+
+
+def lock_for(*, guild_id: int, scope_id: int) -> asyncio.Lock:
+    key = (int(guild_id), int(scope_id))
+    lock = _locks.get(key)
+    if lock is None:
+        lock = asyncio.Lock()
+        _locks[key] = lock
+    return lock

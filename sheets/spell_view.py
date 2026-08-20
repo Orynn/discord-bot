@@ -2,6 +2,7 @@ import discord
 from urllib.parse import quote, unquote
 
 from bot.messaging import send_interaction_message
+from bot.selects import fresh_component_id, replace_message_view, select_menus_from_message
 from srd import fivetools
 from srd.embeds import kind_embed_color, spell_embed, titled
 from srd.fivetools import entry_url
@@ -49,6 +50,7 @@ class PersistentSpellSelect(discord.ui.Select):
             max_values=1,
             options=options,
             custom_id=f"{SPELL_SELECT_PREFIX}{chunk_index}",
+            id=fresh_component_id(),
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
@@ -58,45 +60,47 @@ class PersistentSpellSelect(discord.ui.Select):
             return
 
         await interaction.response.defer(ephemeral=True)
-
-        if is_homebrew_slug(slug):
-            name = homebrew_name_from_slug(slug)
-            embed = discord.Embed(
-                title=titled("spell", name),
-                description="Homebrew spell (not in the SRD).",
-                color=kind_embed_color("spell_list"),
-            )
-            await send_interaction_message(
-                interaction,
-                embed=embed,
-                ephemeral=True,
-                definition_menu=False,
-            )
-            return
         try:
-            spell = await fivetools.get_spell(slug=slug)
-        except fivetools.FiveToolsError as exc:
+            if is_homebrew_slug(slug):
+                name = homebrew_name_from_slug(slug)
+                embed = discord.Embed(
+                    title=titled("spell", name),
+                    description="Homebrew spell (not in the SRD).",
+                    color=kind_embed_color("spell_list"),
+                )
+                await send_interaction_message(
+                    interaction,
+                    embed=embed,
+                    ephemeral=True,
+                    definition_menu=False,
+                )
+                return
+            try:
+                spell = await fivetools.get_spell(slug=slug)
+            except fivetools.FiveToolsError as exc:
+                await send_interaction_message(
+                    interaction,
+                    content=str(exc),
+                    ephemeral=True,
+                    definition_menu=False,
+                )
+                return
+            except Exception:
+                await send_interaction_message(
+                    interaction,
+                    content="Could not load that spell.",
+                    ephemeral=True,
+                    definition_menu=False,
+                )
+                return
             await send_interaction_message(
                 interaction,
-                content=str(exc),
+                embed=spell_embed(spell),
                 ephemeral=True,
                 definition_menu=False,
             )
-            return
-        except Exception:
-            await send_interaction_message(
-                interaction,
-                content="Could not load that spell.",
-                ephemeral=True,
-                definition_menu=False,
-            )
-            return
-        await send_interaction_message(
-            interaction,
-            embed=spell_embed(spell),
-            ephemeral=True,
-            definition_menu=False,
-        )
+        finally:
+            await reset_spell_select(interaction)
 
 
 class SpellSelectView(discord.ui.View):
@@ -110,6 +114,35 @@ class SpellSelectView(discord.ui.View):
         else:
             for index in range(5):
                 self.add_item(PersistentSpellSelect(index))
+
+
+def spell_entries_from_select_options(options) -> list[tuple[str, str, str]]:
+    entries: list[tuple[str, str, str]] = []
+    for option in options:
+        value = getattr(option, "value", "")
+        if not value or value == "noop":
+            continue
+        entries.append((value, getattr(option, "label", value), getattr(option, "description", None) or ""))
+    return entries
+
+
+def spell_view_from_message(message: discord.Message | None) -> SpellSelectView | None:
+    entries: list[tuple[str, str, str]] = []
+    for menu in select_menus_from_message(message):
+        custom_id = getattr(menu, "custom_id", None) or ""
+        if not custom_id.startswith(SPELL_SELECT_PREFIX):
+            continue
+        entries.extend(spell_entries_from_select_options(menu.options))
+    if not entries:
+        return None
+    return SpellSelectView(entries)
+
+
+async def reset_spell_select(interaction: discord.Interaction) -> None:
+    view = spell_view_from_message(interaction.message)
+    if view is None:
+        return
+    await replace_message_view(interaction, view)
 
 
 def format_spell_lines(spell_entries: list[tuple[str, str, str]]) -> str:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from combat.cards import (
+    BUFF_BY_SLUG,
     DODGE_CARD_ID,
     SCHOOL_EMOJI,
     WEAPON_CARD_ID,
@@ -14,6 +15,7 @@ from combat.cards import (
     spellcasting_ability,
     weapon_attack_ability,
 )
+from combat.monsters import MonsterProfile
 from sheets.data import CharacterSheet, hit_die_sides
 from sheets.equipment import ITEM_KIND_WEAPON
 from srd import fivetools
@@ -26,24 +28,24 @@ CANTRIP_COPIES = 3
 LEVELED_SPELL_COPIES = 1
 HOMEBREW_COPIES = 1
 
+BUFF_EFFECT_TEXT: dict[str, str] = {
+    "shield": "Negate the next hit against this creature.",
+    "mage-armor": "Reduce each hit by 1d4.",
+    "bless": "This creature's attacks deal +1d4.",
+}
 
-def _weapon_card(sheet: CharacterSheet | None, *, damage_type_label: str | None = None) -> CardSnapshot:
-    if sheet is None:
-        ability = "str"
-        die_sides = 6
-        uses_prof = False
-        label = "Claw"
-        description = "Natural attack: 1d6 damage."
-    else:
-        ability = weapon_attack_ability(sheet.char_class, sheet.abilities)
-        die_sides = min(hit_die_sides(sheet.char_class), 12)
-        uses_prof = True
-        label = "Weapon Attack"
-        ability_name = ability.upper()
-        description = f"SRD weapon attack: 1d{die_sides} + {ability_name} + proficiency."
-        if damage_type_label:
-            description += f" Deals {damage_type_label} damage."
 
+def _weapon_card(
+    *,
+    label: str,
+    description: str,
+    dice_count: int,
+    dice_sides: int,
+    flat_modifier: int = 0,
+    ability: str | None,
+    uses_proficiency: bool,
+    damage_type_label: str | None = None,
+) -> CardSnapshot:
     return CardSnapshot(
         card_id=WEAPON_CARD_ID,
         label=label,
@@ -52,28 +54,71 @@ def _weapon_card(sheet: CharacterSheet | None, *, damage_type_label: str | None 
         needs_target=True,
         target_enemies_only=True,
         card_type="weapon",
-        dice_count=1,
-        dice_sides=die_sides,
-        uses_proficiency=uses_prof,
+        dice_count=dice_count,
+        dice_sides=dice_sides,
+        flat_modifier=flat_modifier,
+        uses_proficiency=uses_proficiency,
         ability=ability,
         damage_type_label=damage_type_label,
     )
 
 
-def _dodge_card(sheet: CharacterSheet | None) -> CardSnapshot:
-    ability = "dex"
-    if sheet is not None:
-        ability = weapon_attack_ability(sheet.char_class, sheet.abilities)
-        if spellcasting_ability(sheet.char_class):
-            ability = "dex"
+def _fallback_player_weapon(sheet: CharacterSheet, *, damage_type_label: str | None = None) -> CardSnapshot:
+    ability = weapon_attack_ability(sheet.char_class, sheet.abilities)
+    die_sides = min(hit_die_sides(sheet.char_class), 12)
+    description = f"Unarmed/improvised: 1d{die_sides} + {ability.upper()} + proficiency."
+    if damage_type_label:
+        description += f" Deals {damage_type_label} damage."
+    return _weapon_card(
+        label="Weapon Attack",
+        description=description,
+        dice_count=1,
+        dice_sides=die_sides,
+        ability=ability,
+        uses_proficiency=True,
+        damage_type_label=damage_type_label,
+    )
+
+
+def _claw_card() -> CardSnapshot:
+    return _weapon_card(
+        label="Claw",
+        description="Natural attack: 1d6 damage.",
+        dice_count=1,
+        dice_sides=6,
+        ability=None,
+        uses_proficiency=False,
+    )
+
+
+def _monster_weapon_card(monster: MonsterProfile) -> CardSnapshot:
+    dice = f"{monster.dice_count}d{monster.dice_sides}"
+    if monster.flat_modifier:
+        sign = "+" if monster.flat_modifier > 0 else ""
+        dice = f"{dice}{sign}{monster.flat_modifier}"
+    type_text = f" {monster.damage_type_label}" if monster.damage_type_label else ""
+    return _weapon_card(
+        label=monster.attack_name,
+        description=f"{monster.attack_name}: {dice}{type_text} damage.",
+        dice_count=monster.dice_count,
+        dice_sides=monster.dice_sides,
+        flat_modifier=monster.flat_modifier,
+        ability=None,
+        uses_proficiency=False,
+        damage_type_label=monster.damage_type_label,
+    )
+
+
+def _dodge_card() -> CardSnapshot:
     return CardSnapshot(
         card_id=DODGE_CARD_ID,
         label="Dodge",
         emoji="🤸",
-        description="SRD Dodge: reduce the next damage you take (half, rounded down).",
+        description="Halve all damage until your next turn.",
         needs_target=False,
         card_type="dodge",
         ability="dex",
+        buff="dodge",
     )
 
 
@@ -90,16 +135,18 @@ def _spell_card(sheet: CharacterSheet, spell: dict[str, Any]) -> CardSnapshot | 
     dice_count, dice_sides, flat_modifier = parse_damage_roll(damage_roll)
     damage_types = list(spell.get("damage_types") or spell.get("damageInflict") or [])
     healing = is_healing_spell(damage_types=damage_types, desc=desc)
+    buff = BUFF_BY_SLUG.get(str(slug).lower())
+    target_allies = False
+    target_enemies = False
+    ability: str | None = None
 
     if healing:
         needs_target = True
         target_allies = True
-        target_enemies = False
         ability = spellcasting_ability(sheet.char_class) or "wis"
         effect = f"Restore {damage_roll or 'HP'} + {ability.upper()} (SRD)."
     elif dice_count > 0:
         needs_target = True
-        target_allies = False
         target_enemies = True
         ability = spellcasting_ability(sheet.char_class) if level > 0 else None
         type_label = (
@@ -108,11 +155,12 @@ def _spell_card(sheet: CharacterSheet, spell: dict[str, Any]) -> CardSnapshot | 
         type_text = f"{type_label} " if type_label else ""
         mod_note = f" + {ability.upper()}" if ability and level > 0 else ""
         effect = f"Deal {damage_roll}{mod_note} {type_text}damage (SRD)."
+    elif buff:
+        needs_target = True
+        target_allies = True
+        effect = BUFF_EFFECT_TEXT[buff]
     else:
-        needs_target = False
-        target_allies = False
-        target_enemies = False
-        ability = None
+        needs_target = True
         effect = desc[:120] + ("…" if len(desc) > 120 else "")
 
     level_label = "Cantrip" if level == 0 else f"Level {level}"
@@ -133,6 +181,7 @@ def _spell_card(sheet: CharacterSheet, spell: dict[str, Any]) -> CardSnapshot | 
         spell_slug=slug,
         ability=ability,
         damage_type_label=spell_damage_type_label(spell),
+        buff=buff,
     )
 
 
@@ -162,37 +211,85 @@ async def _fetch_spell(slug: str) -> dict[str, Any] | None:
         return None
 
 
-async def _equipped_weapon_damage_type(sheet: CharacterSheet) -> str | None:
+async def _lookup_equipped_weapon(sheet: CharacterSheet) -> dict[str, Any] | None:
     for item in sheet.equipment.equipped_items():
         if item.kind != ITEM_KIND_WEAPON:
             continue
         try:
             if item.slug:
-                weapon = await fivetools.get_weapon(slug=item.slug)
-            else:
-                weapon = await fivetools.search_weapon(item.name)
+                return await fivetools.get_weapon(slug=item.slug)
+            return await fivetools.search_weapon(item.name)
         except fivetools.FiveToolsError:
-            continue
-        damage_type = weapon.get("damage_type")
-        if damage_type and damage_type != "—":
-            return str(damage_type)
+            try:
+                return await fivetools.search_weapon(item.name)
+            except fivetools.FiveToolsError:
+                continue
     return None
+
+
+def _ability_for_weapon(sheet: CharacterSheet, weapon: dict[str, Any]) -> str:
+    props = str(weapon.get("properties") or "").lower()
+    range_text = str(weapon.get("range") or "Melee")
+    if "finesse" in props:
+        return "dex" if sheet.abilities.get("dex", 10) >= sheet.abilities.get("str", 10) else "str"
+    if range_text.lower() != "melee":
+        return "dex"
+    return weapon_attack_ability(sheet.char_class, sheet.abilities)
+
+
+async def _player_weapon_card(sheet: CharacterSheet) -> CardSnapshot:
+    weapon = await _lookup_equipped_weapon(sheet)
+    if weapon is None:
+        return _fallback_player_weapon(sheet)
+    count, sides, flat = parse_damage_roll(weapon.get("damage"))
+    if count <= 0 or sides <= 0:
+        type_label = weapon.get("damage_type")
+        if type_label == "—":
+            type_label = None
+        return _fallback_player_weapon(sheet, damage_type_label=type_label)
+    ability = _ability_for_weapon(sheet, weapon)
+    type_label = weapon.get("damage_type")
+    if type_label == "—":
+        type_label = None
+    dice = f"{count}d{sides}"
+    if flat:
+        dice = f"{dice}+{flat}"
+    type_text = f" {type_label}" if type_label else ""
+    name = str(weapon.get("name") or "Weapon")
+    return _weapon_card(
+        label=name,
+        description=f"{name}: {dice} + {ability.upper()} + proficiency{type_text}.",
+        dice_count=count,
+        dice_sides=sides,
+        flat_modifier=flat,
+        ability=ability,
+        uses_proficiency=True,
+        damage_type_label=type_label,
+    )
 
 
 async def build_combatant_deck(
     *,
     sheet: CharacterSheet | None,
+    monster: MonsterProfile | None = None,
 ) -> tuple[list[str], dict[str, CardSnapshot]]:
     catalog: dict[str, CardSnapshot] = {}
     deck: list[str] = []
 
-    weapon_type = await _equipped_weapon_damage_type(sheet) if sheet is not None else None
-    weapon = _weapon_card(sheet, damage_type_label=weapon_type)
-    dodge = _dodge_card(sheet)
+    if sheet is not None:
+        weapon = await _player_weapon_card(sheet)
+    elif monster is not None:
+        weapon = _monster_weapon_card(monster)
+    else:
+        weapon = _claw_card()
+    dodge = _dodge_card()
     catalog[weapon.card_id] = weapon
     catalog[dodge.card_id] = dodge
     deck.extend([weapon.card_id] * NPC_WEAPON_COPIES)
-    deck.extend([dodge.card_id] * NPC_DODGE_COPIES)
+    dodge_copies = NPC_DODGE_COPIES
+    if monster is not None and any("nimble escape" in trait.lower() for trait in monster.traits):
+        dodge_copies += 1
+    deck.extend([dodge.card_id] * dodge_copies)
 
     if sheet is None:
         return deck, catalog

@@ -2,6 +2,8 @@ import re
 
 import discord
 
+from srd.fivetools_parser import format_weight_from_lb
+
 SRD_COLOR = 0x4A6741
 SHEET_COLOR = 0x8B0000
 
@@ -80,11 +82,99 @@ MONSTER_TYPE_EMOJI: dict[str, str] = {
 MARKDOWN_HEADERS = re.compile(r"^#{1,6}\s+", re.MULTILINE)
 
 
+DISCORD_FIELD_LIMIT = 1024
+DISCORD_FIELD_NAME_LIMIT = 256
+DISCORD_DESCRIPTION_LIMIT = 4096
+MAX_EMBED_FIELDS = 25
+
+
 def truncate(text: str, limit: int) -> str:
     text = text.strip()
     if len(text) <= limit:
         return text
     return f"{text[: limit - 1].rstrip()}…"
+
+
+def _split_oversize_line(line: str, limit: int) -> list[str]:
+    if len(line) <= limit:
+        return [line]
+    parts: list[str] = []
+    rest = line
+    while len(rest) > limit:
+        cut = rest.rfind(" ", 0, limit)
+        if cut < max(1, limit // 2):
+            cut = limit
+        parts.append(rest[:cut].rstrip())
+        rest = rest[cut:].lstrip()
+    if rest:
+        parts.append(rest)
+    return parts
+
+
+def chunk_field_value(text: str, *, limit: int = DISCORD_FIELD_LIMIT) -> list[str]:
+    cleaned = (text or "").strip() or "—"
+    if len(cleaned) <= limit:
+        return [cleaned]
+
+    chunks: list[str] = []
+    current: list[str] = []
+    current_len = 0
+    for line in cleaned.split("\n"):
+        for piece in _split_oversize_line(line, limit):
+            extra = len(piece) + (1 if current else 0)
+            if current and current_len + extra > limit:
+                chunks.append("\n".join(current))
+                current = [piece]
+                current_len = len(piece)
+            else:
+                current.append(piece)
+                current_len += extra
+    if current:
+        chunks.append("\n".join(current))
+    return chunks or ["—"]
+
+
+def add_chunked_field(
+    embed: discord.Embed,
+    name: str,
+    text: str,
+    *,
+    inline: bool = False,
+) -> None:
+    remaining = MAX_EMBED_FIELDS - len(embed.fields)
+    if remaining <= 0:
+        return
+    chunks = chunk_field_value(text)
+    for index, chunk in enumerate(chunks):
+        if index >= remaining:
+            return
+        label = name if index == 0 else f"{name} (cont.)"
+        embed.add_field(
+            name=truncate(label, DISCORD_FIELD_NAME_LIMIT),
+            value=chunk,
+            inline=inline and index == 0,
+        )
+
+
+def clamp_embed_limits(embed: discord.Embed) -> discord.Embed:
+    if embed.title and len(embed.title) > 256:
+        embed.title = truncate(embed.title, 256)
+    if embed.description and len(embed.description) > DISCORD_DESCRIPTION_LIMIT:
+        embed.description = truncate(embed.description, DISCORD_DESCRIPTION_LIMIT)
+    if embed.footer.text and len(embed.footer.text) > 2048:
+        embed.set_footer(text=truncate(embed.footer.text, 2048), icon_url=embed.footer.icon_url)
+
+    if len(embed.fields) <= MAX_EMBED_FIELDS and all(
+        len(field.name) <= DISCORD_FIELD_NAME_LIMIT and len(field.value) <= DISCORD_FIELD_LIMIT
+        for field in embed.fields
+    ):
+        return embed
+
+    original = list(embed.fields)
+    embed.clear_fields()
+    for field in original:
+        add_chunked_field(embed, field.name, field.value, inline=field.inline)
+    return embed
 
 
 def clean_markdown(text: str) -> str:
@@ -274,6 +364,7 @@ def weapon_embed(weapon: dict) -> discord.Embed:
     embed.add_field(name="💥 Damage", value=weapon.get("damage", "—"), inline=True)
     embed.add_field(name="💥 Damage Type", value=weapon.get("damage_type", "—"), inline=True)
     embed.add_field(name="📏 Range", value=weapon.get("range", "—"), inline=True)
+    embed.add_field(name="⚖️ Weight", value=weapon.get("weight", "—"), inline=True)
     embed.add_field(name="✦ Properties", value=weapon.get("properties", "—"), inline=False)
     embed.set_footer(text=weapon.get("document__title", "5etools"))
     return embed
@@ -292,6 +383,7 @@ def armor_embed(armor: dict) -> discord.Embed:
     strength = armor.get("strength_required")
     if strength:
         embed.add_field(name="💪 Strength Required", value=str(strength), inline=True)
+    embed.add_field(name="⚖️ Weight", value=armor.get("weight", "—"), inline=True)
     embed.set_footer(text=armor.get("document__title", "5etools"))
     return embed
 
@@ -306,6 +398,12 @@ def item_embed(item: dict) -> discord.Embed:
     embed.add_field(name="🏷️ Category", value=item.get("category", "—"), inline=True)
     embed.add_field(name="💰 Cost", value=item.get("cost", "—"), inline=True)
     embed.add_field(name="⚖️ Weight", value=item.get("weight", "—"), inline=True)
+    capacity = item.get("container_capacity_lb")
+    if capacity not in (None, ""):
+        label = format_weight_from_lb(float(capacity))
+        if item.get("container_weightless"):
+            label += " (contents are weightless)"
+        embed.add_field(name="🎒 Holds", value=label, inline=True)
     embed.set_footer(text=item.get("document__title", "5etools"))
     return embed
 
@@ -336,7 +434,7 @@ def _monster_defenses(monster: dict) -> str | None:
 def _monster_field(text: str | None) -> str:
     if not text:
         return "—"
-    return truncate(clean_markdown(text), 1024)
+    return clean_markdown(text)
 
 
 def _parse_cr_value(cr: str) -> float | None:
@@ -384,19 +482,19 @@ def monster_embed(monster: dict) -> discord.Embed:
     embed.add_field(name="🛡️ AC", value=monster.get("ac", "—"), inline=True)
     embed.add_field(name="❤️ HP", value=monster.get("hp", "—"), inline=True)
     embed.add_field(name="👟 Speed", value=monster.get("speed", "—"), inline=True)
-    embed.add_field(name="📊 Abilities", value=monster.get("abilities", "—"), inline=False)
+    add_chunked_field(embed, "📊 Abilities", str(monster.get("abilities") or "—"))
 
     if monster.get("saves") and monster["saves"] != "—":
-        embed.add_field(name="🎲 Saving Throws", value=truncate(monster["saves"], 1024), inline=True)
+        add_chunked_field(embed, "🎲 Saving Throws", monster["saves"], inline=True)
     if monster.get("skills") and monster["skills"] != "—":
-        embed.add_field(name="🎯 Skills", value=truncate(monster["skills"], 1024), inline=True)
+        add_chunked_field(embed, "🎯 Skills", monster["skills"], inline=True)
 
     defenses = _monster_defenses(monster)
     if defenses:
-        embed.add_field(name="🛡️ Defenses", value=truncate(defenses, 1024), inline=False)
+        add_chunked_field(embed, "🛡️ Defenses", defenses)
 
-    embed.add_field(name="👁️ Senses", value=truncate(str(monster.get("senses") or "—"), 1024), inline=False)
-    embed.add_field(name="💬 Languages", value=truncate(str(monster.get("languages") or "—"), 1024), inline=False)
+    add_chunked_field(embed, "👁️ Senses", str(monster.get("senses") or "—"))
+    add_chunked_field(embed, "💬 Languages", str(monster.get("languages") or "—"))
 
     for field_name, key in (
         ("✦ Traits", "traits"),
@@ -408,7 +506,7 @@ def monster_embed(monster: dict) -> discord.Embed:
     ):
         text = monster.get(key)
         if text:
-            embed.add_field(name=field_name, value=_monster_field(text), inline=False)
+            add_chunked_field(embed, field_name, _monster_field(text))
 
     embed.set_footer(text=monster.get("document__title", "5etools"))
     return embed
