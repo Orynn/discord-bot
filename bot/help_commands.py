@@ -19,6 +19,33 @@ from bot.help_view import HelpView
 from bot.messaging import send_message
 from config import PREFIX
 
+HELP_FLAGS = frozenset({"-h", "--help", "-help"})
+
+
+def leftover_argument_tokens(ctx: Context) -> list[str]:
+    view = getattr(ctx, "view", None)
+    rest = getattr(view, "rest", None)
+    if isinstance(rest, str) and rest.strip():
+        return rest.split()
+    return []
+
+
+def wants_command_help(ctx: Context) -> bool:
+    if getattr(ctx, "command", None) is None:
+        return False
+    if getattr(ctx, "interaction", None) is not None:
+        return False
+    return any(
+        token.casefold() in HELP_FLAGS for token in leftover_argument_tokens(ctx)
+    )
+
+
+async def maybe_send_command_help(ctx: Context) -> bool:
+    if not wants_command_help(ctx):
+        return False
+    await ctx.send_help(ctx.command)
+    return True
+
 
 def _command_signature(command) -> str:
     parent = command.full_parent_name
@@ -55,7 +82,7 @@ async def _send_help_embed(ctx: Context, embed: discord.Embed) -> None:
 async def send_srd_help(ctx: Context) -> None:
     await _send_sectioned_help(
         ctx,
-        title="Rules lookup",
+        title="Recherche de règles",
         sections=build_srd_help_sections(prefix=PREFIX),
     )
 
@@ -65,7 +92,7 @@ class ArkannHelpCommand(MinimalHelpCommand):
         ctx = self.context
         await _send_sectioned_help(
             ctx,
-            title="Arkann — commands",
+            title="Arkann — commandes",
             sections=build_help_sections(prefix=PREFIX, is_admin=is_admin(ctx)),
         )
 
@@ -74,7 +101,7 @@ class ArkannHelpCommand(MinimalHelpCommand):
         if group.qualified_name == "sheet":
             await _send_sectioned_help(
                 ctx,
-                title="Character sheet",
+                title="Fiche de personnage",
                 sections=build_sheet_help_sections(
                     prefix=PREFIX,
                     is_admin=is_admin(ctx),
@@ -85,7 +112,7 @@ class ArkannHelpCommand(MinimalHelpCommand):
         if group.qualified_name == "combat":
             await _send_sectioned_help(
                 ctx,
-                title="Card combat",
+                title="Combat à cartes",
                 sections=build_combat_help_sections(
                     prefix=PREFIX,
                     is_admin=is_admin(ctx),
@@ -100,7 +127,7 @@ class ArkannHelpCommand(MinimalHelpCommand):
         if group.qualified_name == "hunger":
             await _send_sectioned_help(
                 ctx,
-                title="Hunger",
+                title="Faim",
                 sections=build_hunger_help_sections(
                     prefix=PREFIX,
                     is_admin=is_admin(ctx),
@@ -117,7 +144,9 @@ class ArkannHelpCommand(MinimalHelpCommand):
             if lines:
                 lines.append("")
             for command in sorted(subcommands, key=lambda cmd: cmd.name):
-                summary = (command.short_doc or command.help or "").strip().split("\n")[0]
+                summary = (
+                    (command.short_doc or command.help or "").strip().split("\n")[0]
+                )
                 line = f"• {_command_signature(command)}"
                 if summary:
                     if len(summary) > 80:
@@ -184,43 +213,51 @@ def setup_help(bot: Bot) -> None:
     async def aide_command(ctx: Context) -> None:
         await _send_sectioned_help(
             ctx,
-            title="Arkann — commands",
+            title="Arkann — commandes",
             sections=build_help_sections(prefix=PREFIX, is_admin=is_admin(ctx)),
         )
 
     @bot.tree.command(name="help", description="Show Arkann commands")
-    @app_commands.describe(topic="Optional topic: sheet, combat, srd, hunger, or a command name")
-    async def slash_help(interaction: discord.Interaction, topic: str | None = None) -> None:
+    @app_commands.describe(
+        topic="Optional topic: sheet, combat, srd, hunger, or a command name"
+    )
+    async def slash_help(
+        interaction: discord.Interaction, topic: str | None = None
+    ) -> None:
         ctx = await bot.get_context(interaction)
         query = (topic or "").strip().lower()
         if not query:
             await _send_sectioned_help(
                 ctx,
-                title="Arkann — commands",
+                title="Arkann — commandes",
                 sections=build_help_sections(prefix=PREFIX, is_admin=is_admin(ctx)),
             )
             return
-        if query in {"sheet", "character"}:
+        if query in {"sheet", "character", "fiche"}:
             await _send_sectioned_help(
                 ctx,
-                title="Character sheet",
-                sections=build_sheet_help_sections(prefix=PREFIX, is_admin=is_admin(ctx)),
+                title="Fiche de personnage",
+                sections=build_sheet_help_sections(
+                    prefix=PREFIX, is_admin=is_admin(ctx)
+                ),
             )
             return
         if query in {"combat", "cards"}:
             await _send_sectioned_help(
                 ctx,
-                title="Card combat",
-                sections=build_combat_help_sections(prefix=PREFIX, is_admin=is_admin(ctx)),
+                title="Combat à cartes",
+                sections=build_combat_help_sections(
+                    prefix=PREFIX, is_admin=is_admin(ctx)
+                ),
             )
             return
-        if query in {"srd", "lookup", "5etools"}:
+        if query in {"srd", "lookup", "5etools", "regles", "règles"}:
             await send_srd_help(ctx)
             return
         if query in {"hunger", "faim", "food"}:
             await _send_sectioned_help(
                 ctx,
-                title="Hunger",
+                title="Faim",
                 sections=build_hunger_help_sections(
                     prefix=PREFIX,
                     is_admin=is_admin(ctx),

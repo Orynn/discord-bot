@@ -58,7 +58,9 @@ def _ensure_data(data_dir: Path) -> None:
             check=True,
         )
     print("Checking out data/ …", file=sys.stderr)
-    subprocess.run(["git", "-C", str(repo_root), "sparse-checkout", "set", "data"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo_root), "sparse-checkout", "set", "data"], check=True
+    )
     subprocess.run(["git", "-C", str(repo_root), "checkout"], check=True)
     target = repo_root / "data"
     if not data_dir.exists():
@@ -70,17 +72,27 @@ def cmd_build(args: argparse.Namespace) -> int:
     _ensure_data(args.data_dir)
     merge_path = None if args.no_merge else args.merge
 
-    if merge_path and merge_path.is_file() and merge_path.resolve() == args.output.resolve():
+    if (
+        merge_path
+        and merge_path.is_file()
+        and merge_path.resolve() == args.output.resolve()
+    ):
         backup = args.output.with_suffix(".json.bak")
         print(f"Backing up {args.output} → {backup}", file=sys.stderr)
         backup.write_bytes(args.output.read_bytes())
 
     export = build_export(args.data_dir, merge_path=merge_path)
-    print(f"Official data: {summarize_body(build_official_body(args.data_dir))}", file=sys.stderr)
+    print(
+        f"Official data: {summarize_body(build_official_body(args.data_dir))}",
+        file=sys.stderr,
+    )
 
     homebrew_count = len(export["async"]["HOMEBREW_2_STORAGE"]) - 1
     if homebrew_count:
-        print(f"Preserved {homebrew_count} homebrew entr{'y' if homebrew_count == 1 else 'ies'}", file=sys.stderr)
+        print(
+            f"Preserved {homebrew_count} homebrew entr{'y' if homebrew_count == 1 else 'ies'}",
+            file=sys.stderr,
+        )
 
     write_json(args.output, export)
     size_mb = args.output.stat().st_size / (1024 * 1024)
@@ -91,7 +103,10 @@ def cmd_build(args: argparse.Namespace) -> int:
 def cmd_extract_homebrew(args: argparse.Namespace) -> int:
     export = extract_homebrew_export(args.from_file)
     count = len(export["async"]["HOMEBREW_2_STORAGE"])
-    print(f"Extracted {count} homebrew entr{'y' if count == 1 else 'ies'}", file=sys.stderr)
+    print(
+        f"Extracted {count} homebrew entr{'y' if count == 1 else 'ies'}",
+        file=sys.stderr,
+    )
     write_json(args.output, export)
     size_mb = args.output.stat().st_size / (1024 * 1024)
     print(f"Wrote {args.output} ({size_mb:.1f} MB)", file=sys.stderr)
@@ -109,7 +124,9 @@ def main() -> int:
     build.add_argument("--no-merge", action="store_true")
     build.set_defaults(func=cmd_build)
 
-    extract = sub.add_parser("extract-homebrew", help="Extract homebrew entries from a merged export")
+    extract = sub.add_parser(
+        "extract-homebrew", help="Extract homebrew entries from a merged export"
+    )
     extract.add_argument("--from", dest="from_file", type=Path, required=True)
     extract.add_argument("--output", type=Path, default=DEFAULT_HOMEBREW)
     extract.set_defaults(func=cmd_extract_homebrew)

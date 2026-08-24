@@ -104,13 +104,17 @@ class FiveToolsIndex:
             if isinstance(body, dict):
                 self._ingest_brew_body(body)
 
-    def _resolve_unique_slug(self, slug: str, source: str, by_slug: dict[str, dict[str, Any]]) -> str:
+    def _resolve_unique_slug(
+        self, slug: str, source: str, by_slug: dict[str, dict[str, Any]]
+    ) -> str:
         existing = by_slug.get(slug)
         if existing is None or existing.get("source") == source:
             return slug
         return f"{slug}__{source.lower()}"
 
-    def _should_replace_name(self, existing: dict[str, Any] | None, item: dict[str, Any]) -> bool:
+    def _should_replace_name(
+        self, existing: dict[str, Any] | None, item: dict[str, Any]
+    ) -> bool:
         return should_replace(existing, item)
 
     def _register(
@@ -136,7 +140,9 @@ class FiveToolsIndex:
             code = source.get("json")
             if not code:
                 continue
-            self._source_titles[code] = source.get("full") or source.get("abbreviation") or code
+            self._source_titles[code] = (
+                source.get("full") or source.get("abbreviation") or code
+            )
 
     def _ingest_brew_body(self, body: dict[str, Any]) -> None:
         self._index_source_titles(body)
@@ -156,11 +162,19 @@ class FiveToolsIndex:
 
         for raw in body.get("spell", []):
             slug = slugify(raw["name"])
-            self._register({**raw, "slug": slug}, by_slug=self.spells_by_slug, by_name=self.spells_by_name)
+            self._register(
+                {**raw, "slug": slug},
+                by_slug=self.spells_by_slug,
+                by_name=self.spells_by_name,
+            )
 
         for raw in body.get("race", []):
             slug = slugify(raw["name"])
-            self._register({**raw, "slug": slug}, by_slug=self.races_by_slug, by_name=self.races_by_name)
+            self._register(
+                {**raw, "slug": slug},
+                by_slug=self.races_by_slug,
+                by_name=self.races_by_name,
+            )
 
         class_features = body.get("classFeature", [])
         class_features_by_key: dict[tuple[Any, Any], list[dict[str, Any]]] = {}
@@ -183,7 +197,11 @@ class FiveToolsIndex:
         subclass_features = body.get("subclassFeature", [])
         subclass_features_by_key: dict[tuple[Any, Any, Any], list[dict[str, Any]]] = {}
         for feature in subclass_features:
-            key = (feature.get("className"), feature.get("subclassShortName"), feature.get("source"))
+            key = (
+                feature.get("className"),
+                feature.get("subclassShortName"),
+                feature.get("source"),
+            )
             subclass_features_by_key.setdefault(key, []).append(feature)
 
         for raw in body.get("subclass", []):
@@ -204,19 +222,35 @@ class FiveToolsIndex:
 
         for raw in body.get("background", []):
             slug = slugify(raw["name"])
-            self._register({**raw, "slug": slug}, by_slug=self.backgrounds_by_slug, by_name=self.backgrounds_by_name)
+            self._register(
+                {**raw, "slug": slug},
+                by_slug=self.backgrounds_by_slug,
+                by_name=self.backgrounds_by_name,
+            )
 
         for raw in body.get("feat", []):
             slug = slugify(raw["name"])
-            self._register({**raw, "slug": slug}, by_slug=self.feats_by_slug, by_name=self.feats_by_name)
+            self._register(
+                {**raw, "slug": slug},
+                by_slug=self.feats_by_slug,
+                by_name=self.feats_by_name,
+            )
 
         for raw in body.get("condition", []):
             slug = slugify(raw["name"])
-            self._register({**raw, "slug": slug}, by_slug=self.conditions_by_slug, by_name=self.conditions_by_name)
+            self._register(
+                {**raw, "slug": slug},
+                by_slug=self.conditions_by_slug,
+                by_name=self.conditions_by_name,
+            )
 
         for raw in body.get("skill", []):
             slug = slugify(raw["name"]).replace("-", "_")
-            self._register({**raw, "slug": slug}, by_slug=self.skills_by_slug, by_name=self.skills_by_name)
+            self._register(
+                {**raw, "slug": slug},
+                by_slug=self.skills_by_slug,
+                by_name=self.skills_by_name,
+            )
 
         for raw in body.get("baseitem", []):
             if not raw.get("name"):
@@ -225,17 +259,27 @@ class FiveToolsIndex:
             item = {**raw, "slug": slug}
             kind = _baseitem_kind(raw)
             if kind == "weapon":
-                self._register(item, by_slug=self.weapons_by_slug, by_name=self.weapons_by_name)
+                self._register(
+                    item, by_slug=self.weapons_by_slug, by_name=self.weapons_by_name
+                )
             elif kind == "armor":
-                self._register(item, by_slug=self.armor_by_slug, by_name=self.armor_by_name)
+                self._register(
+                    item, by_slug=self.armor_by_slug, by_name=self.armor_by_name
+                )
             else:
-                self._register(item, by_slug=self.items_by_slug, by_name=self.items_by_name)
+                self._register(
+                    item, by_slug=self.items_by_slug, by_name=self.items_by_name
+                )
 
         for raw in body.get("item", []):
             if raw.get("weapon") or raw.get("armor"):
                 continue
             slug = slugify(raw["name"])
-            self._register({**raw, "slug": slug}, by_slug=self.items_by_slug, by_name=self.items_by_name)
+            self._register(
+                {**raw, "slug": slug},
+                by_slug=self.items_by_slug,
+                by_name=self.items_by_name,
+            )
 
         for raw in body.get("monster", []):
             if not raw.get("name"):
@@ -243,13 +287,19 @@ class FiveToolsIndex:
             if raw.get("_copy") and not raw.get("hp") and not raw.get("ac"):
                 continue
             slug = slugify(raw["name"])
-            self._register({**raw, "slug": slug}, by_slug=self.monsters_by_slug, by_name=self.monsters_by_name)
+            self._register(
+                {**raw, "slug": slug},
+                by_slug=self.monsters_by_slug,
+                by_name=self.monsters_by_name,
+            )
 
     def property_name(self, code: str) -> str:
         base = code.split("|", 1)[0]
         return self._property_names.get(base, base)
 
-    def subclass_features(self, *, class_name: str, short_name: str) -> list[dict[str, Any]]:
+    def subclass_features(
+        self, *, class_name: str, short_name: str
+    ) -> list[dict[str, Any]]:
         return self._subclass_features.get((class_name, short_name), [])
 
     def class_features(self, class_slug: str) -> list[dict[str, Any]]:

@@ -108,7 +108,9 @@ def parse_post_spec(section: str, details: str) -> CampaignPostSpec:
     raw_section = section.strip()
     text = details.strip()
     if not raw_section:
-        raise CampaignForumError("Missing forum name. Example: `lieux`, `pnj`, `quêtes`.")
+        raise CampaignForumError(
+            "Missing forum name. Example: `lieux`, `pnj`, `quêtes`."
+        )
     if not text:
         raise CampaignForumError("Missing post title.")
 
@@ -194,7 +196,9 @@ def is_campaign_home_guild(guild: discord.Guild) -> bool:
 
 def require_manage_channels(guild: discord.Guild) -> None:
     if not has_manage_channels(guild):
-        raise CampaignForumError("I need the **Manage Channels** permission to create campaign forums.")
+        raise CampaignForumError(
+            "I need the **Manage Channels** permission to create campaign forums."
+        )
 
 
 def _visible_overwrite(*, manage: bool = False) -> discord.PermissionOverwrite:
@@ -314,7 +318,9 @@ async def ensure_campaign_category(guild: discord.Guild) -> discord.CategoryChan
             reason=reason,
         )
     _persist_campaign_home(guild, created.id)
-    logger.info("Recreated private CAMPAIGN category in %s (%s).", guild.name, created.id)
+    logger.info(
+        "Recreated private CAMPAIGN category in %s (%s).", guild.name, created.id
+    )
     return created
 
 
@@ -328,7 +334,9 @@ def post_jump_markdown(*, title: str, url: str) -> str:
     return markdown_channel_link(label=title, url=url)
 
 
-async def ensure_campaign_forum(guild: discord.Guild, name: str) -> discord.ForumChannel:
+async def ensure_campaign_forum(
+    guild: discord.Guild, name: str
+) -> discord.ForumChannel:
     existing = match_campaign_forum(list_campaign_forums(guild), name)
     if existing is not None:
         return existing
@@ -341,7 +349,9 @@ async def ensure_campaign_forum(guild: discord.Guild, name: str) -> discord.Foru
     )
 
 
-async def ensure_default_campaign_forums(guild: discord.Guild) -> list[discord.ForumChannel]:
+async def ensure_default_campaign_forums(
+    guild: discord.Guild,
+) -> list[discord.ForumChannel]:
     home_id = app_config.CAMPAIGN_GUILD_ID
     if home_id is not None and home_id != guild.id:
         return list_campaign_forums(guild)

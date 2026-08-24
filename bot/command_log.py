@@ -13,7 +13,11 @@ async def log_command(ctx: Context) -> None:
     if log_channel is None:
         return
 
-    channel_ref = ctx.channel.mention if isinstance(ctx.channel, discord.abc.GuildChannel) else "unknown"
+    channel_ref = (
+        ctx.channel.mention
+        if isinstance(ctx.channel, discord.abc.GuildChannel)
+        else "unknown"
+    )
     message = (
         f"**{ctx.author.display_name}** (`{ctx.author.id}`) "
         f"used `{ctx.command.qualified_name}` in {channel_ref}\n"

@@ -20,14 +20,25 @@ from campaign.clock import (
 from campaign.clock_storage import get_clock, save_clock
 from config import PREFIX
 from sheets.context import infer_player_id, parse_mention_and_text, resolve_owner
-from sheets.hunger import format_hunger_line, sync_hunger_to_clock, tick_hunger_for_clock
+from sheets.hunger import (
+    format_hunger_line,
+    sync_hunger_to_clock,
+    tick_hunger_for_clock,
+)
 from players.storage import list_player_user_ids
-from sheets.storage import get_character_name, get_sheet, list_sheet_user_ids, save_sheet
+from sheets.storage import (
+    get_character_name,
+    get_sheet,
+    list_sheet_user_ids,
+    save_sheet,
+)
 
 CLOCK_COLOR = 0x5DADE2
 
 
-def _clock_label(guild_id: int, user_id: int, member: discord.Member | None = None) -> str:
+def _clock_label(
+    guild_id: int, user_id: int, member: discord.Member | None = None
+) -> str:
     name = get_character_name(user_id=user_id, guild_id=guild_id)
     if name:
         return name
@@ -54,7 +65,9 @@ def _clock_embed(
     )
     if notice:
         embed.add_field(name="⏭️ Change", value=notice, inline=False)
-    embed.add_field(name="🕰️ Clock", value=f"{clock.format_clock()} · {clock.period()}", inline=True)
+    embed.add_field(
+        name="🕰️ Clock", value=f"{clock.format_clock()} · {clock.period()}", inline=True
+    )
     embed.add_field(name="📅 Tenday", value=clock.tenday(), inline=True)
     until_dusk = clock.minutes_until_hour(18)
     until_dawn = clock.minutes_until_hour(6)
@@ -77,22 +90,36 @@ def _party_embed(lines: list[str], *, notice: str | None = None) -> discord.Embe
     )
     if notice:
         embed.add_field(name="⏭️ Change", value=notice, inline=False)
-    embed.set_footer(text=f"One clock per player · DM: {PREFIX}time @player · {PREFIX}time all")
+    embed.set_footer(
+        text=f"One clock per player · DM: {PREFIX}time @player · {PREFIX}time all"
+    )
     return embed
 
 
 def _party_user_ids(guild_id: int, *, fallback_id: int) -> list[int]:
-    ids = [user_id for user_id in list_player_user_ids(guild_id=guild_id) if not is_staff_user_id(user_id)]
+    ids = [
+        user_id
+        for user_id in list_player_user_ids(guild_id=guild_id)
+        if not is_staff_user_id(user_id)
+    ]
     if ids:
         return ids
-    ids = [user_id for user_id in list_sheet_user_ids(guild_id=guild_id) if not is_staff_user_id(user_id)]
+    ids = [
+        user_id
+        for user_id in list_sheet_user_ids(guild_id=guild_id)
+        if not is_staff_user_id(user_id)
+    ]
     return ids or [fallback_id]
 
 
-async def _mutation_targets(ctx: Context, member: discord.Member | None) -> list[int] | None:
+async def _mutation_targets(
+    ctx: Context, member: discord.Member | None
+) -> list[int] | None:
     assert ctx.guild is not None
     if not is_admin(ctx):
-        await command_reply(ctx, "Only the DM can change a campaign clock. Use `;time` to see yours.")
+        await command_reply(
+            ctx, "Only the DM can change a campaign clock. Use `;time` to see yours."
+        )
         await delete_command(ctx)
         return None
     if member is not None and member.id != ctx.author.id:
@@ -242,7 +269,10 @@ def setup_time(bot: Bot) -> None:
             await _show_all_clocks(ctx)
             return
         if not is_admin(ctx):
-            await command_reply(ctx, "Only the DM can change a campaign clock. Use `;time` to see yours.")
+            await command_reply(
+                ctx,
+                "Only the DM can change a campaign clock. Use `;time` to see yours.",
+            )
             await delete_command(ctx)
             return
         targets = await _mutation_targets(ctx, member)
@@ -283,17 +313,25 @@ def setup_time(bot: Bot) -> None:
             await command_reply(ctx, str(exc))
             await delete_command(ctx)
 
-    @time_group.command(name="all", aliases=["party"], help="Show every player's campaign clock.")
+    @time_group.command(
+        name="all", aliases=["party"], help="Show every player's campaign clock."
+    )
     @guild_only
     @admin_only
     async def time_all(ctx: Context) -> None:
         await _show_all_clocks(ctx)
 
-    @time_group.command(name="advance", aliases=["add", "skip"], help="Advance time. Example: `2h`, `3d`, `1h 30m`.")
+    @time_group.command(
+        name="advance",
+        aliases=["add", "skip"],
+        help="Advance time. Example: `2h`, `3d`, `1h 30m`.",
+    )
     @app_commands.describe(amount="Duration to skip, e.g. 2h, 3d, 1h 30m")
     @guild_only
     @admin_only
-    async def time_advance(ctx: Context, member: discord.Member | None = None, *, amount: str) -> None:
+    async def time_advance(
+        ctx: Context, member: discord.Member | None = None, *, amount: str
+    ) -> None:
         if member is None:
             member, amount = parse_mention_and_text(ctx, amount)
         try:
@@ -313,11 +351,15 @@ def setup_time(bot: Bot) -> None:
             member=member,
         )
 
-    @time_group.command(name="set", help="Set the date. Example: `12 Hammer 1492 14:00`.")
+    @time_group.command(
+        name="set", help="Set the date. Example: `12 Hammer 1492 14:00`."
+    )
     @app_commands.describe(when="Harptos date and time, e.g. 12 Hammer 1492 14:00")
     @guild_only
     @admin_only
-    async def time_set(ctx: Context, member: discord.Member | None = None, *, when: str) -> None:
+    async def time_set(
+        ctx: Context, member: discord.Member | None = None, *, when: str
+    ) -> None:
         if member is None:
             member, when = parse_mention_and_text(ctx, when)
         try:
@@ -338,7 +380,9 @@ def setup_time(bot: Bot) -> None:
             member=member,
         )
 
-    async def _skip_to(ctx: Context, hour: int, *, label: str, member: discord.Member | None) -> None:
+    async def _skip_to(
+        ctx: Context, hour: int, *, label: str, member: discord.Member | None
+    ) -> None:
         targets = await _mutation_targets(ctx, member)
         if targets is None:
             return
@@ -395,7 +439,9 @@ def setup_time(bot: Bot) -> None:
     @time_rest_group.command(name="short", help="Advance 1 hour (short rest).")
     @guild_only
     @admin_only
-    async def time_rest_short(ctx: Context, member: discord.Member | None = None) -> None:
+    async def time_rest_short(
+        ctx: Context, member: discord.Member | None = None
+    ) -> None:
         minutes = parse_duration("short")
         targets = await _mutation_targets(ctx, member)
         if targets is None:
@@ -411,7 +457,9 @@ def setup_time(bot: Bot) -> None:
     @time_rest_group.command(name="long", help="Advance 8 hours (long rest).")
     @guild_only
     @admin_only
-    async def time_rest_long(ctx: Context, member: discord.Member | None = None) -> None:
+    async def time_rest_long(
+        ctx: Context, member: discord.Member | None = None
+    ) -> None:
         minutes = parse_duration("long")
         targets = await _mutation_targets(ctx, member)
         if targets is None:

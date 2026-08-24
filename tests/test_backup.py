@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 import data.db as db_module
-from data.backup import backup_database, prune_backups
+from data.backup import backup_database, copy_backup_remote, prune_backups
 from data.db import init_db
 
 
@@ -37,6 +37,16 @@ class TestDatabaseBackup(unittest.TestCase):
         self.assertEqual(len(remaining), 14)
         self.assertEqual(remaining[0], "arkann-20260101-000002.db")
         self.assertEqual(remaining[-1], "arkann-20260101-000015.db")
+
+    def test_copy_backup_remote(self) -> None:
+        dest_dir = self.root / "backups"
+        path = backup_database(source=db_module.DB_FILE, dest_dir=dest_dir, keep=5)
+        remote = self.root / "remote"
+        copied = copy_backup_remote(path, remote_dir=str(remote))
+        assert copied is not None
+        self.assertTrue(copied.exists())
+        self.assertEqual(copied.read_bytes(), path.read_bytes())
+        self.assertIsNone(copy_backup_remote(path, remote_dir=""))
 
 
 if __name__ == "__main__":

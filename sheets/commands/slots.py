@@ -44,7 +44,9 @@ def register_slot_commands(sheet_group: Group) -> None:
         invoke_without_command=True,
         help="Track spell slots (not known spells).",
     )
-    async def sheet_slots_group(ctx: Context, member: discord.Member | None = None) -> None:
+    async def sheet_slots_group(
+        ctx: Context, member: discord.Member | None = None
+    ) -> None:
         result = await get_sheet_for_owner(ctx, member)
         if result is None:
             return
@@ -67,7 +69,9 @@ def register_slot_commands(sheet_group: Group) -> None:
         name="show",
         help=f"Display spell slots. Usage: `{PREFIX}sheet slots show [@player]`",
     )
-    async def sheet_slots_show(ctx: Context, member: discord.Member | None = None) -> None:
+    async def sheet_slots_show(
+        ctx: Context, member: discord.Member | None = None
+    ) -> None:
         result = await get_sheet_for_owner(ctx, member)
         if result is None:
             return
@@ -201,7 +205,9 @@ def register_slot_commands(sheet_group: Group) -> None:
             f"Usage: `{PREFIX}sheet slots auto [@player]`"
         ),
     )
-    async def sheet_slots_auto(ctx: Context, member: discord.Member | None = None) -> None:
+    async def sheet_slots_auto(
+        ctx: Context, member: discord.Member | None = None
+    ) -> None:
         result = await get_sheet_for_owner(ctx, member)
         if result is None:
             return
@@ -240,7 +246,9 @@ def register_slot_commands(sheet_group: Group) -> None:
         name="clear",
         help=f"Clear all spell slot tracking. Usage: `{PREFIX}sheet slots clear [@player]`",
     )
-    async def sheet_slots_clear(ctx: Context, member: discord.Member | None = None) -> None:
+    async def sheet_slots_clear(
+        ctx: Context, member: discord.Member | None = None
+    ) -> None:
         result = await get_sheet_for_owner(ctx, member)
         if result is None:
             return

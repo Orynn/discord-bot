@@ -22,7 +22,9 @@ class PlayerSetupError(Exception):
     pass
 
 
-def ensure_player_sheet(*, user_id: int, guild_id: int, name: str) -> tuple[CharacterSheet, bool]:
+def ensure_player_sheet(
+    *, user_id: int, guild_id: int, name: str
+) -> tuple[CharacterSheet, bool]:
     """Create or update the player's sheet and speaking name. Returns (sheet, created)."""
     cleaned = name.strip()
     if not cleaned:
@@ -42,7 +44,9 @@ def ensure_player_sheet(*, user_id: int, guild_id: int, name: str) -> tuple[Char
     return sheet, True
 
 
-def build_welcome_embed(*, character_name: str, member: discord.Member) -> discord.Embed:
+def build_welcome_embed(
+    *, character_name: str, member: discord.Member
+) -> discord.Embed:
     embed = discord.Embed(
         title=f"🎉 Welcome, {character_name}!",
         description=f"Your private section is ready, {member.mention}.",
@@ -114,13 +118,17 @@ async def create_player_section(
     display_name: str,
 ) -> dict[str, Any]:
     if not guild.me or not guild.me.guild_permissions.manage_channels:
-        raise PlayerSetupError("I need the **Manage Channels** permission to create player sections.")
+        raise PlayerSetupError(
+            "I need the **Manage Channels** permission to create player sections."
+        )
 
     character_name = display_name.strip()
     if not character_name:
         raise PlayerSetupError("Character name cannot be empty.")
 
-    _, sheet_created = ensure_player_sheet(user_id=member.id, guild_id=guild.id, name=character_name)
+    _, sheet_created = ensure_player_sheet(
+        user_id=member.id, guild_id=guild.id, name=character_name
+    )
 
     category_name = format_player_category_name(
         character_name,
@@ -128,7 +136,9 @@ async def create_player_section(
         emoji=PLAYER_CATEGORY_EMOJI,
     )
     if len(category_name) > 100:
-        raise PlayerSetupError("Category name is too long for Discord. Shorten the player name or config width.")
+        raise PlayerSetupError(
+            "Category name is too long for Discord. Shorten the player name or config width."
+        )
 
     overwrites = _member_overwrites(guild, member)
     category = await guild.create_category(name=category_name, overwrites=overwrites)
@@ -143,7 +153,10 @@ async def create_player_section(
         overwrites=overwrites,
     )
 
-    await send_message(ooc_channel, embed=build_welcome_embed(character_name=character_name, member=member))
+    await send_message(
+        ooc_channel,
+        embed=build_welcome_embed(character_name=character_name, member=member),
+    )
 
     record = {
         "name": character_name.upper(),
@@ -162,7 +175,9 @@ async def remove_player_section(
     user_id: int,
 ) -> dict[str, Any]:
     if not guild.me or not guild.me.guild_permissions.manage_channels:
-        raise PlayerSetupError("I need the **Manage Channels** permission to remove player sections.")
+        raise PlayerSetupError(
+            "I need the **Manage Channels** permission to remove player sections."
+        )
 
     record = delete_player_section(guild_id=guild.id, user_id=user_id)
     if record is None:

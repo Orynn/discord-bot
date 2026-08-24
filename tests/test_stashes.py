@@ -46,7 +46,9 @@ class TestParseLetArgs(unittest.TestCase):
 
 class TestInferPlace(unittest.TestCase):
     def test_thread_name(self) -> None:
-        channel = SimpleNamespace(type=discord.ChannelType.public_thread, name="Padhiver")
+        channel = SimpleNamespace(
+            type=discord.ChannelType.public_thread, name="Padhiver"
+        )
         self.assertEqual(infer_place_from_channel(channel), "Padhiver")
 
     def test_text_channel_is_not_a_place(self) -> None:
@@ -58,18 +60,36 @@ class TestDetachAndRestore(unittest.TestCase):
     def test_leaves_bag_with_contents(self) -> None:
         equipment = Equipment()
         equipment.add_item(slug="backpack", name="Backpack", kind="item", weight_lb=5)
-        equipment.add_item(slug="rope", name="Rope", kind="item", quantity=1, stored_in="backpack", auto_stow=False)
-        equipment.add_item(slug="torch", name="Torch", kind="item", quantity=3, stored_in="backpack", auto_stow=False)
+        equipment.add_item(
+            slug="rope",
+            name="Rope",
+            kind="item",
+            quantity=1,
+            stored_in="backpack",
+            auto_stow=False,
+        )
+        equipment.add_item(
+            slug="torch",
+            name="Torch",
+            kind="item",
+            quantity=3,
+            stored_in="backpack",
+            auto_stow=False,
+        )
 
         detached = equipment.detach_for_stash("backpack")
-        self.assertEqual([item.name for item in detached], ["Backpack", "Rope", "Torch"])
+        self.assertEqual(
+            [item.name for item in detached], ["Backpack", "Rope", "Torch"]
+        )
         self.assertEqual(equipment.items, [])
         self.assertIsNone(detached[0].stored_in)
         self.assertEqual(detached[2].stored_in, "backpack")
 
     def test_leaves_partial_stack(self) -> None:
         equipment = Equipment()
-        equipment.add_item(slug="torch", name="Torch", kind="item", quantity=5, auto_stow=False)
+        equipment.add_item(
+            slug="torch", name="Torch", kind="item", quantity=5, auto_stow=False
+        )
         detached = equipment.detach_for_stash("torch", quantity=2)
         self.assertEqual(detached[0].quantity, 2)
         self.assertEqual(equipment.find_item("torch").quantity, 3)
@@ -77,11 +97,15 @@ class TestDetachAndRestore(unittest.TestCase):
     def test_restore_keeps_bag_contents(self) -> None:
         source = Equipment()
         source.add_item(slug="backpack", name="Backpack", kind="item", weight_lb=5)
-        source.add_item(slug="rope", name="Rope", kind="item", stored_in="backpack", auto_stow=False)
+        source.add_item(
+            slug="rope", name="Rope", kind="item", stored_in="backpack", auto_stow=False
+        )
         detached = source.detach_for_stash("backpack")
 
         dest = Equipment()
-        dest.add_item(slug="torch", name="Torch", kind="item", stored_in="loose", auto_stow=False)
+        dest.add_item(
+            slug="torch", name="Torch", kind="item", stored_in="loose", auto_stow=False
+        )
         dest.restore_stash_items(detached)
 
         bag = dest.find_item("backpack")
@@ -123,7 +147,9 @@ class TestStashStorage(unittest.TestCase):
     def test_take_bag_and_empty_place(self) -> None:
         stash = get_stash(guild_id=1, place="Camp")
         bag = InventoryItem(slug="backpack", name="Backpack", kind="item")
-        rope = InventoryItem(slug="rope", name="Rope", kind="item", stored_in="backpack")
+        rope = InventoryItem(
+            slug="rope", name="Rope", kind="item", stored_in="backpack"
+        )
         stash.add_entries([bag, rope], left_by="Ilidor")
         save_stash(stash)
 
@@ -134,7 +160,9 @@ class TestStashStorage(unittest.TestCase):
 
     def test_take_partial_quantity(self) -> None:
         stash = get_stash(guild_id=1, place="Camp")
-        stash.add_entries([InventoryItem(slug="torch", name="Torch", quantity=5)], left_by="Ilidor")
+        stash.add_entries(
+            [InventoryItem(slug="torch", name="Torch", quantity=5)], left_by="Ilidor"
+        )
         taken = stash.take_items("torch", quantity=2)
         self.assertEqual(taken[0].quantity, 2)
         self.assertEqual(stash.entries[0].item.quantity, 3)

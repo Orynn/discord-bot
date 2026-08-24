@@ -136,16 +136,22 @@ class TestHandSelectOptions(unittest.TestCase):
                 target_enemies_only=True,
                 card_type="spell",
             )
-        page0, page, count = build_play_select_options([WEAPON_CARD_ID], catalog, page=0)
+        page0, page, count = build_play_select_options(
+            [WEAPON_CARD_ID], catalog, page=0
+        )
         self.assertEqual(page, 0)
         self.assertGreater(count, 1)
         self.assertEqual(len(page0), 25)
         self.assertEqual(page0[0][0], WEAPON_CARD_ID)
-        page1, page, count2 = build_play_select_options([WEAPON_CARD_ID], catalog, page=1)
+        page1, page, count2 = build_play_select_options(
+            [WEAPON_CARD_ID], catalog, page=1
+        )
         self.assertEqual(page, 1)
         self.assertEqual(count, count2)
         self.assertEqual(page1[0][0], WEAPON_CARD_ID)
-        self.assertNotEqual({item[0] for item in page0[1:]}, {item[0] for item in page1[1:]})
+        self.assertNotEqual(
+            {item[0] for item in page0[1:]}, {item[0] for item in page1[1:]}
+        )
 
         from combat.storage import CombatState, CombatantState
         from combat.view import CombatBoardView
@@ -212,5 +218,7 @@ class TestHandSelectOptions(unittest.TestCase):
     def test_persistent_view_uses_stable_custom_ids(self) -> None:
         view = PersistentCombatBoardView()
         custom_ids = [item.custom_id for item in view.children]
-        self.assertEqual(custom_ids, [COMBAT_SELECT_ID, COMBAT_END_TURN_ID, COMBAT_HAND_ID])
+        self.assertEqual(
+            custom_ids, [COMBAT_SELECT_ID, COMBAT_END_TURN_ID, COMBAT_HAND_ID]
+        )
         self.assertNotIn("0", COMBAT_SELECT_ID)

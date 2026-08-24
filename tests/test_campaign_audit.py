@@ -2,7 +2,12 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from campaign.audit import AuditItem, audit_campaign_posts, classify_placement, format_audit_report
+from campaign.audit import (
+    AuditItem,
+    audit_campaign_posts,
+    classify_placement,
+    format_audit_report,
+)
 from campaign.forums import iter_forum_threads
 from campaign.wiki import WikiNotFoundError, WikiPage
 
@@ -140,7 +145,9 @@ class TestAuditCampaignPosts(unittest.IsolatedAsyncioTestCase):
             return pages[title]
 
         with (
-            patch("campaign.audit.ensure_default_campaign_forums", new_callable=AsyncMock),
+            patch(
+                "campaign.audit.ensure_default_campaign_forums", new_callable=AsyncMock
+            ),
             patch("campaign.audit.list_campaign_forums", return_value=[lieux, divers]),
             patch("campaign.audit.fetch_wiki_page", side_effect=fake_fetch),
             patch("campaign.audit.asyncio.sleep", new_callable=AsyncMock),
@@ -165,13 +172,17 @@ class TestAuditCampaignPosts(unittest.IsolatedAsyncioTestCase):
         )
 
         with (
-            patch("campaign.audit.ensure_default_campaign_forums", new_callable=AsyncMock),
+            patch(
+                "campaign.audit.ensure_default_campaign_forums", new_callable=AsyncMock
+            ),
             patch("campaign.audit.list_campaign_forums", return_value=[lieux, pnj]),
             patch(
                 "campaign.audit.fetch_wiki_page",
                 new=AsyncMock(return_value=_page("Elminster", "pnj")),
             ),
-            patch("campaign.audit.ensure_campaign_forum", new=AsyncMock(return_value=pnj)),
+            patch(
+                "campaign.audit.ensure_campaign_forum", new=AsyncMock(return_value=pnj)
+            ),
             patch(
                 "campaign.audit.move_campaign_post",
                 new=AsyncMock(return_value=SimpleNamespace(thread=created)),
@@ -193,13 +204,17 @@ class TestAuditCampaignPosts(unittest.IsolatedAsyncioTestCase):
         pnj = _forum("👤 pnj", [existing])
 
         with (
-            patch("campaign.audit.ensure_default_campaign_forums", new_callable=AsyncMock),
+            patch(
+                "campaign.audit.ensure_default_campaign_forums", new_callable=AsyncMock
+            ),
             patch("campaign.audit.list_campaign_forums", return_value=[lieux, pnj]),
             patch(
                 "campaign.audit.fetch_wiki_page",
                 new=AsyncMock(return_value=_page("Elminster", "pnj")),
             ),
-            patch("campaign.audit.ensure_campaign_forum", new=AsyncMock(return_value=pnj)),
+            patch(
+                "campaign.audit.ensure_campaign_forum", new=AsyncMock(return_value=pnj)
+            ),
             patch(
                 "campaign.audit.move_campaign_post",
                 new=AsyncMock(return_value=SimpleNamespace(thread=existing)),

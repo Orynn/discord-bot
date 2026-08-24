@@ -12,14 +12,22 @@ from combat.cards import (
     is_healing_spell,
     parse_damage_roll,
     spell_card_id,
+    spell_damage_roll,
+    spell_save_ability,
+    spell_save_half,
     spellcasting_ability,
     weapon_attack_ability,
 )
 from combat.monsters import MonsterProfile
+from sheets.conditions import normalize_condition
 from sheets.data import CharacterSheet, hit_die_sides
 from sheets.equipment import ITEM_KIND_WEAPON
 from srd import fivetools
-from srd.fivetools_parser import format_damage_type_label, spell_damage_type_label, spell_level_int
+from srd.fivetools_parser import (
+    format_damage_type_label,
+    spell_damage_type_label,
+    spell_level_int,
+)
 from sheets.spell_view import is_homebrew_slug
 
 NPC_WEAPON_COPIES = 4
@@ -63,10 +71,14 @@ def _weapon_card(
     )
 
 
-def _fallback_player_weapon(sheet: CharacterSheet, *, damage_type_label: str | None = None) -> CardSnapshot:
+def _fallback_player_weapon(
+    sheet: CharacterSheet, *, damage_type_label: str | None = None
+) -> CardSnapshot:
     ability = weapon_attack_ability(sheet.char_class, sheet.abilities)
     die_sides = min(hit_die_sides(sheet.char_class), 12)
-    description = f"Unarmed/improvised: 1d{die_sides} + {ability.upper()} + proficiency."
+    description = (
+        f"Unarmed/improvised: 1d{die_sides} + {ability.upper()} + proficiency."
+    )
     if damage_type_label:
         description += f" Deals {damage_type_label} damage."
     return _weapon_card(
@@ -131,11 +143,19 @@ def _spell_card(sheet: CharacterSheet, spell: dict[str, Any]) -> CardSnapshot | 
     school = str(spell.get("school") or "—")
     emoji = SCHOOL_EMOJI.get(school.lower(), "✨")
     desc = str(spell.get("desc") or "")
-    damage_roll = spell.get("damage_roll")
+    damage_roll = spell_damage_roll(spell)
     dice_count, dice_sides, flat_modifier = parse_damage_roll(damage_roll)
     damage_types = list(spell.get("damage_types") or spell.get("damageInflict") or [])
     healing = is_healing_spell(damage_types=damage_types, desc=desc)
     buff = BUFF_BY_SLUG.get(str(slug).lower())
+    save_ability = spell_save_ability(spell)
+    save_half = bool(save_ability and dice_count > 0 and spell_save_half(spell))
+    inflicted = spell.get("conditionInflict") or spell.get("inflict_condition")
+    inflict_condition = None
+    if isinstance(inflicted, list) and inflicted:
+        inflict_condition = normalize_condition(str(inflicted[0]))
+    elif isinstance(inflicted, str):
+        inflict_condition = normalize_condition(inflicted)
     target_allies = False
     target_enemies = False
     ability: str | None = None
@@ -145,12 +165,33 @@ def _spell_card(sheet: CharacterSheet, spell: dict[str, Any]) -> CardSnapshot | 
         target_allies = True
         ability = spellcasting_ability(sheet.char_class) or "wis"
         effect = f"Restore {damage_roll or 'HP'} + {ability.upper()} (SRD)."
+    elif save_ability:
+        needs_target = True
+        target_enemies = True
+        ability = None
+        type_label = (
+            format_damage_type_label(str(damage_types[0]).replace("_", " ").title())
+            if damage_types
+            else None
+        )
+        type_text = f"{type_label} " if type_label else ""
+        if dice_count > 0:
+            outcome = "half on a success" if save_half else "nothing on a success"
+            effect = (
+                f"{save_ability.upper()} save · {damage_roll} {type_text}damage, {outcome}."
+            ).replace("  ", " ")
+        elif inflict_condition:
+            effect = f"{save_ability.upper()} save or {inflict_condition}."
+        else:
+            effect = f"{save_ability.upper()} save (SRD)."
     elif dice_count > 0:
         needs_target = True
         target_enemies = True
         ability = spellcasting_ability(sheet.char_class) if level > 0 else None
         type_label = (
-            format_damage_type_label(str(damage_types[0]).replace("_", " ").title()) if damage_types else None
+            format_damage_type_label(str(damage_types[0]).replace("_", " ").title())
+            if damage_types
+            else None
         )
         type_text = f"{type_label} " if type_label else ""
         mod_note = f" + {ability.upper()}" if ability and level > 0 else ""
@@ -182,6 +223,9 @@ def _spell_card(sheet: CharacterSheet, spell: dict[str, Any]) -> CardSnapshot | 
         ability=ability,
         damage_type_label=spell_damage_type_label(spell),
         buff=buff,
+        save_ability=save_ability,
+        save_half=save_half,
+        inflict_condition=inflict_condition,
     )
 
 
@@ -231,7 +275,11 @@ def _ability_for_weapon(sheet: CharacterSheet, weapon: dict[str, Any]) -> str:
     props = str(weapon.get("properties") or "").lower()
     range_text = str(weapon.get("range") or "Melee")
     if "finesse" in props:
-        return "dex" if sheet.abilities.get("dex", 10) >= sheet.abilities.get("str", 10) else "str"
+        return (
+            "dex"
+            if sheet.abilities.get("dex", 10) >= sheet.abilities.get("str", 10)
+            else "str"
+        )
     if range_text.lower() != "melee":
         return "dex"
     return weapon_attack_ability(sheet.char_class, sheet.abilities)
@@ -287,7 +335,9 @@ async def build_combatant_deck(
     catalog[dodge.card_id] = dodge
     deck.extend([weapon.card_id] * NPC_WEAPON_COPIES)
     dodge_copies = NPC_DODGE_COPIES
-    if monster is not None and any("nimble escape" in trait.lower() for trait in monster.traits):
+    if monster is not None and any(
+        "nimble escape" in trait.lower() for trait in monster.traits
+    ):
         dodge_copies += 1
     deck.extend([dodge.card_id] * dodge_copies)
 

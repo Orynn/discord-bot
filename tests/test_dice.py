@@ -1,7 +1,13 @@
 import unittest
 
 from sheets.currency import Currency, parse_currency
-from sheets.dice import RollResult, execute_roll, format_roll_embed, parse_dice, parse_roll_args
+from sheets.dice import (
+    RollResult,
+    execute_roll,
+    format_roll_embed,
+    parse_dice,
+    parse_roll_args,
+)
 from sheets.data import CharacterSheet
 
 
@@ -51,7 +57,14 @@ class TestDice(unittest.TestCase):
         sheet = CharacterSheet(
             name="Test",
             level=5,
-            abilities={"str": 16, "dex": 10, "con": 10, "int": 10, "wis": 10, "cha": 10},
+            abilities={
+                "str": 16,
+                "dex": 10,
+                "con": 10,
+                "int": 10,
+                "wis": 10,
+                "cha": 10,
+            },
             skill_proficiencies=["athletics"],
         )
         request = parse_roll_args("1d20 athletics")
@@ -68,7 +81,14 @@ class TestDice(unittest.TestCase):
         sheet = CharacterSheet(
             name="Test",
             level=5,
-            abilities={"str": 10, "dex": 16, "con": 10, "int": 10, "wis": 10, "cha": 10},
+            abilities={
+                "str": 10,
+                "dex": 16,
+                "con": 10,
+                "int": 10,
+                "wis": 10,
+                "cha": 10,
+            },
             skill_proficiencies=["stealth"],
         )
         request = parse_roll_args("discrétion")
@@ -156,7 +176,14 @@ class TestDice(unittest.TestCase):
             name="Test",
             inspired=True,
             conditions=["poisoned"],
-            abilities={"str": 16, "dex": 10, "con": 10, "int": 10, "wis": 10, "cha": 10},
+            abilities={
+                "str": 16,
+                "dex": 10,
+                "con": 10,
+                "int": 10,
+                "wis": 10,
+                "cha": 10,
+            },
             skill_proficiencies=["athletics"],
         )
         request = parse_roll_args("athletics")

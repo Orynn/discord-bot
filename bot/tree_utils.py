@@ -10,7 +10,9 @@ def clamp_app_command_descriptions(
 ) -> None:
     """Discord rejects command descriptions longer than 100 characters."""
 
-    def clamp(command: app_commands.Command | app_commands.Group | app_commands.ContextMenu) -> None:
+    def clamp(
+        command: app_commands.Command | app_commands.Group | app_commands.ContextMenu,
+    ) -> None:
         description = getattr(command, "description", None)
         if isinstance(description, str) and len(description) > limit:
             command.description = f"{description[: limit - 1]}…"

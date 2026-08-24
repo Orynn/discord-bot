@@ -61,8 +61,7 @@ def _collect_sources(body: dict[str, Any]) -> list[dict[str, str]]:
             if source:
                 codes.add(str(source))
     return [
-        {"json": code, "abbreviation": code, "full": code}
-        for code in sorted(codes)
+        {"json": code, "abbreviation": code, "full": code} for code in sorted(codes)
     ]
 
 

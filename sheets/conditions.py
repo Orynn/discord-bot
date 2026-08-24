@@ -25,9 +25,19 @@ _CONDITION_ALIASES: dict[str, str] = {
 }
 
 CHECK_DISADVANTAGE = frozenset({"poisoned", "frightened", "exhaustion"})
-ATTACKER_DISADVANTAGE = frozenset({"poisoned", "frightened", "blinded", "restrained", "prone"})
+ATTACKER_DISADVANTAGE = frozenset(
+    {"poisoned", "frightened", "blinded", "restrained", "prone"}
+)
 DEFENDER_ADVANTAGE = frozenset(
-    {"blinded", "restrained", "prone", "paralyzed", "unconscious", "stunned", "incapacitated"}
+    {
+        "blinded",
+        "restrained",
+        "prone",
+        "paralyzed",
+        "unconscious",
+        "stunned",
+        "incapacitated",
+    }
 )
 
 _CANONICAL = frozenset(_CONDITION_ALIASES.values())

@@ -66,7 +66,9 @@ class TestCampaignForums(unittest.TestCase):
 
     def test_starter_content_placeholder(self) -> None:
         self.assertIn("Fiche à compléter", starter_content(title="Phandalin", body=""))
-        self.assertEqual(starter_content(title="Phandalin", body="Petite ville."), "Petite ville.")
+        self.assertEqual(
+            starter_content(title="Phandalin", body="Petite ville."), "Petite ville."
+        )
 
     def test_find_existing_thread_matches_name(self) -> None:
         thread = SimpleNamespace(name="Phandalin")
@@ -83,7 +85,9 @@ class TestLocateCampaignThread(unittest.IsolatedAsyncioTestCase):
         async def archived_threads(*, limit: int = 100):
             yield archived
 
-        forum = SimpleNamespace(name="📍 lieux", threads=[], archived_threads=archived_threads)
+        forum = SimpleNamespace(
+            name="📍 lieux", threads=[], archived_threads=archived_threads
+        )
         found = await locate_campaign_thread([forum], "padhiver")  # type: ignore[arg-type]
         self.assertIs(found, archived)
 
@@ -230,7 +234,9 @@ class TestEnsureCampaignCategory(unittest.IsolatedAsyncioTestCase):
 
         self.assertIs(category, created)
         self.assertEqual(guild.create_category.await_count, 2)
-        second_overwrites = guild.create_category.await_args_list[1].kwargs["overwrites"]
+        second_overwrites = guild.create_category.await_args_list[1].kwargs[
+            "overwrites"
+        ]
         self.assertNotIn(admin, second_overwrites)
         persist.assert_called_once_with(99, guild_id=11)
 
@@ -293,7 +299,9 @@ class TestEnsureCampaignCategory(unittest.IsolatedAsyncioTestCase):
         guild = MagicMock()
         guild.id = 22
         guild.name = "Le Moulin"
-        guild.me = SimpleNamespace(guild_permissions=SimpleNamespace(manage_channels=False))
+        guild.me = SimpleNamespace(
+            guild_permissions=SimpleNamespace(manage_channels=False)
+        )
         guild.create_category = AsyncMock()
 
         with (

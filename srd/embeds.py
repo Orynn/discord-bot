@@ -162,10 +162,13 @@ def clamp_embed_limits(embed: discord.Embed) -> discord.Embed:
     if embed.description and len(embed.description) > DISCORD_DESCRIPTION_LIMIT:
         embed.description = truncate(embed.description, DISCORD_DESCRIPTION_LIMIT)
     if embed.footer.text and len(embed.footer.text) > 2048:
-        embed.set_footer(text=truncate(embed.footer.text, 2048), icon_url=embed.footer.icon_url)
+        embed.set_footer(
+            text=truncate(embed.footer.text, 2048), icon_url=embed.footer.icon_url
+        )
 
     if len(embed.fields) <= MAX_EMBED_FIELDS and all(
-        len(field.name) <= DISCORD_FIELD_NAME_LIMIT and len(field.value) <= DISCORD_FIELD_LIMIT
+        len(field.name) <= DISCORD_FIELD_NAME_LIMIT
+        and len(field.value) <= DISCORD_FIELD_LIMIT
         for field in embed.fields
     ):
         return embed
@@ -207,13 +210,19 @@ def spell_embed(spell: dict) -> discord.Embed:
     )
     embed.add_field(name="📊 Level", value=spell.get("level", "—"), inline=True)
     embed.add_field(name="🏫 School", value=spell.get("school", "—"), inline=True)
-    embed.add_field(name="⏱️ Casting Time", value=spell.get("casting_time", "—"), inline=True)
+    embed.add_field(
+        name="⏱️ Casting Time", value=spell.get("casting_time", "—"), inline=True
+    )
     embed.add_field(name="📏 Range", value=spell.get("range", "—"), inline=True)
     embed.add_field(name="⌛ Duration", value=spell.get("duration", "—"), inline=True)
-    embed.add_field(name="🧪 Components", value=spell.get("components", "—"), inline=True)
+    embed.add_field(
+        name="🧪 Components", value=spell.get("components", "—"), inline=True
+    )
 
     if spell.get("material"):
-        embed.add_field(name="🔮 Material", value=truncate(spell["material"], 1024), inline=False)
+        embed.add_field(
+            name="🔮 Material", value=truncate(spell["material"], 1024), inline=False
+        )
     if spell.get("higher_level"):
         embed.add_field(
             name="⬆️ At Higher Levels",
@@ -240,7 +249,11 @@ def species_embed(species: dict) -> discord.Embed:
         url=species.get("url"),
     )
     if species.get("asi_desc"):
-        embed.add_field(name="📊 Ability Scores", value=clean_markdown(species["asi_desc"]), inline=False)
+        embed.add_field(
+            name="📊 Ability Scores",
+            value=clean_markdown(species["asi_desc"]),
+            inline=False,
+        )
     embed.add_field(name="📐 Size", value=species.get("size_raw", "—"), inline=True)
     if isinstance(walk_speed, int):
         speed_value = f"{walk_speed} ft."
@@ -248,9 +261,17 @@ def species_embed(species: dict) -> discord.Embed:
         speed_value = str(walk_speed)
     embed.add_field(name="👟 Speed", value=speed_value, inline=True)
     if species.get("vision"):
-        embed.add_field(name="👁️ Vision", value=truncate(clean_markdown(species["vision"]), 1024), inline=False)
+        embed.add_field(
+            name="👁️ Vision",
+            value=truncate(clean_markdown(species["vision"]), 1024),
+            inline=False,
+        )
     if species.get("traits"):
-        embed.add_field(name="✦ Traits", value=truncate(clean_markdown(species["traits"]), 1024), inline=False)
+        embed.add_field(
+            name="✦ Traits",
+            value=truncate(clean_markdown(species["traits"]), 1024),
+            inline=False,
+        )
 
     subraces = species.get("subraces", [])
     if subraces:
@@ -271,21 +292,47 @@ def class_embed(char_class: dict, subclass: dict | None = None) -> discord.Embed
         color=kind_embed_color("class"),
         url=(subclass or char_class).get("url") or char_class.get("url"),
     )
-    embed.add_field(name="🎲 Hit Dice", value=char_class.get("hit_dice", "—"), inline=True)
-    embed.add_field(name="❤️ HP at 1st", value=char_class.get("hp_at_1st_level", "—"), inline=True)
+    embed.add_field(
+        name="🎲 Hit Dice", value=char_class.get("hit_dice", "—"), inline=True
+    )
+    embed.add_field(
+        name="❤️ HP at 1st", value=char_class.get("hp_at_1st_level", "—"), inline=True
+    )
     if char_class.get("spellcasting_ability"):
-        embed.add_field(name="🔮 Spellcasting", value=char_class["spellcasting_ability"], inline=True)
-    embed.add_field(name="🎲 Saving Throws", value=char_class.get("prof_saving_throws", "—"), inline=False)
-    embed.add_field(name="🎯 Skills", value=char_class.get("prof_skills", "—"), inline=False)
-    embed.add_field(name="🛡️ Armor", value=char_class.get("prof_armor", "—"), inline=True)
-    embed.add_field(name="🗡️ Weapons", value=truncate(char_class.get("prof_weapons", "—"), 1024), inline=False)
+        embed.add_field(
+            name="🔮 Spellcasting",
+            value=char_class["spellcasting_ability"],
+            inline=True,
+        )
+    embed.add_field(
+        name="🎲 Saving Throws",
+        value=char_class.get("prof_saving_throws", "—"),
+        inline=False,
+    )
+    embed.add_field(
+        name="🎯 Skills", value=char_class.get("prof_skills", "—"), inline=False
+    )
+    embed.add_field(
+        name="🛡️ Armor", value=char_class.get("prof_armor", "—"), inline=True
+    )
+    embed.add_field(
+        name="🗡️ Weapons",
+        value=truncate(char_class.get("prof_weapons", "—"), 1024),
+        inline=False,
+    )
 
     if not subclass:
         archetypes = char_class.get("archetypes") or []
         if archetypes:
-            names = ", ".join(str(entry.get("name")) for entry in archetypes[:12] if entry.get("name"))
+            names = ", ".join(
+                str(entry.get("name")) for entry in archetypes[:12] if entry.get("name")
+            )
             extra = f" (+{len(archetypes) - 12})" if len(archetypes) > 12 else ""
-            embed.add_field(name="📚 Subclasses", value=truncate(f"{names}{extra}", 1024), inline=False)
+            embed.add_field(
+                name="📚 Subclasses",
+                value=truncate(f"{names}{extra}", 1024),
+                inline=False,
+            )
 
     description = subclass.get("desc") if subclass else char_class.get("desc", "")
     if description:
@@ -303,7 +350,11 @@ def background_embed(background: dict) -> discord.Embed:
         url=background.get("url"),
     )
     if background.get("skill_proficiencies"):
-        embed.add_field(name="🎯 Skill Proficiencies", value=background["skill_proficiencies"], inline=False)
+        embed.add_field(
+            name="🎯 Skill Proficiencies",
+            value=background["skill_proficiencies"],
+            inline=False,
+        )
     if background.get("feature"):
         feature_text = background.get("feature_desc") or background["feature"]
         embed.add_field(
@@ -312,7 +363,11 @@ def background_embed(background: dict) -> discord.Embed:
             inline=False,
         )
     if background.get("equipment"):
-        embed.add_field(name="🎒 Equipment", value=truncate(background["equipment"], 1024), inline=False)
+        embed.add_field(
+            name="🎒 Equipment",
+            value=truncate(background["equipment"], 1024),
+            inline=False,
+        )
 
     embed.set_footer(text=background.get("document__title", "5etools"))
     return embed
@@ -326,7 +381,11 @@ def feat_embed(feat: dict) -> discord.Embed:
         url=feat.get("url"),
     )
     if feat.get("prerequisite"):
-        embed.add_field(name="📋 Prerequisite", value=truncate(str(feat["prerequisite"]), 1024), inline=False)
+        embed.add_field(
+            name="📋 Prerequisite",
+            value=truncate(str(feat["prerequisite"]), 1024),
+            inline=False,
+        )
     embed.set_footer(text=feat.get("document__title", "5etools"))
     return embed
 
@@ -362,10 +421,14 @@ def weapon_embed(weapon: dict) -> discord.Embed:
     )
     embed.add_field(name="🏷️ Category", value=weapon.get("category", "—"), inline=True)
     embed.add_field(name="💥 Damage", value=weapon.get("damage", "—"), inline=True)
-    embed.add_field(name="💥 Damage Type", value=weapon.get("damage_type", "—"), inline=True)
+    embed.add_field(
+        name="💥 Damage Type", value=weapon.get("damage_type", "—"), inline=True
+    )
     embed.add_field(name="📏 Range", value=weapon.get("range", "—"), inline=True)
     embed.add_field(name="⚖️ Weight", value=weapon.get("weight", "—"), inline=True)
-    embed.add_field(name="✦ Properties", value=weapon.get("properties", "—"), inline=False)
+    embed.add_field(
+        name="✦ Properties", value=weapon.get("properties", "—"), inline=False
+    )
     embed.set_footer(text=weapon.get("document__title", "5etools"))
     return embed
 

@@ -36,7 +36,9 @@ def property_codes(raw: dict[str, Any] | None) -> set[str]:
     return codes
 
 
-def container_capacity_from_raw(raw: dict[str, Any] | None) -> tuple[float, bool] | None:
+def container_capacity_from_raw(
+    raw: dict[str, Any] | None,
+) -> tuple[float, bool] | None:
     if not raw:
         return None
     capacity = raw.get("containerCapacity")

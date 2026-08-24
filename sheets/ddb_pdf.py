@@ -3,7 +3,12 @@ from dataclasses import dataclass, field
 
 from sheets.currency import Currency
 from sheets.data import ABILITIES, CharacterSheet, ability_modifier, proficiency_bonus
-from sheets.equipment import ITEM_KIND_ARMOR, ITEM_KIND_CUSTOM, custom_slug, pack_bundle_contents
+from sheets.equipment import (
+    ITEM_KIND_ARMOR,
+    ITEM_KIND_CUSTOM,
+    custom_slug,
+    pack_bundle_contents,
+)
 
 DDB_ABILITY_FIELDS: dict[str, str] = {
     "STR": "str",
@@ -109,7 +114,9 @@ def extract_ddb_fields(pdf_bytes: bytes) -> dict[str, str]:
     raw = pdf_bytes.decode("latin-1", errors="ignore")
     fields: dict[str, str] = {}
 
-    for name_match, block in re.findall(r"/T\(([^)]+)\)(.*?)(?=/T\(|$)", raw, re.DOTALL):
+    for name_match, block in re.findall(
+        r"/T\(([^)]+)\)(.*?)(?=/T\(|$)", raw, re.DOTALL
+    ):
         value = _field_value_from_block(block)
         if not value or value in {"Off", "/Off"}:
             continue
@@ -151,7 +158,9 @@ def _parse_speed(raw: str) -> int:
     return int(match.group(1)) if match else 30
 
 
-def _collect_save_proficiencies(fields: dict[str, str], sheet: CharacterSheet) -> list[str]:
+def _collect_save_proficiencies(
+    fields: dict[str, str], sheet: CharacterSheet
+) -> list[str]:
     prof_bonus = proficiency_bonus(sheet.level)
     proficiencies: list[str] = []
 
@@ -264,7 +273,12 @@ def parse_equipment_entry(text: str) -> tuple[str, int] | None:
     cleaned = re.sub(r"\s+", " ", text).strip().strip(".")
     if not cleaned or _CURRENCY_LINE.match(cleaned):
         return None
-    if cleaned.casefold() in {"equipment", "treasure", "additional equipment", "inventory"}:
+    if cleaned.casefold() in {
+        "equipment",
+        "treasure",
+        "additional equipment",
+        "inventory",
+    }:
         return None
 
     prefix = _QUANTITY_PREFIX.match(cleaned)
@@ -332,7 +346,9 @@ def collect_equipped_names(fields: dict[str, str]) -> list[str]:
     return names
 
 
-async def add_catalog_equipment(sheet: CharacterSheet, entry: dict, quantity: int = 1) -> tuple[int, int, list[str]]:
+async def add_catalog_equipment(
+    sheet: CharacterSheet, entry: dict, quantity: int = 1
+) -> tuple[int, int, list[str]]:
     from srd import fivetools
 
     pieces = pack_bundle_contents(entry)
@@ -346,7 +362,9 @@ async def add_catalog_equipment(sheet: CharacterSheet, entry: dict, quantity: in
         )
         fivetools.register_glossary_item(
             item=entry,
-            endpoint={"weapon": "weapons", "armor": "armor", "item": "items"}[entry["kind"]],
+            endpoint={"weapon": "weapons", "armor": "armor", "item": "items"}[
+                entry["kind"]
+            ],
         )
         return 1, 0, [entry["name"]]
 
@@ -375,7 +393,9 @@ async def add_catalog_equipment(sheet: CharacterSheet, entry: dict, quantity: in
         )
         fivetools.register_glossary_item(
             item=piece,
-            endpoint={"weapon": "weapons", "armor": "armor", "item": "items"}[piece["kind"]],
+            endpoint={"weapon": "weapons", "armor": "armor", "item": "items"}[
+                piece["kind"]
+            ],
         )
         matched += 1
         names.append(piece["name"])
@@ -397,7 +417,9 @@ async def fill_sheet_equipment(
             pending.append((name, 1))
             seen.add(name.casefold())
 
-    pending.sort(key=lambda item: (0 if _likely_container(item[0]) else 1, item[0].casefold()))
+    pending.sort(
+        key=lambda item: (0 if _likely_container(item[0]) else 1, item[0].casefold())
+    )
     matched = 0
     custom = 0
     for name, quantity in pending:
@@ -421,7 +443,9 @@ async def fill_sheet_equipment(
             )
             custom += 1
             continue
-        added, added_custom, _names = await add_catalog_equipment(sheet, entry, quantity)
+        added, added_custom, _names = await add_catalog_equipment(
+            sheet, entry, quantity
+        )
         matched += added
         custom += added_custom
 
@@ -507,7 +531,9 @@ def parse_ddb_pdf(pdf_bytes: bytes) -> DdbPdfImport:
     )
 
     sheet.save_proficiencies = _collect_save_proficiencies(fields, sheet)
-    sheet.skill_proficiencies, sheet.skill_expertise = _collect_skill_proficiencies(fields)
+    sheet.skill_proficiencies, sheet.skill_expertise = _collect_skill_proficiencies(
+        fields
+    )
 
     spell_names = _collect_spell_names(fields)
     equipment_entries = collect_equipment_entries(fields)

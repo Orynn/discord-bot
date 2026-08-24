@@ -25,7 +25,9 @@ from image.generate import (
 
 
 class _FakeResponse:
-    def __init__(self, *, status: int, body: bytes, content_type: str = "image/jpeg") -> None:
+    def __init__(
+        self, *, status: int, body: bytes, content_type: str = "image/jpeg"
+    ) -> None:
         self.status = status
         self._body = body
         self.headers = {"Content-Type": content_type}
@@ -79,7 +81,9 @@ class _FakeHistory:
         return _gen()
 
 
-def _message(*, mid: int, content: str, bot: bool = False, attachments: bool = False) -> MagicMock:
+def _message(
+    *, mid: int, content: str, bot: bool = False, attachments: bool = False
+) -> MagicMock:
     message = MagicMock()
     message.id = mid
     message.clean_content = content
@@ -98,14 +102,14 @@ class TestPromptBuilding(unittest.TestCase):
 
     def test_adds_thread_place(self) -> None:
         prompt = build_prompt(user_prompt="the tavern", place="Padhiver")
-        self.assertIn("Setting: Padhiver", prompt)
+        self.assertIn("Place: Padhiver", prompt)
 
     def test_uses_scene_when_prompt_omitted(self) -> None:
         prompt = build_prompt(
             scene_lines=["The gates creak open.", "A guard shouts."],
             character="FOX",
         )
-        self.assertIn("characters FOX", prompt)
+        self.assertIn("In frame: FOX", prompt)
         self.assertIn("The gates creak open.", prompt)
         self.assertIn("A guard shouts.", prompt)
 
@@ -113,7 +117,10 @@ class TestPromptBuilding(unittest.TestCase):
         prompt = build_prompt(
             user_prompt="the swinging lantern",
             place="Padhiver",
-            scene_lines=["Rain hammers the docks.", format_npc_speech("FOX", "Stay low.")],
+            scene_lines=[
+                "Rain hammers the docks.",
+                format_npc_speech("FOX", "Stay low."),
+            ],
         )
         self.assertIn("Focus: the swinging lantern", prompt)
         self.assertIn("Padhiver", prompt)
@@ -137,7 +144,9 @@ class TestPromptBuilding(unittest.TestCase):
 
 class TestSceneSummary(unittest.TestCase):
     def test_parse_pc_speech_and_action(self) -> None:
-        speaker, action, text = parse_rp_line(format_npc_speech("FOX", "Stay back.", action="draws a sword"))
+        speaker, action, text = parse_rp_line(
+            format_npc_speech("FOX", "Stay back.", action="draws a sword")
+        )
         self.assertEqual(speaker, "FOX")
         self.assertEqual(action, "draws a sword")
         self.assertEqual(text, "Stay back.")
@@ -156,7 +165,7 @@ class TestSceneSummary(unittest.TestCase):
         self.assertIn("Garde", summary)
         self.assertIn("Qui va là ?", summary)
         self.assertIn("Les docks", summary)
-        self.assertIn("characters FOX, Garde", summary)
+        self.assertIn("In frame: FOX, Garde", summary)
 
     def test_now_prefers_the_latest_beats(self) -> None:
         lines = [f"Old beat {index}." for index in range(20)]
@@ -173,10 +182,14 @@ class TestSceneLines(unittest.TestCase):
     def test_skips_prefix_commands(self) -> None:
         self.assertIsNone(usable_scene_line(";image a dragon", prefix=";"))
         self.assertIsNone(usable_scene_line("  ;desc rain  ", prefix=";"))
-        self.assertEqual(usable_scene_line("*The rain falls.*", prefix=";"), "The rain falls.")
+        self.assertEqual(
+            usable_scene_line("*The rain falls.*", prefix=";"), "The rain falls."
+        )
 
     def test_extracts_bot_rp_and_skips_other_bot_posts(self) -> None:
-        desc = extract_scene_line(content="*The gates creak open.*", prefix=";", is_bot=True)
+        desc = extract_scene_line(
+            content="*The gates creak open.*", prefix=";", is_bot=True
+        )
         self.assertEqual(desc, "The gates creak open.")
         speech = extract_scene_line(
             content=format_npc_speech("FOX", "I wait."),
@@ -186,7 +199,9 @@ class TestSceneLines(unittest.TestCase):
         self.assertIsNotNone(speech)
         self.assertIn("FOX", speech or "")
         self.assertIsNone(
-            extract_scene_line(content="**Round 3** — FOX vs goblin", prefix=";", is_bot=True)
+            extract_scene_line(
+                content="**Round 3** — FOX vs goblin", prefix=";", is_bot=True
+            )
         )
         self.assertIsNone(
             extract_scene_line(
@@ -211,7 +226,9 @@ class TestGatherSceneLines(unittest.IsolatedAsyncioTestCase):
     async def test_collects_the_whole_channel_rp(self) -> None:
         messages = [_message(mid=99, content=";image")]
         for index in range(12, 0, -1):
-            messages.append(_message(mid=index, content=f"*Narration {index}.*", bot=True))
+            messages.append(
+                _message(mid=index, content=f"*Narration {index}.*", bot=True)
+            )
         messages.append(_message(mid=0, content=";pc I wait."))
 
         ctx = MagicMock()
@@ -233,7 +250,11 @@ class TestPollinationsUrl(unittest.TestCase):
             model="flux",
             seed=42,
         )
-        self.assertTrue(url.startswith("https://gen.pollinations.ai/image/a%20dragon%20over%20Padhiver?"))
+        self.assertTrue(
+            url.startswith(
+                "https://gen.pollinations.ai/image/a%20dragon%20over%20Padhiver?"
+            )
+        )
         self.assertIn("private=true", url)
         self.assertIn("nologo=true", url)
         self.assertIn("seed=42", url)
@@ -241,7 +262,9 @@ class TestPollinationsUrl(unittest.TestCase):
 
     def test_filename_from_content_type(self) -> None:
         self.assertEqual(filename_for_content_type("image/png"), "scene.png")
-        self.assertEqual(filename_for_content_type("image/jpeg; charset=binary"), "scene.jpg")
+        self.assertEqual(
+            filename_for_content_type("image/jpeg; charset=binary"), "scene.jpg"
+        )
 
 
 class TestGenerateImage(unittest.IsolatedAsyncioTestCase):
@@ -252,7 +275,9 @@ class TestGenerateImage(unittest.IsolatedAsyncioTestCase):
 
     async def test_pollinations_returns_jpeg_bytes(self) -> None:
         jpeg = b"\xff\xd8" + b"\x00" * 64
-        session = _FakeSession(_FakeResponse(status=200, body=jpeg, content_type="image/jpeg"))
+        session = _FakeSession(
+            _FakeResponse(status=200, body=jpeg, content_type="image/jpeg")
+        )
         image = await generate_image("a torchlit hall", seed=7, session=session)
         self.assertEqual(image.data, jpeg)
         self.assertEqual(image.filename, "scene.jpg")
@@ -261,7 +286,9 @@ class TestGenerateImage(unittest.IsolatedAsyncioTestCase):
 
     async def test_pollinations_rejects_html_errors(self) -> None:
         session = _FakeSession(
-            _FakeResponse(status=200, body=b"<html>rate limit</html>", content_type="text/html")
+            _FakeResponse(
+                status=200, body=b"<html>rate limit</html>", content_type="text/html"
+            )
         )
         with patch("image.generate.asyncio.sleep", new_callable=AsyncMock):
             with self.assertRaises(ImageGenerationError):
@@ -272,7 +299,9 @@ class TestGenerateImage(unittest.IsolatedAsyncioTestCase):
         jpeg = b"\xff\xd8" + b"\x00" * 64
         session = _FakeSession(
             [
-                _FakeResponse(status=200, body=b"<html>wait</html>", content_type="text/html"),
+                _FakeResponse(
+                    status=200, body=b"<html>wait</html>", content_type="text/html"
+                ),
                 _FakeResponse(status=200, body=jpeg, content_type="image/jpeg"),
             ]
         )
@@ -285,8 +314,12 @@ class TestGenerateImage(unittest.IsolatedAsyncioTestCase):
 
     async def test_local_decodes_base64_png(self) -> None:
         png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 48
-        payload = json.dumps({"images": [base64.b64encode(png).decode("ascii")]}).encode("utf-8")
-        session = _FakeSession(_FakeResponse(status=200, body=payload, content_type="application/json"))
+        payload = json.dumps(
+            {"images": [base64.b64encode(png).decode("ascii")]}
+        ).encode("utf-8")
+        session = _FakeSession(
+            _FakeResponse(status=200, body=payload, content_type="application/json")
+        )
         with patch("image.generate.IMAGE_PROVIDER", "local"):
             image = await generate_image("a torchlit hall", session=session)
         self.assertEqual(image.data, png)
@@ -299,7 +332,11 @@ class TestGenerateImage(unittest.IsolatedAsyncioTestCase):
         jpeg = b"\xff\xd8" + b"\x00" * 64
         session = _FakeSession(
             [
-                _FakeResponse(status=503, body=b'{"error":"loading"}', content_type="application/json"),
+                _FakeResponse(
+                    status=503,
+                    body=b'{"error":"loading"}',
+                    content_type="application/json",
+                ),
                 _FakeResponse(status=200, body=jpeg, content_type="image/jpeg"),
             ]
         )

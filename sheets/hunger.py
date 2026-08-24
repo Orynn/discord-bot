@@ -160,7 +160,9 @@ def eat_half(sheet: CharacterSheet, clock: CampaignTime | None = None) -> None:
         sheet.hunger_days = 0.0
 
 
-def set_hunger_days(sheet: CharacterSheet, days: float, clock: CampaignTime | None = None) -> None:
+def set_hunger_days(
+    sheet: CharacterSheet, days: float, clock: CampaignTime | None = None
+) -> None:
     sheet.hunger_days = max(0.0, float(days))
     if sheet.hunger_days <= 0:
         sheet.fed_today = FED_FULL
@@ -175,7 +177,9 @@ def set_hunger_days(sheet: CharacterSheet, days: float, clock: CampaignTime | No
         stamp_meal(sheet, past, kind)
 
 
-def _apply_starvation_crossings(sheet: CharacterSheet, before: float, after: float) -> list[str]:
+def _apply_starvation_crossings(
+    sheet: CharacterSheet, before: float, after: float
+) -> list[str]:
     notices: list[str] = []
     limit = sheet_starvation_limit(sheet)
     threshold = math.floor(before) + 1
@@ -206,7 +210,9 @@ def advance_hunger(sheet: CharacterSheet, calendar_days: int) -> list[str]:
         else:
             sheet.hunger_days = before + 1.0
         sheet.fed_today = FED_NONE
-        notices.extend(_apply_starvation_crossings(sheet, before, float(sheet.hunger_days)))
+        notices.extend(
+            _apply_starvation_crossings(sheet, before, float(sheet.hunger_days))
+        )
     return notices
 
 
@@ -217,7 +223,12 @@ def skip_hunger_day(sheet: CharacterSheet) -> list[str]:
 
 def parse_hunger_days(text: str) -> float:
     cleaned = text.strip().lower().replace(",", ".")
-    cleaned = cleaned.replace(" days", "").replace(" day", "").replace(" jours", "").replace(" jour", "")
+    cleaned = (
+        cleaned.replace(" days", "")
+        .replace(" day", "")
+        .replace(" jours", "")
+        .replace(" jour", "")
+    )
     if cleaned in {"0", "fed", "full", "rassasie", "rassasié"}:
         return 0.0
     if cleaned in {"half", "demi", "0.5", "1/2"}:
@@ -225,7 +236,9 @@ def parse_hunger_days(text: str) -> float:
     try:
         value = float(cleaned)
     except ValueError as exc:
-        raise ValueError("Hunger must be a number of days, e.g. `0`, `2`, `2.5`.") from exc
+        raise ValueError(
+            "Hunger must be a number of days, e.g. `0`, `2`, `2.5`."
+        ) from exc
     if value < 0 or value > 30:
         raise ValueError("Hunger days must be between 0 and 30.")
     return value

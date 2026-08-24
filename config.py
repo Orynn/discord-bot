@@ -46,26 +46,40 @@ else:
 
 PREFIX = config.get("prefix", _DEFAULT_CONFIG["prefix"])
 CATCHUP_ENABLED = config.get("catchup_enabled", _DEFAULT_CONFIG["catchup_enabled"])
-CATCHUP_MAX_MESSAGES = config.get("catchup_max_messages", _DEFAULT_CONFIG["catchup_max_messages"])
-CATCHUP_MAX_AGE_HOURS = config.get("catchup_max_age_hours", _DEFAULT_CONFIG["catchup_max_age_hours"])
+CATCHUP_MAX_MESSAGES = config.get(
+    "catchup_max_messages", _DEFAULT_CONFIG["catchup_max_messages"]
+)
+CATCHUP_MAX_AGE_HOURS = config.get(
+    "catchup_max_age_hours", _DEFAULT_CONFIG["catchup_max_age_hours"]
+)
 
-_raw_campaign_id = config.get("campaign_category_id", _DEFAULT_CONFIG["campaign_category_id"])
+_raw_campaign_id = config.get(
+    "campaign_category_id", _DEFAULT_CONFIG["campaign_category_id"]
+)
 CAMPAIGN_CATEGORY_ID: int | None = int(_raw_campaign_id) if _raw_campaign_id else None
 _raw_campaign_guild = config.get("campaign_guild_id")
-CAMPAIGN_GUILD_ID: int | None = int(_raw_campaign_guild) if _raw_campaign_guild else None
+CAMPAIGN_GUILD_ID: int | None = (
+    int(_raw_campaign_guild) if _raw_campaign_guild else None
+)
 CAMPAIGN_CATEGORY_NAME = str(
     config.get("campaign_category_name", _DEFAULT_CONFIG["campaign_category_name"])
 )
 CAMPAIGN_CACHE_TTL_SECONDS = int(
-    config.get("campaign_cache_ttl_seconds", _DEFAULT_CONFIG["campaign_cache_ttl_seconds"])
+    config.get(
+        "campaign_cache_ttl_seconds", _DEFAULT_CONFIG["campaign_cache_ttl_seconds"]
+    )
 )
 CAMPAIGN_MESSAGES_PER_THREAD = int(
-    config.get("campaign_messages_per_thread", _DEFAULT_CONFIG["campaign_messages_per_thread"])
+    config.get(
+        "campaign_messages_per_thread", _DEFAULT_CONFIG["campaign_messages_per_thread"]
+    )
 )
 
 
 def _resolve_path(key: str, *, fallback: str | None = None) -> Path:
-    value = config.get(key, fallback if fallback is not None else _DEFAULT_CONFIG.get(key))
+    value = config.get(
+        key, fallback if fallback is not None else _DEFAULT_CONFIG.get(key)
+    )
     return _ROOT / str(value)
 
 
@@ -76,8 +90,12 @@ if "fivetools_export_file" in config:
 elif "fivetools_file" in config:
     FIVETOOLS_EXPORT_FILE = _ROOT / str(config["fivetools_file"])
 else:
-    FIVETOOLS_EXPORT_FILE = _resolve_path("fivetools_export_file", fallback="5etools/5etools.json")
-FIVETOOLS_HOMEBREW_FILE = _resolve_path("fivetools_homebrew_file", fallback="5etools/homebrew.json")
+    FIVETOOLS_EXPORT_FILE = _resolve_path(
+        "fivetools_export_file", fallback="5etools/5etools.json"
+    )
+FIVETOOLS_HOMEBREW_FILE = _resolve_path(
+    "fivetools_homebrew_file", fallback="5etools/homebrew.json"
+)
 
 # Legacy alias used by glossary fingerprinting and startup logs.
 FIVETOOLS_FILE = FIVETOOLS_EXPORT_FILE
@@ -104,19 +122,25 @@ def set_campaign_category_id(category_id: int, *, guild_id: int | None = None) -
         file.write("\n")
 
 
-PLAYER_CATEGORY_WIDTH = int(config.get("player_category_width", _DEFAULT_CONFIG["player_category_width"]))
-PLAYER_CATEGORY_EMOJI = str(config.get("player_category_emoji", _DEFAULT_CONFIG["player_category_emoji"]))
-PLAYER_CHANNEL_OOC = str(config.get("player_channel_ooc", _DEFAULT_CONFIG["player_channel_ooc"]))
-PLAYER_CHANNEL_RP = str(config.get("player_channel_rp", _DEFAULT_CONFIG["player_channel_rp"]))
+PLAYER_CATEGORY_WIDTH = int(
+    config.get("player_category_width", _DEFAULT_CONFIG["player_category_width"])
+)
+PLAYER_CATEGORY_EMOJI = str(
+    config.get("player_category_emoji", _DEFAULT_CONFIG["player_category_emoji"])
+)
+PLAYER_CHANNEL_OOC = str(
+    config.get("player_channel_ooc", _DEFAULT_CONFIG["player_channel_ooc"])
+)
+PLAYER_CHANNEL_RP = str(
+    config.get("player_channel_rp", _DEFAULT_CONFIG["player_channel_rp"])
+)
 STAFF_USERNAMES = [
     str(name).casefold()
     for name in config.get("staff_usernames", ["Orynn"])
     if str(name).strip()
 ]
 STAFF_USER_IDS = {
-    int(user_id)
-    for user_id in config.get("staff_user_ids", [])
-    if str(user_id).strip()
+    int(user_id) for user_id in config.get("staff_user_ids", []) if str(user_id).strip()
 }
 
 IMAGE_PROVIDER = str(config.get("image_provider", _DEFAULT_CONFIG["image_provider"]))

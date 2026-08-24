@@ -11,26 +11,16 @@ from bot.privacy import reject_other_player
 from combat.scope import PLAYER_INIT_ONLY, scope_id_for_channel
 from config import PREFIX
 from initiative.display import advance_turn, build_initiative_embed
-from initiative.storage import InitiativeEntry, InitiativeState, clear_initiative, get_initiative, save_initiative
+from initiative.storage import (
+    InitiativeState,
+    add_initiative_entry,
+    clear_initiative,
+    get_initiative,
+    save_initiative,
+)
 from sheets.context import infer_player_id, parse_mention_and_text
 from sheets.data import ability_modifier
 from sheets.storage import get_sheet
-
-
-def _preserve_active_index(
-    state: InitiativeState,
-    active_entry: InitiativeEntry | None,
-) -> None:
-    if active_entry is None or not state.order:
-        state.active_index = 0
-        return
-
-    for index, entry in enumerate(state.order):
-        if entry.name == active_entry.name and entry.user_id == active_entry.user_id:
-            state.active_index = index
-            return
-
-    state.active_index = min(state.active_index, len(state.order) - 1)
 
 
 async def _require_player_scope(ctx: Context) -> int | None:
@@ -66,7 +56,9 @@ def setup_initiative(bot: Bot) -> None:
                 ),
             )
         else:
-            await send_message(ctx, embed=build_initiative_embed(state), definition_menu=False)
+            await send_message(
+                ctx, embed=build_initiative_embed(state), definition_menu=False
+            )
         await delete_command(ctx)
 
     @init_group.command(
@@ -117,17 +109,9 @@ def setup_initiative(bot: Bot) -> None:
         if state is None:
             state = InitiativeState(channel_id=ctx.channel.id, active_index=0, order=[])
 
-        active_entry = (
-            state.order[state.active_index]
-            if state.order and 0 <= state.active_index < len(state.order)
-            else None
-        )
-
         roll = random.randint(1, 20)
         total = roll + modifier
-        state.order.append(InitiativeEntry(name=entry_name, total=total, user_id=user_id))
-        state.order.sort(key=lambda entry: entry.total, reverse=True)
-        _preserve_active_index(state, active_entry)
+        add_initiative_entry(state, name=entry_name, total=total, user_id=user_id)
         save_initiative(guild_id=ctx.guild.id, scope_id=scope_id, state=state)
         mod_label = f"+{modifier}" if modifier >= 0 else str(modifier)
         await send_message(
@@ -168,7 +152,9 @@ def setup_initiative(bot: Bot) -> None:
         if not state or not state.order:
             await command_reply(ctx, "No initiative tracked.")
             return
-        await send_message(ctx, embed=build_initiative_embed(state), definition_menu=False)
+        await send_message(
+            ctx, embed=build_initiative_embed(state), definition_menu=False
+        )
         await delete_command(ctx)
 
     @init_group.command(name="clear", help=f"Clear initiative. `{PREFIX}init clear`")
@@ -182,7 +168,9 @@ def setup_initiative(bot: Bot) -> None:
         await command_reply(ctx, "Initiative cleared.")
         await delete_command(ctx)
 
-    @init_group.command(name="remove", help=f"Remove combatant. `{PREFIX}init remove <name>`")
+    @init_group.command(
+        name="remove", help=f"Remove combatant. `{PREFIX}init remove <name>`"
+    )
     @guild_only
     @admin_only
     async def init_remove(ctx: Context, *, name: str) -> None:
@@ -198,13 +186,18 @@ def setup_initiative(bot: Bot) -> None:
         if state.order and 0 <= state.active_index < len(state.order):
             active_entry = state.order[state.active_index]
 
-        state.order = [entry for entry in state.order if query not in entry.name.lower()]
+        state.order = [
+            entry for entry in state.order if query not in entry.name.lower()
+        ]
         if not state.order:
             clear_initiative(guild_id=ctx.guild.id, scope_id=scope_id)
         else:
             if active_entry is not None:
                 for index, entry in enumerate(state.order):
-                    if entry.name == active_entry.name and entry.user_id == active_entry.user_id:
+                    if (
+                        entry.name == active_entry.name
+                        and entry.user_id == active_entry.user_id
+                    ):
                         state.active_index = index
                         break
                 else:

@@ -68,7 +68,9 @@ def setup_party(bot: Bot) -> None:
         save_party_currency(guild_id=ctx.guild.id, currency=currency)
         await send_message(
             ctx,
-            embed=_treasury_embed(amount=currency.format(), notice=f"Set to **{currency.format()}**."),
+            embed=_treasury_embed(
+                amount=currency.format(), notice=f"Set to **{currency.format()}**."
+            ),
             definition_menu=False,
         )
         await delete_command(ctx)
@@ -95,7 +97,9 @@ def setup_party(bot: Bot) -> None:
         )
         await delete_command(ctx)
 
-    @party_money_group.command(name="spend", help="Spend coins from the party treasury.")
+    @party_money_group.command(
+        name="spend", help="Spend coins from the party treasury."
+    )
     @guild_only
     @admin_only
     async def party_money_spend(ctx: Context, *, amount: str) -> None:

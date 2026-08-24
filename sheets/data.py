@@ -3,7 +3,12 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from sheets.currency import Currency
-from sheets.equipment import CARRY_CAPACITY_PER_STR, Equipment, encumbered_speed, format_load_line
+from sheets.equipment import (
+    CARRY_CAPACITY_PER_STR,
+    Equipment,
+    encumbered_speed,
+    format_load_line,
+)
 from sheets.spell_slots import SpellSlots
 from srd.spell_slugs import migrate_spell_slugs, normalize_stored_spell_slug
 
@@ -53,7 +58,9 @@ SKILL_ALIASES: dict[str, str] = {
 def fold_lookup_key(text: str) -> str:
     cleaned = text.lower().replace("-", " ").replace("'", " ").replace("’", " ").strip()
     stripped = "".join(
-        ch for ch in unicodedata.normalize("NFKD", cleaned) if not unicodedata.combining(ch)
+        ch
+        for ch in unicodedata.normalize("NFKD", cleaned)
+        if not unicodedata.combining(ch)
     )
     return "_".join(stripped.split())
 
@@ -63,6 +70,7 @@ def lookup_skill(text: str) -> str | None:
     if key in SKILL_ABILITIES:
         return key
     return SKILL_ALIASES.get(key)
+
 
 SETTABLE_FIELDS: frozenset[str] = frozenset(
     {
@@ -126,7 +134,9 @@ class CharacterSheet:
     subclass: str = ""
     level: int = 1
     background: str = ""
-    abilities: dict[str, int] = field(default_factory=lambda: dict.fromkeys(ABILITIES, 10))
+    abilities: dict[str, int] = field(
+        default_factory=lambda: dict.fromkeys(ABILITIES, 10)
+    )
     hp_max: int = 0
     hp_current: int = 0
     ac: int = 10
@@ -187,14 +197,20 @@ class CharacterSheet:
             inspired=bool(data.get("inspired", False)),
             death_save_successes=int(data.get("death_save_successes", 0)),
             death_save_failures=int(data.get("death_save_failures", 0)),
-            hit_dice_remaining=int(data.get("hit_dice_remaining", data.get("level", 1))),
+            hit_dice_remaining=int(
+                data.get("hit_dice_remaining", data.get("level", 1))
+            ),
             hunger_days=float(data.get("hunger_days", 0) or 0),
             fed_today=str(data.get("fed_today", "") or ""),
             hunger_meal_year=(
-                int(data["hunger_meal_year"]) if data.get("hunger_meal_year") is not None else None
+                int(data["hunger_meal_year"])
+                if data.get("hunger_meal_year") is not None
+                else None
             ),
             hunger_meal_day=(
-                int(data["hunger_meal_day"]) if data.get("hunger_meal_day") is not None else None
+                int(data["hunger_meal_day"])
+                if data.get("hunger_meal_day") is not None
+                else None
             ),
             hunger_meal_kind=str(data.get("hunger_meal_kind", "") or ""),
             notes=data.get("notes", ""),
@@ -235,7 +251,9 @@ class CharacterSheet:
 
     def format_load(self) -> str:
         coin_lb = self.currency.weight_lb()
-        counted_coins = coin_lb if self.equipment.coins_count_toward_load(coin_lb) else 0
+        counted_coins = (
+            coin_lb if self.equipment.coins_count_toward_load(coin_lb) else 0
+        )
         return format_load_line(
             gear_lb=self.equipment.carried_weight_lb(coin_lb=0),
             coin_lb=counted_coins,
@@ -352,7 +370,10 @@ class CharacterSheet:
         if self.hp_max:
             self.hp_current = min(self.hp_max, self.hp_current + healing)
         # Warlock pact slots recharge on a short rest.
-        if self.char_class.lower().strip().startswith("warlock") and self.spell_slots.has_slots():
+        if (
+            self.char_class.lower().strip().startswith("warlock")
+            and self.spell_slots.has_slots()
+        ):
             self.spell_slots.restore_all()
 
     def long_rest(self) -> None:

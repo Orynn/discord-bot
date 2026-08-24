@@ -31,7 +31,9 @@ def format_dialogue(text: str) -> str:
         return text
 
     lines = text.split("\n")
-    return "\n".join(_format_dialogue_line(line) if line.strip() else line for line in lines)
+    return "\n".join(
+        _format_dialogue_line(line) if line.strip() else line for line in lines
+    )
 
 
 def format_npc_speech(name: str, dialogue: str, action: str | None = None) -> str:

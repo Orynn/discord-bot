@@ -71,7 +71,9 @@ class TestCampaignWiki(unittest.TestCase):
             "Bois du Padhiver",
         )
         self.assertEqual(
-            page_title_from_query("https://forgottenrealms.fandom.com/wiki/Neverwinter"),
+            page_title_from_query(
+                "https://forgottenrealms.fandom.com/wiki/Neverwinter"
+            ),
             "Neverwinter",
         )
 
@@ -96,7 +98,9 @@ class TestCampaignWiki(unittest.TestCase):
             split_import_query("--liens")
 
     def test_plain_links_and_bold(self) -> None:
-        plain = wiki_to_plain("'''Padhiver''' est dans la [[Côte des Épées septentrionale]].")
+        plain = wiki_to_plain(
+            "'''Padhiver''' est dans la [[Côte des Épées septentrionale]]."
+        )
         self.assertIn("**Padhiver** est dans", plain)
         self.assertIn(
             markdown_wiki_link(
@@ -112,7 +116,9 @@ class TestCampaignWiki(unittest.TestCase):
         self.assertEqual(name, "Région_ou_Pays")
         self.assertEqual(fields["type"], "cité")
         self.assertIn("Côte des Épées septentrionale", fields["région"])
-        self.assertIn("le-monde-des-royaumes-oublies.fandom.com/fr/wiki/", fields["région"])
+        self.assertIn(
+            "le-monde-des-royaumes-oublies.fandom.com/fr/wiki/", fields["région"]
+        )
         self.assertIn("**Padhiver** est une cité", body)
         self.assertIn("**Géographie**", body)
         self.assertNotIn("Références", body)
@@ -152,31 +158,51 @@ class TestCampaignWiki(unittest.TestCase):
             sections={"tymora": "📜 pantheon"},
         )
         self.assertIn("**Liens**", block)
-        self.assertIn("📜 pantheon — [Tymora](https://discord.com/channels/1/2/3)", block)
+        self.assertIn(
+            "📜 pantheon — [Tymora](https://discord.com/channels/1/2/3)", block
+        )
         self.assertNotIn("Humain", block)
 
     def test_guesses_section_from_french_infobox_and_categories(self) -> None:
-        self.assertEqual(guess_section(infobox_name="Région_ou_Pays", categories=["Ville"]), "lieux")
+        self.assertEqual(
+            guess_section(infobox_name="Région_ou_Pays", categories=["Ville"]), "lieux"
+        )
         self.assertEqual(guess_section(infobox_name="Personnage", categories=[]), "pnj")
-        self.assertEqual(guess_section(infobox_name="Créature", categories=[]), "créatures")
+        self.assertEqual(
+            guess_section(infobox_name="Créature", categories=[]), "créatures"
+        )
         self.assertEqual(guess_section(infobox_name="Objet", categories=[]), "objets")
         self.assertEqual(guess_section(infobox_name="Plante", categories=[]), "flore")
         self.assertEqual(
             guess_section(infobox_name=None, categories=["Nourriture et Boisson"]),
             "objets",
         )
-        self.assertEqual(guess_section(infobox_name=None, categories=["Food and drink"]), "objets")
-        self.assertEqual(guess_section(infobox_name=None, categories=["Plante"]), "flore")
-        self.assertEqual(guess_section(infobox_name=None, categories=["Vegetation"]), "flore")
-        self.assertEqual(guess_section(infobox_name="Divinité", categories=[]), "pantheon")
-        self.assertEqual(guess_section(infobox_name="Location", categories=["Settlements"]), "lieux")
+        self.assertEqual(
+            guess_section(infobox_name=None, categories=["Food and drink"]), "objets"
+        )
+        self.assertEqual(
+            guess_section(infobox_name=None, categories=["Plante"]), "flore"
+        )
+        self.assertEqual(
+            guess_section(infobox_name=None, categories=["Vegetation"]), "flore"
+        )
+        self.assertEqual(
+            guess_section(infobox_name="Divinité", categories=[]), "pantheon"
+        )
+        self.assertEqual(
+            guess_section(infobox_name="Location", categories=["Settlements"]), "lieux"
+        )
         self.assertEqual(
             guess_section(infobox_name=None, categories=["Catégorie:Organisation"]),
             "organisations",
         )
-        self.assertEqual(guess_section(infobox_name=None, categories=["Année"]), "divers")
+        self.assertEqual(
+            guess_section(infobox_name=None, categories=["Année"]), "divers"
+        )
         self.assertEqual(guess_section(infobox_name="Ethnie", categories=[]), "race")
-        self.assertEqual(guess_section(infobox_name=None, categories=["Catégorie:Race"]), "race")
+        self.assertEqual(
+            guess_section(infobox_name=None, categories=["Catégorie:Race"]), "race"
+        )
         self.assertEqual(
             guess_section(
                 infobox_name="Organisation_et_églises",
@@ -193,19 +219,31 @@ class TestCampaignWiki(unittest.TestCase):
             "classe",
         )
         self.assertEqual(
-            guess_section(infobox_name="Organisation_et_églises", categories=["Catégorie:Guilde"]),
+            guess_section(
+                infobox_name="Organisation_et_églises", categories=["Catégorie:Guilde"]
+            ),
             "organisations",
         )
-        self.assertEqual(guess_section(infobox_name=None, categories=["Catégorie:Monnaie"]), "objets")
         self.assertEqual(
-            guess_section(infobox_name="Objet", categories=[], infobox_fields={"type": "Monnaie"}),
+            guess_section(infobox_name=None, categories=["Catégorie:Monnaie"]), "objets"
+        )
+        self.assertEqual(
+            guess_section(
+                infobox_name="Objet", categories=[], infobox_fields={"type": "Monnaie"}
+            ),
             "objets",
         )
-        self.assertEqual(guess_section(infobox_name=None, categories=["Portrait"]), "divers")
-        self.assertEqual(guess_section(infobox_name=None, categories=["Consort"]), "divers")
+        self.assertEqual(
+            guess_section(infobox_name=None, categories=["Portrait"]), "divers"
+        )
+        self.assertEqual(
+            guess_section(infobox_name=None, categories=["Consort"]), "divers"
+        )
         self.assertEqual(guess_section(infobox_name=None, categories=["Port"]), "lieux")
         self.assertEqual(guess_section(infobox_name=None, categories=["Sort"]), "sorts")
-        self.assertEqual(guess_section(infobox_name=None, categories=["Divinités"]), "pantheon")
+        self.assertEqual(
+            guess_section(infobox_name=None, categories=["Divinités"]), "pantheon"
+        )
 
     def test_skip_template_prefix_ignores_short_keys(self) -> None:
         self.assertTrue(_is_skipped_template("Homonymie"))
@@ -240,7 +278,9 @@ class TestCampaignWiki(unittest.TestCase):
             title="Padhiver",
             url="https://le-monde-des-royaumes-oublies.fandom.com/fr/wiki/Padhiver",
             summary="**Padhiver**",
-            body="\n\n".join(f"Paragraphe {index} de lore détaillé." for index in range(80)),
+            body="\n\n".join(
+                f"Paragraphe {index} de lore détaillé." for index in range(80)
+            ),
             section="lieux",
         )
         chunks = page.discord_chunks()
@@ -295,7 +335,9 @@ class TestCampaignWiki(unittest.TestCase):
         self.assertIn("Padhiver", field.value)
 
 
-def _page(title: str, *outgoing: str, infobox: tuple[str, ...] | None = None) -> WikiPage:
+def _page(
+    title: str, *outgoing: str, infobox: tuple[str, ...] | None = None
+) -> WikiPage:
     return WikiPage(
         title=title,
         url=f"{WIKI_BASE}{title.replace(' ', '_')}",
@@ -389,9 +431,7 @@ class TestWikiClusterCrawl(unittest.IsolatedAsyncioTestCase):
             patch("campaign.wiki.fetch_wiki_page", side_effect=fake_fetch),
             patch("campaign.wiki.asyncio.sleep", new_callable=AsyncMock),
         ):
-            cluster = await fetch_wiki_cluster(
-                catalog["Padhiver"], limit=2, depth=8
-            )
+            cluster = await fetch_wiki_cluster(catalog["Padhiver"], limit=2, depth=8)
 
         self.assertEqual([page.title for page in cluster.pages], ["Padhiver", "Tymora"])
         self.assertTrue(cluster.truncated)
@@ -445,7 +485,13 @@ class TestFetchWikiPageSuggestions(unittest.IsolatedAsyncioTestCase):
         suggest = AsyncMock(return_value=["Leilon"])
 
         async def fake_api(params: dict[str, str]) -> dict:
-            return {"query": {"pages": [{"missing": True, "title": params.get("titles") or "Phandalin"}]}}
+            return {
+                "query": {
+                    "pages": [
+                        {"missing": True, "title": params.get("titles") or "Phandalin"}
+                    ]
+                }
+            }
 
         with (
             patch("campaign.wiki._api_object", side_effect=fake_api),
@@ -504,7 +550,9 @@ class TestThumbnailAllowlist(unittest.TestCase):
             is_allowed_thumbnail_url("https://vignette.wikia.nocookie.net/foo.png")
         )
         self.assertTrue(
-            is_allowed_thumbnail_url("https://le-monde-des-royaumes-oublies.fandom.com/fr/wiki/File:Foo.png")
+            is_allowed_thumbnail_url(
+                "https://le-monde-des-royaumes-oublies.fandom.com/fr/wiki/File:Foo.png"
+            )
         )
 
     def test_rejects_unexpected_hosts(self) -> None:

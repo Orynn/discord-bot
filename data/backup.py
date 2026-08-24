@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import shutil
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,6 +11,7 @@ from data.db import DB_FILE
 
 BACKUP_DIR = DATA_DIR / "backups"
 KEEP_BACKUPS = 14
+REMOTE_BACKUP_DIR = os.environ.get("ARKANN_BACKUP_REMOTE", "").strip()
 
 
 def backup_database(
@@ -37,6 +40,18 @@ def backup_database(
         source_conn.close()
 
     prune_backups(dest_dir, keep=keep)
+    copy_backup_remote(dest)
+    return dest
+
+
+def copy_backup_remote(source: Path, *, remote_dir: str | None = None) -> Path | None:
+    target = (remote_dir if remote_dir is not None else REMOTE_BACKUP_DIR).strip()
+    if not target:
+        return None
+    dest_dir = Path(target).expanduser()
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / source.name
+    shutil.copy2(source, dest)
     return dest
 
 

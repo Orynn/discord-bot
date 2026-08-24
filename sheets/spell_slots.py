@@ -165,8 +165,12 @@ class SpellSlots:
     def to_dict(self) -> dict[str, dict[str, int]]:
         levels = sorted(set(self.current) | set(self.maximum))
         return {
-            "current": {str(level): int(self.current.get(level, 0)) for level in levels},
-            "maximum": {str(level): int(self.maximum.get(level, 0)) for level in levels},
+            "current": {
+                str(level): int(self.current.get(level, 0)) for level in levels
+            },
+            "maximum": {
+                str(level): int(self.maximum.get(level, 0)) for level in levels
+            },
         }
 
     def has_slots(self) -> bool:

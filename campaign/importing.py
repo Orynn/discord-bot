@@ -288,7 +288,9 @@ async def _import_wiki_cluster(
     forums_by_section: dict[str, discord.ForumChannel] = {}
     for page in pages:
         if page.section not in forums_by_section:
-            forums_by_section[page.section] = await ensure_campaign_forum(guild, page.section)
+            forums_by_section[page.section] = await ensure_campaign_forum(
+                guild, page.section
+            )
 
     forums = list_campaign_forums(guild)
     posts: list[ImportedPost] = []
@@ -315,8 +317,12 @@ async def _import_wiki_cluster(
                 starters[existing.id] = starter
             continue
 
-        await _emit(on_progress, f"🧵 Création des posts… **{index}/{total}** (`{page.title}`)")
-        image = await download_thumbnail(page.thumbnail_url) if page.thumbnail_url else None
+        await _emit(
+            on_progress, f"🧵 Création des posts… **{index}/{total}** (`{page.title}`)"
+        )
+        image = (
+            await download_thumbnail(page.thumbnail_url) if page.thumbnail_url else None
+        )
         chunks = page.discord_chunks()
         kwargs: dict = {
             "name": page.title[:100],
@@ -428,7 +434,9 @@ async def _repair_placeholder_posts(
     missing: list[str] = []
     total = len(pending)
     for index, (thread, starter) in enumerate(pending, start=1):
-        await _emit(on_progress, f"🔧 Remplissage… **{index}/{total}** (`{thread.name}`)")
+        await _emit(
+            on_progress, f"🔧 Remplissage… **{index}/{total}** (`{thread.name}`)"
+        )
         try:
             page = await fetch_wiki_page(thread.name, suggest=False)
         except (WikiNotFoundError, WikiError):

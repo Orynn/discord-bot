@@ -154,7 +154,9 @@ class CampaignTime:
         )
 
     def advance(self, minutes: int) -> "CampaignTime":
-        return self._normalized(day_index=self.day_index, minute=self.minute + int(minutes))
+        return self._normalized(
+            day_index=self.day_index, minute=self.minute + int(minutes)
+        )
 
     def skip_to_hour(self, hour: int) -> "CampaignTime":
         target = max(0, min(23, hour)) * MINUTES_PER_HOUR
@@ -221,10 +223,16 @@ def days_of_year(year: int) -> list[CalendarDay]:
         if segment.leap_only and not is_leap(year):
             continue
         if segment.festival:
-            days.append(CalendarDay(name=segment.name, festival=True, month=None, day=None))
+            days.append(
+                CalendarDay(name=segment.name, festival=True, month=None, day=None)
+            )
             continue
         for day in range(1, segment.length + 1):
-            days.append(CalendarDay(name=segment.name, festival=False, month=segment.name, day=day))
+            days.append(
+                CalendarDay(
+                    name=segment.name, festival=False, month=segment.name, day=day
+                )
+            )
     return days
 
 
@@ -257,7 +265,9 @@ def format_duration(minutes: int) -> str:
     if hours:
         parts.append(f"{hours} hour" if hours == 1 else f"{hours} hours")
     if remaining or not parts:
-        parts.append(f"{remaining} minute" if remaining == 1 else f"{remaining} minutes")
+        parts.append(
+            f"{remaining} minute" if remaining == 1 else f"{remaining} minutes"
+        )
     label = ", ".join(parts)
     if minutes < 0:
         return f"-{label}"
@@ -342,7 +352,9 @@ def parse_clock_set(text: str) -> CampaignTime:
     year_match = re.search(r"\b(\d{3,4})\b", cleaned)
     if year_match:
         year = int(year_match.group(1))
-        festival_key = (cleaned[: year_match.start()] + cleaned[year_match.end() :]).strip()
+        festival_key = (
+            cleaned[: year_match.start()] + cleaned[year_match.end() :]
+        ).strip()
         festival_key = re.sub(r"\bdr\b", "", festival_key, flags=re.IGNORECASE).strip()
 
     festival_name = _FESTIVAL_ALIASES.get(festival_key.lower())
@@ -355,7 +367,9 @@ def parse_clock_set(text: str) -> CampaignTime:
     leftover: list[str] = []
     for token in tokens:
         stripped = re.sub(r"(st|nd|rd|th)$", "", token, flags=re.IGNORECASE)
-        alias = _MONTH_ALIASES.get(token.lower()) or _MONTH_ALIASES.get(stripped.lower())
+        alias = _MONTH_ALIASES.get(token.lower()) or _MONTH_ALIASES.get(
+            stripped.lower()
+        )
         if alias:
             month_name = alias
             continue
@@ -368,7 +382,9 @@ def parse_clock_set(text: str) -> CampaignTime:
         raise ValueError("Could not read that date. Example: `12 Hammer 1492 14:00`.")
     if month_name is None or day_number is None:
         raise ValueError("Could not read that date. Example: `12 Hammer 1492 14:00`.")
-    return _clock_for_month_day(year=year, month=month_name, day=day_number, minute=minute)
+    return _clock_for_month_day(
+        year=year, month=month_name, day=day_number, minute=minute
+    )
 
 
 def _clock_for_named_day(*, year: int, name: str, minute: int) -> CampaignTime:
@@ -379,7 +395,9 @@ def _clock_for_named_day(*, year: int, name: str, minute: int) -> CampaignTime:
     raise ValueError(f"**{name}** does not fall in {year} DR.")
 
 
-def _clock_for_month_day(*, year: int, month: str, day: int, minute: int) -> CampaignTime:
+def _clock_for_month_day(
+    *, year: int, month: str, day: int, minute: int
+) -> CampaignTime:
     days = days_of_year(year)
     for index, entry in enumerate(days):
         if entry.month == month and entry.day == day:

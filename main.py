@@ -10,7 +10,7 @@ VoiceClient.warn_dave = False
 from discord.flags import Intents
 
 from bot.events import register_events
-from bot.help_commands import setup_help
+from bot.help_commands import maybe_send_command_help, setup_help
 from bot.logging_config import setup_logging
 from bot.slash import setup_slash
 from bot.tree_utils import clamp_app_command_descriptions
@@ -39,6 +39,11 @@ logger = logging.getLogger(__name__)
 
 
 class ArkannBot(commands.Bot):
+    async def invoke(self, ctx: commands.Context) -> None:
+        if await maybe_send_command_help(ctx):
+            return
+        await super().invoke(ctx)
+
     async def setup_hook(self) -> None:
         try:
             clamp_app_command_descriptions(self.tree)

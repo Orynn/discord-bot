@@ -1,6 +1,8 @@
 from typing import Any
 
-PLAYER_COMBAT_ONLY = "Card combat only runs in a player section (OOC or roleplay channel)."
+PLAYER_COMBAT_ONLY = (
+    "Card combat only runs in a player section (OOC or roleplay channel)."
+)
 PLAYER_INIT_ONLY = "Initiative only runs in a player section (OOC or roleplay channel)."
 
 

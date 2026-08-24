@@ -39,10 +39,14 @@ class AuditItem:
     moved: bool = False
 
 
-def classify_placement(*, current_section: str, expected_section: str | None) -> AuditStatus:
+def classify_placement(
+    *, current_section: str, expected_section: str | None
+) -> AuditStatus:
     if expected_section is None:
         return "missing_wiki"
-    if normalize_section_key(current_section) == normalize_section_key(expected_section):
+    if normalize_section_key(current_section) == normalize_section_key(
+        expected_section
+    ):
         return "ok"
     return "misplaced"
 

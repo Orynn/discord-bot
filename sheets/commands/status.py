@@ -10,7 +10,9 @@ from sheets.context import get_sheet_for_owner, resolve_guild_id, save_owner_she
 from sheets.data import ability_modifier
 
 
-def advance_clock_for_long_rest(*, guild_id: int, user_id: int) -> tuple[str, list[str]]:
+def advance_clock_for_long_rest(
+    *, guild_id: int, user_id: int
+) -> tuple[str, list[str]]:
     from campaign.clock import format_duration, parse_duration
     from campaign.clock_storage import get_clock, save_clock
     from sheets.hunger import tick_hunger_for_clock
@@ -45,12 +47,16 @@ def register_status_commands(sheet_group: Group) -> None:
             return
         owner_id, sheet = result
         if not condition:
-            await command_reply(ctx, f"Usage: `{PREFIX}sheet condition [@player] <condition>`")
+            await command_reply(
+                ctx, f"Usage: `{PREFIX}sheet condition [@player] <condition>`"
+            )
             return
         added = sheet.toggle_condition(condition)
         save_owner_sheet(ctx, owner_id, sheet)
         status = "added" if added else "removed"
-        await command_reply(ctx, f"**{sheet.name}**: condition **{condition.lower()}** {status}.")
+        await command_reply(
+            ctx, f"**{sheet.name}**: condition **{condition.lower()}** {status}."
+        )
         await delete_command(ctx)
 
     @sheet_group.command(
@@ -83,7 +89,9 @@ def register_status_commands(sheet_group: Group) -> None:
         owner_id, sheet = result
         key = outcome.lower()
         if key not in {"success", "failure", "fail"}:
-            await command_reply(ctx, f"Usage: `{PREFIX}sheet deathsave [@player] success|failure`")
+            await command_reply(
+                ctx, f"Usage: `{PREFIX}sheet deathsave [@player] success|failure`"
+            )
             return
         if key.startswith("success"):
             sheet.death_save_successes += 1
@@ -116,7 +124,9 @@ def register_status_commands(sheet_group: Group) -> None:
         name="long",
         help=f"Long rest. `{PREFIX}sheet rest long [@player]`",
     )
-    async def sheet_rest_long(ctx: Context, member: discord.Member | None = None) -> None:
+    async def sheet_rest_long(
+        ctx: Context, member: discord.Member | None = None
+    ) -> None:
         result = await get_sheet_for_owner(ctx, member)
         if result is None:
             return
@@ -163,7 +173,9 @@ def register_status_commands(sheet_group: Group) -> None:
             await command_reply(ctx, "Must spend at least 1 hit die.")
             return
         if sheet.hit_dice_remaining < dice_spent:
-            await command_reply(ctx, f"Not enough hit dice ({sheet.hit_dice_remaining} remaining).")
+            await command_reply(
+                ctx, f"Not enough hit dice ({sheet.hit_dice_remaining} remaining)."
+            )
             return
         con_mod = ability_modifier(sheet.abilities["con"])
         die_sides = sheet.get_hit_die_sides()
@@ -172,7 +184,10 @@ def register_status_commands(sheet_group: Group) -> None:
         sheet.short_rest(dice_spent=dice_spent, healing=healing)
         save_owner_sheet(ctx, owner_id, sheet)
         slots_note = ""
-        if sheet.char_class.lower().startswith("warlock") and sheet.spell_slots.has_slots():
+        if (
+            sheet.char_class.lower().startswith("warlock")
+            and sheet.spell_slots.has_slots()
+        ):
             slots_note = f", pact slots {sheet.spell_slots.format()}"
         await command_reply(
             ctx,

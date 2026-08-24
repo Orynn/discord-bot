@@ -247,12 +247,20 @@ def render_entries(value: Any) -> str:
             items = value.get("items") or []
             style = value.get("style")
             if style == "list-hang-notitle":
-                return "\n".join(f"• {render_entries(item)}" for item in items if render_entries(item))
-            return "\n".join(f"• {render_entries(item)}" for item in items if render_entries(item))
+                return "\n".join(
+                    f"• {render_entries(item)}"
+                    for item in items
+                    if render_entries(item)
+                )
+            return "\n".join(
+                f"• {render_entries(item)}" for item in items if render_entries(item)
+            )
         if entry_type == "table":
             return ""
         name = value.get("name") or ""
-        body = render_entries(value.get("entries") or value.get("entry") or value.get("items"))
+        body = render_entries(
+            value.get("entries") or value.get("entry") or value.get("items")
+        )
         if name and body:
             return f"**{clean_tags(name)}.** {body}"
         if name:
@@ -277,7 +285,9 @@ def format_spell_level(level: Any) -> str:
     if level in (0, "0", "Cantrip"):
         return "Cantrip"
     if isinstance(level, int):
-        suffix = {1: "st", 2: "nd", 3: "rd"}.get(level % 10 if level % 100 not in (11, 12, 13) else 0, "th")
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(
+            level % 10 if level % 100 not in (11, 12, 13) else 0, "th"
+        )
         return f"{level}{suffix}"
     return str(level)
 
@@ -286,7 +296,11 @@ def format_time(value: Any) -> str:
     if not value:
         return "—"
     if isinstance(value, str):
-        labels = {"action": "1 action", "bonus action": "1 bonus action", "reaction": "1 reaction"}
+        labels = {
+            "action": "1 action",
+            "bonus action": "1 bonus action",
+            "reaction": "1 reaction",
+        }
         return labels.get(value.strip().lower(), value)
     if isinstance(value, list) and value:
         return format_time(value[0])

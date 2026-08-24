@@ -35,9 +35,14 @@ class TestHelpSections(unittest.TestCase):
         self.assertIn(";help sheet", overview.body)
         self.assertIn(";help srd", overview.body)
         self.assertIn(";help hunger", overview.body)
+        self.assertIn(";commande -h", overview.body)
 
     def test_srd_help_has_examples_not_pipe_list(self) -> None:
-        lookup = next(section for section in build_help_sections(prefix=";", is_admin=False) if section.key == "lookup")
+        lookup = next(
+            section
+            for section in build_help_sections(prefix=";", is_admin=False)
+            if section.key == "lookup"
+        )
         self.assertNotIn("spell|species", lookup.body)
         self.assertIn(";srd <type> <name>", lookup.body)
         self.assertIn(";help srd", lookup.body)
@@ -51,9 +56,11 @@ class TestHelpSections(unittest.TestCase):
 
     def test_help_ties_hunger_to_the_clock(self) -> None:
         roleplay = next(
-            section for section in build_help_sections(prefix=";", is_admin=False) if section.key == "roleplay"
+            section
+            for section in build_help_sections(prefix=";", is_admin=False)
+            if section.key == "roleplay"
         )
-        self.assertIn("hunger follows that clock", roleplay.body)
+        self.assertIn("la faim suit cette horloge", roleplay.body)
         self.assertIn(";get naked", roleplay.body)
         self.assertIn(";image", roleplay.body)
         self.assertIn(";dessine", roleplay.body)
@@ -64,21 +71,23 @@ class TestHelpSections(unittest.TestCase):
             if section.key == "status"
         )
         self.assertIn(";time", sheet.body)
-        self.assertIn("calendar day", sheet.body)
+        self.assertIn("jour de calendrier", sheet.body)
 
         admin = next(
-            section for section in build_help_sections(prefix=";", is_admin=True) if section.key == "admin"
+            section
+            for section in build_help_sections(prefix=";", is_admin=True)
+            if section.key == "admin"
         )
-        self.assertIn("ticks that player's hunger", admin.body)
-        self.assertIn(";hunger skip @player", admin.body)
+        self.assertIn("fait avancer la faim de ce joueur", admin.body)
+        self.assertIn(";hunger skip @joueur", admin.body)
 
         player = build_hunger_help_sections(prefix=";", is_admin=False)[0]
-        self.assertIn("campaign clock", player.body)
+        self.assertIn("horloge de campagne", player.body)
         self.assertNotIn(";hunger skip", player.body)
 
         dm = build_hunger_help_sections(prefix=";", is_admin=True)[0]
         self.assertIn(";time advance 1d", dm.body)
-        self.assertIn(";hunger skip @player", dm.body)
+        self.assertIn(";hunger skip @joueur", dm.body)
 
     def test_sheet_help_mentions_leaving_gear(self) -> None:
         resources = next(
@@ -88,7 +97,7 @@ class TestHelpSections(unittest.TestCase):
         )
         self.assertIn(";sheet gear let", resources.body)
         self.assertIn(";sheet gear take", resources.body)
-        self.assertIn("updates AC", resources.body)
+        self.assertIn("met à jour la CA", resources.body)
 
     def test_combat_help_requires_player_section(self) -> None:
         start = next(
@@ -96,23 +105,25 @@ class TestHelpSections(unittest.TestCase):
             for section in build_combat_help_sections(prefix=";", is_admin=False)
             if section.key == "start"
         )
-        self.assertIn("player's OOC or roleplay channel", start.body)
+        self.assertIn("salon OOC ou roleplay du joueur", start.body)
         admin = next(
             section
             for section in build_combat_help_sections(prefix=";", is_admin=True)
             if section.key == "admin"
         )
-        self.assertIn("player OOC/roleplay channel", admin.body)
+        self.assertIn("salon OOC/roleplay du joueur", admin.body)
 
     def test_help_embed_uses_section_color_and_fields(self) -> None:
         from bot.help_text import HELP_SHEET_COLOR, build_help_embed
 
         sections = build_help_sections(prefix=";", is_admin=False)
-        overview = build_help_embed(title="Arkann — commands", sections=sections, index=0)
+        overview = build_help_embed(
+            title="Arkann — commands", sections=sections, index=0
+        )
         sheet = build_help_embed(title="Arkann — commands", sections=sections, index=2)
 
         self.assertIn("📖", overview.title)
-        self.assertIn("Quick start", overview.description or "")
+        self.assertIn("Pour commencer", overview.description or "")
         self.assertTrue(overview.fields)
         self.assertEqual(sheet.color.value, HELP_SHEET_COLOR)
         self.assertIn("📋", sheet.title)

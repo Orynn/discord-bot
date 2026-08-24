@@ -43,7 +43,9 @@ def register_events(bot: Bot) -> None:
                 try:
                     mapped = sync_guild_player_sections(guild)
                     if mapped:
-                        logger.info("Mapped %s player section(s) in %s.", mapped, guild.name)
+                        logger.info(
+                            "Mapped %s player section(s) in %s.", mapped, guild.name
+                        )
                 except Exception:
                     logger.exception("Could not map player sections in %s", guild.name)
                 try:
@@ -54,9 +56,13 @@ def register_events(bot: Bot) -> None:
                         ", ".join(forum.name for forum in forums),
                     )
                 except CampaignForumError as exc:
-                    logger.warning("Could not create campaign forums in %s: %s", guild.name, exc)
+                    logger.warning(
+                        "Could not create campaign forums in %s: %s", guild.name, exc
+                    )
                 except (discord.Forbidden, discord.HTTPException):
-                    logger.exception("Could not create campaign forums in %s", guild.name)
+                    logger.exception(
+                        "Could not create campaign forums in %s", guild.name
+                    )
 
             if not is_available():
                 logger.error(
@@ -66,7 +72,9 @@ def register_events(bot: Bot) -> None:
             else:
                 try:
                     index = await fivetools.ensure_index_loaded()
-                    logger.info("5etools index loaded from %s.", ", ".join(index.loaded_sources))
+                    logger.info(
+                        "5etools index loaded from %s.", ", ".join(index.loaded_sources)
+                    )
                 except Exception:
                     logger.exception("5etools index load failed")
                 else:
@@ -88,7 +96,9 @@ def register_events(bot: Bot) -> None:
         try:
             refresh_guild_player_sections(guild)
         except Exception:
-            logger.exception("Could not refresh player sections in %s", getattr(guild, "name", guild))
+            logger.exception(
+                "Could not refresh player sections in %s", getattr(guild, "name", guild)
+            )
 
     @bot.event
     async def on_guild_available(guild: discord.Guild) -> None:
@@ -107,7 +117,9 @@ def register_events(bot: Bot) -> None:
         before: discord.abc.GuildChannel,
         after: discord.abc.GuildChannel,
     ) -> None:
-        _refresh_sections(getattr(after, "guild", None) or getattr(before, "guild", None))
+        _refresh_sections(
+            getattr(after, "guild", None) or getattr(before, "guild", None)
+        )
 
     @bot.event
     async def on_guild_channel_delete(channel: discord.abc.GuildChannel) -> None:
@@ -123,7 +135,9 @@ def register_events(bot: Bot) -> None:
 
         if isinstance(error, commands.CommandOnCooldown):
             wait = max(1, int(error.retry_after + 0.999))
-            await _error_reply(ctx, f"That command is on cooldown. Try again in {wait}s.")
+            await _error_reply(
+                ctx, f"That command is on cooldown. Try again in {wait}s."
+            )
             return
 
         if isinstance(error, commands.UserInputError):
@@ -144,7 +158,9 @@ def register_events(bot: Bot) -> None:
             if ctx.guild is None:
                 await _error_reply(ctx, "This command can only be used in a server.")
             else:
-                await _error_reply(ctx, "You don't have permission to use this command.")
+                await _error_reply(
+                    ctx, "You don't have permission to use this command."
+                )
             return
 
         logger.exception("Unhandled command error in %s", ctx.command, exc_info=error)

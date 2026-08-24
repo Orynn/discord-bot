@@ -30,7 +30,9 @@ _model_id = DEFAULT_MODEL
 _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="sd")
 
 
-def round_edge(value: int, *, default: int = DEFAULT_EDGE, maximum: int = MAX_EDGE) -> int:
+def round_edge(
+    value: int, *, default: int = DEFAULT_EDGE, maximum: int = MAX_EDGE
+) -> int:
     size = int(value or default)
     size = max(64, min(size, maximum))
     return max(64, (size // 8) * 8)
@@ -45,7 +47,9 @@ def _load_pipeline(model_id: str) -> None:
         threads = max(1, min(6, (os.cpu_count() or 4) // 2 or 1))
         torch.set_num_threads(threads)
         logger.info("Loading %s on CPU (%s threads)…", model_id, threads)
-        pipe = AutoPipelineForText2Image.from_pretrained(model_id, torch_dtype=torch.float32)
+        pipe = AutoPipelineForText2Image.from_pretrained(
+            model_id, torch_dtype=torch.float32
+        )
         pipe.to("cpu")
         if hasattr(pipe, "enable_attention_slicing"):
             pipe.enable_attention_slicing()
@@ -110,7 +114,9 @@ async def handle_health(_request: web.Request) -> web.Response:
 
 async def handle_txt2img(request: web.Request) -> web.Response:
     if not _ready:
-        return web.json_response({"error": _error or "Model is still loading."}, status=503)
+        return web.json_response(
+            {"error": _error or "Model is still loading."}, status=503
+        )
     try:
         payload = await request.json()
     except Exception:
@@ -135,13 +141,25 @@ def create_app() -> web.Application:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
+    )
     parser = argparse.ArgumentParser(description="Arkann local image server")
-    parser.add_argument("--host", default=os.environ.get("ARKANN_IMAGE_HOST", DEFAULT_HOST))
-    parser.add_argument("--port", type=int, default=int(os.environ.get("ARKANN_IMAGE_PORT", DEFAULT_PORT)))
-    parser.add_argument("--model", default=os.environ.get("ARKANN_IMAGE_MODEL", DEFAULT_MODEL))
+    parser.add_argument(
+        "--host", default=os.environ.get("ARKANN_IMAGE_HOST", DEFAULT_HOST)
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("ARKANN_IMAGE_PORT", DEFAULT_PORT)),
+    )
+    parser.add_argument(
+        "--model", default=os.environ.get("ARKANN_IMAGE_MODEL", DEFAULT_MODEL)
+    )
     args = parser.parse_args()
-    threading.Thread(target=_load_pipeline, args=(args.model,), name="sd-load", daemon=True).start()
+    threading.Thread(
+        target=_load_pipeline, args=(args.model,), name="sd-load", daemon=True
+    ).start()
     web.run_app(create_app(), host=args.host, port=args.port, print=None)
 
 

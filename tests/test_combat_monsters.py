@@ -19,7 +19,9 @@ class TestMonsterProfiles(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(profile.hp, 10)
         self.assertEqual(profile.ac, 15)
         self.assertEqual(profile.attack_bonus, 4)
-        self.assertTrue(any("nimble escape" in trait.lower() for trait in profile.traits))
+        self.assertTrue(
+            any("nimble escape" in trait.lower() for trait in profile.traits)
+        )
 
     async def test_wolf_has_pack_tactics_and_bite(self) -> None:
         profile = await lookup_monster_profile("Wolf")
@@ -47,5 +49,7 @@ class TestMonsterProfiles(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(profile.ac, 10)
         self.assertEqual(profile.attack_bonus, 4)
         self.assertEqual(profile.attack_name, "Scimitar")
-        self.assertEqual((profile.dice_count, profile.dice_sides, profile.flat_modifier), (1, 6, 2))
+        self.assertEqual(
+            (profile.dice_count, profile.dice_sides, profile.flat_modifier), (1, 6, 2)
+        )
         self.assertEqual(profile.traits, ("Nimble Escape",))

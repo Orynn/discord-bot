@@ -67,16 +67,45 @@ class TestSlashRegistration(unittest.TestCase):
     def test_registers_player_facing_slash_commands(self) -> None:
         names = {command.name for command in self.bot.tree.get_commands()}
         self.assertTrue(
-            {"help", "aide", "roll", "sheet", "combat", "init", "srd", "pc", "desc", "campaign", "time", "get", "image"}.issubset(names)
+            {
+                "help",
+                "aide",
+                "roll",
+                "sheet",
+                "combat",
+                "init",
+                "srd",
+                "pc",
+                "desc",
+                "campaign",
+                "time",
+                "get",
+                "image",
+            }.issubset(names)
         )
-        campaign = next(command for command in self.bot.tree.get_commands() if command.name == "campaign")
+        campaign = next(
+            command
+            for command in self.bot.tree.get_commands()
+            if command.name == "campaign"
+        )
         child_names = {child.name for child in campaign.commands}
         self.assertTrue(
-            {"search", "post", "forum", "document", "wiki", "import", "channels", "audit", "move", "repair"}.issubset(
-                child_names
-            )
+            {
+                "search",
+                "post",
+                "forum",
+                "document",
+                "wiki",
+                "import",
+                "channels",
+                "audit",
+                "move",
+                "repair",
+            }.issubset(child_names)
         )
-        import_cmd = next(child for child in campaign.commands if child.name == "import")
+        import_cmd = next(
+            child for child in campaign.commands if child.name == "import"
+        )
         option_names = {option.name for option in import_cmd.parameters}
         self.assertIn("query", option_names)
         self.assertIn("liens", option_names)

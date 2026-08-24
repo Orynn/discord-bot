@@ -102,9 +102,13 @@ def _equipment_embed_for_item(item) -> discord.Embed | None:
         if item.notes:
             embed.add_field(name="📝 Notes", value=item.notes[:1024], inline=False)
         if item.weight_lb is not None:
-            embed.add_field(name="⚖️ Weight", value=format_pounds(item.weight_lb), inline=True)
+            embed.add_field(
+                name="⚖️ Weight", value=format_pounds(item.weight_lb), inline=True
+            )
         if item.capacity_lb is not None and item.capacity_lb > 0:
-            embed.add_field(name="🎒 Capacity", value=format_pounds(item.capacity_lb), inline=True)
+            embed.add_field(
+                name="🎒 Capacity", value=format_pounds(item.capacity_lb), inline=True
+            )
         return embed
     return None
 
@@ -158,7 +162,9 @@ async def _reply_stash_list(
             for stash in stashes
         ]
         embed.description = "\n".join(lines)
-        embed.set_footer(text=f"{PREFIX}sheet gear let at <place> · {PREFIX}sheet gear take <item> at <place>")
+        embed.set_footer(
+            text=f"{PREFIX}sheet gear let at <place> · {PREFIX}sheet gear take <item> at <place>"
+        )
         await send_message(ctx, embed=embed, definition_menu=False)
         await delete_command(ctx)
         return
@@ -208,7 +214,9 @@ def register_equipment_commands(sheet_group: Group) -> None:
         fallback="list",
         help="Manage character equipment from your 5etools export.",
     )
-    async def sheet_gear_group(ctx: Context, member: discord.Member | None = None) -> None:
+    async def sheet_gear_group(
+        ctx: Context, member: discord.Member | None = None
+    ) -> None:
         result = await get_sheet_for_owner(ctx, member)
         if result is None:
             return
@@ -262,7 +270,9 @@ def register_equipment_commands(sheet_group: Group) -> None:
         name="add",
         help=f"Add equipment. Usage: `{PREFIX}sheet gear add [@player] <name> [qty] [2kg]`",
     )
-    async def sheet_gear_add(ctx: Context, member: discord.Member | None = None, *, name: str = "") -> None:
+    async def sheet_gear_add(
+        ctx: Context, member: discord.Member | None = None, *, name: str = ""
+    ) -> None:
         if member is None:
             member, name = parse_mention_and_text(ctx, name)
         if not name:
@@ -286,7 +296,9 @@ def register_equipment_commands(sheet_group: Group) -> None:
 
         try:
             entry = await fivetools.search_equipment(query=cleaned)
-            _matched, _custom, names = await add_catalog_equipment(sheet, entry, quantity)
+            _matched, _custom, names = await add_catalog_equipment(
+                sheet, entry, quantity
+            )
             _persist_gear(ctx, owner_id, sheet, ac_gear_before=ac_before)
             label = target_label(member, sheet)
             if len(names) > 1:
@@ -333,7 +345,9 @@ def register_equipment_commands(sheet_group: Group) -> None:
         aliases=["store"],
         help=f"Store item(s) in a bag, pouch, or on a belt. Usage: `{PREFIX}sheet gear put [@player] <item|all> [in] <bag|belt>`",
     )
-    async def sheet_gear_put(ctx: Context, member: discord.Member | None = None, *, name: str = "") -> None:
+    async def sheet_gear_put(
+        ctx: Context, member: discord.Member | None = None, *, name: str = ""
+    ) -> None:
         if member is None:
             member, name = parse_mention_and_text(ctx, name)
         item_name, container_name = parse_put_args(name)
@@ -375,7 +389,9 @@ def register_equipment_commands(sheet_group: Group) -> None:
         name="hold",
         help=f"Hold an item in a hand. Usage: `{PREFIX}sheet gear hold [@player] <name>`",
     )
-    async def sheet_gear_hold(ctx: Context, member: discord.Member | None = None, *, name: str = "") -> None:
+    async def sheet_gear_hold(
+        ctx: Context, member: discord.Member | None = None, *, name: str = ""
+    ) -> None:
         if member is None:
             member, name = parse_mention_and_text(ctx, name)
         if not name:
@@ -411,7 +427,9 @@ def register_equipment_commands(sheet_group: Group) -> None:
         aliases=["ceinture"],
         help=f"Hang an item on your belt. Usage: `{PREFIX}sheet gear belt [@player] <name>`",
     )
-    async def sheet_gear_belt(ctx: Context, member: discord.Member | None = None, *, name: str = "") -> None:
+    async def sheet_gear_belt(
+        ctx: Context, member: discord.Member | None = None, *, name: str = ""
+    ) -> None:
         if member is None:
             member, name = parse_mention_and_text(ctx, name)
         if not name:
@@ -446,7 +464,9 @@ def register_equipment_commands(sheet_group: Group) -> None:
         aliases=["pack"],
         help=f"Pack loose items into bags. Usage: `{PREFIX}sheet gear stow [@player]`",
     )
-    async def sheet_gear_stow(ctx: Context, member: discord.Member | None = None) -> None:
+    async def sheet_gear_stow(
+        ctx: Context, member: discord.Member | None = None
+    ) -> None:
         result = await get_sheet_for_owner(ctx, member)
         if result is None:
             return
@@ -469,7 +489,9 @@ def register_equipment_commands(sheet_group: Group) -> None:
         if notes:
             extra = "; leftover gear stays loose" if leftover else ""
             ac_text = _ac_note(sheet) if worn is not None else ""
-            await _gear_reply(ctx, f"{label}: {'; '.join(notes)}.{extra}{ac_text}{_load_note(sheet)}")
+            await _gear_reply(
+                ctx, f"{label}: {'; '.join(notes)}.{extra}{ac_text}{_load_note(sheet)}"
+            )
             return
         if leftover:
             await _gear_reply(
@@ -487,7 +509,9 @@ def register_equipment_commands(sheet_group: Group) -> None:
             f"[at <place>] [-- note]`"
         ),
     )
-    async def sheet_gear_let(ctx: Context, member: discord.Member | None = None, *, name: str = "") -> None:
+    async def sheet_gear_let(
+        ctx: Context, member: discord.Member | None = None, *, name: str = ""
+    ) -> None:
         if member is None:
             member, name = parse_mention_and_text(ctx, name)
         args = parse_let_args(name)
@@ -502,7 +526,8 @@ def register_equipment_commands(sheet_group: Group) -> None:
                 ctx,
                 guild_id=guild_id,
                 place=None if args.all_places else place,
-                list_all=args.all_places or (not args.item and args.place is None and place is None),
+                list_all=args.all_places
+                or (not args.item and args.place is None and place is None),
             )
             return
         if not place:
@@ -522,7 +547,9 @@ def register_equipment_commands(sheet_group: Group) -> None:
         ac_before = has_ac_gear(sheet)
 
         try:
-            detached = sheet.equipment.detach_for_stash(args.item, quantity=args.quantity)
+            detached = sheet.equipment.detach_for_stash(
+                args.item, quantity=args.quantity
+            )
         except ValueError as exc:
             await _gear_reply(ctx, str(exc))
             return
@@ -563,7 +590,9 @@ def register_equipment_commands(sheet_group: Group) -> None:
             f"[at <place>]`"
         ),
     )
-    async def sheet_gear_take(ctx: Context, member: discord.Member | None = None, *, name: str = "") -> None:
+    async def sheet_gear_take(
+        ctx: Context, member: discord.Member | None = None, *, name: str = ""
+    ) -> None:
         if member is None:
             member, name = parse_mention_and_text(ctx, name)
         args = parse_let_args(name)
@@ -574,7 +603,9 @@ def register_equipment_commands(sheet_group: Group) -> None:
 
         place = resolve_place_name(args.place, ctx.channel)
         if not args.item or args.list_only:
-            await _reply_stash_list(ctx, guild_id=guild_id, place=place, list_all=place is None)
+            await _reply_stash_list(
+                ctx, guild_id=guild_id, place=place, list_all=place is None
+            )
             return
         if not place:
             await _gear_reply(
@@ -598,7 +629,9 @@ def register_equipment_commands(sheet_group: Group) -> None:
             await _gear_reply(ctx, str(exc))
             return
         if not taken:
-            await _gear_reply(ctx, f"Nothing matching **{args.item}** at **{stash.place_name}**.")
+            await _gear_reply(
+                ctx, f"Nothing matching **{args.item}** at **{stash.place_name}**."
+            )
             return
 
         sheet.equipment.restore_stash_items(taken)
@@ -622,7 +655,9 @@ def register_equipment_commands(sheet_group: Group) -> None:
         aliases=["drop"],
         help=f"Remove equipment. Usage: `{PREFIX}sheet gear remove [@player] <name> [quantity]`",
     )
-    async def sheet_gear_remove(ctx: Context, member: discord.Member | None = None, *, name: str = "") -> None:
+    async def sheet_gear_remove(
+        ctx: Context, member: discord.Member | None = None, *, name: str = ""
+    ) -> None:
         if member is None:
             member, name = parse_mention_and_text(ctx, name)
         if not name:
@@ -653,13 +688,17 @@ def register_equipment_commands(sheet_group: Group) -> None:
         _persist_gear(ctx, owner_id, sheet, ac_gear_before=ac_before)
         label = target_label(member, sheet)
         qty_text = f" ×{removed.quantity}" if removed.quantity > 1 else ""
-        await _gear_reply(ctx, f"{label}: removed **{removed.name}**{qty_text}.{_load_note(sheet)}")
+        await _gear_reply(
+            ctx, f"{label}: removed **{removed.name}**{qty_text}.{_load_note(sheet)}"
+        )
 
     @sheet_gear_group.command(
         name="equip",
         help=f"Equip an item. Usage: `{PREFIX}sheet gear equip [@player] <name>`",
     )
-    async def sheet_gear_equip(ctx: Context, member: discord.Member | None = None, *, name: str = "") -> None:
+    async def sheet_gear_equip(
+        ctx: Context, member: discord.Member | None = None, *, name: str = ""
+    ) -> None:
         if member is None:
             member, name = parse_mention_and_text(ctx, name)
         if not name:
@@ -687,13 +726,17 @@ def register_equipment_commands(sheet_group: Group) -> None:
         ac_text = ""
         if item.kind == "armor" or sheet.equipment.is_shield(item):
             ac_text = _ac_note(sheet)
-        await _gear_reply(ctx, f"{label}: equipped **{item.name}** ({kind_label}).{ac_text}")
+        await _gear_reply(
+            ctx, f"{label}: equipped **{item.name}** ({kind_label}).{ac_text}"
+        )
 
     @sheet_gear_group.command(
         name="unequip",
         help=f"Unequip an item. Usage: `{PREFIX}sheet gear unequip [@player] <name>`",
     )
-    async def sheet_gear_unequip(ctx: Context, member: discord.Member | None = None, *, name: str = "") -> None:
+    async def sheet_gear_unequip(
+        ctx: Context, member: discord.Member | None = None, *, name: str = ""
+    ) -> None:
         if member is None:
             member, name = parse_mention_and_text(ctx, name)
         if not name:
@@ -726,7 +769,9 @@ def register_equipment_commands(sheet_group: Group) -> None:
         name="weight",
         help=f"Set an item's weight. Usage: `{PREFIX}sheet gear weight [@player] <name> <kg>`",
     )
-    async def sheet_gear_weight(ctx: Context, member: discord.Member | None = None, *, name: str = "") -> None:
+    async def sheet_gear_weight(
+        ctx: Context, member: discord.Member | None = None, *, name: str = ""
+    ) -> None:
         if member is None:
             member, name = parse_mention_and_text(ctx, name)
         item_name, weight = parse_item_and_weight(name)
@@ -763,7 +808,9 @@ def register_equipment_commands(sheet_group: Group) -> None:
             f"(default {format_pounds(DEFAULT_BAG_CAPACITY_LB)} · `0` to unmark)"
         ),
     )
-    async def sheet_gear_bag(ctx: Context, member: discord.Member | None = None, *, name: str = "") -> None:
+    async def sheet_gear_bag(
+        ctx: Context, member: discord.Member | None = None, *, name: str = ""
+    ) -> None:
         if member is None:
             member, name = parse_mention_and_text(ctx, name)
         item_name, capacity = parse_item_and_weight(name)
@@ -788,7 +835,9 @@ def register_equipment_commands(sheet_group: Group) -> None:
         save_owner_sheet(ctx, owner_id, sheet)
         label = target_label(member, sheet)
         if item.capacity_lb is None:
-            await _gear_reply(ctx, f"{label}: **{item.name}** is no longer a bag.{_load_note(sheet)}")
+            await _gear_reply(
+                ctx, f"{label}: **{item.name}** is no longer a bag.{_load_note(sheet)}"
+            )
             return
         await _gear_reply(
             ctx,
@@ -800,7 +849,9 @@ def register_equipment_commands(sheet_group: Group) -> None:
         name="show",
         help=f"Show gear details from your 5etools export. Usage: `{PREFIX}sheet gear show [@player] <name>`",
     )
-    async def sheet_gear_show(ctx: Context, member: discord.Member | None = None, *, name: str = "") -> None:
+    async def sheet_gear_show(
+        ctx: Context, member: discord.Member | None = None, *, name: str = ""
+    ) -> None:
         if member is None:
             member, name = parse_mention_and_text(ctx, name)
         if not name:

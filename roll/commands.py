@@ -10,7 +10,12 @@ from bot.messaging import send_message
 from config import PREFIX
 from sheets.context import parse_mention_and_text, resolve_guild_id, resolve_owner
 from sheets.data import CharacterSheet
-from sheets.dice import execute_roll, format_roll_embed, parse_roll_args, validate_roll_request
+from sheets.dice import (
+    execute_roll,
+    format_roll_embed,
+    parse_roll_args,
+    validate_roll_request,
+)
 from sheets.storage import get_sheet, save_sheet
 
 
@@ -39,7 +44,9 @@ async def _resolve_roll_target(
 
     if member is not None and member.id != ctx.author.id:
         if sheet is None:
-            await command_reply(ctx, f"**{member.display_name}** has no character sheet.")
+            await command_reply(
+                ctx, f"**{member.display_name}** has no character sheet."
+            )
             return None
         return owner_id, sheet, f"**{sheet.name}** ({member.display_name})"
 
@@ -65,7 +72,11 @@ def setup_roll(bot: Bot) -> None:
             args = _clean_roll_args(args)
 
         if not args:
-            admin_hint = f"\n`{PREFIX}roll @player 1d20 perception` — admin only" if is_staff(ctx) else ""
+            admin_hint = (
+                f"\n`{PREFIX}roll @player 1d20 perception` — admin only"
+                if is_staff(ctx)
+                else ""
+            )
             await command_reply(
                 ctx,
                 (

@@ -11,7 +11,13 @@ from discord.ext.commands.context import Context
 
 from bot.command_helpers import command_reply, delete_command
 from bot.messaging import send_message
-from config import IMAGE_COOLDOWN_SECONDS, IMAGE_HISTORY_LIMIT, PLAYER_CHANNEL_OOC, PLAYER_CHANNEL_RP, PREFIX
+from config import (
+    IMAGE_COOLDOWN_SECONDS,
+    IMAGE_HISTORY_LIMIT,
+    PLAYER_CHANNEL_OOC,
+    PLAYER_CHANNEL_RP,
+    PREFIX,
+)
 from image.generate import (
     ImageGenerationError,
     ImagePromptError,
@@ -91,7 +97,9 @@ def setup_image(bot: Bot) -> None:
         aliases=["dessine", "draw", "img"],
         help="Illustrate this channel's roleplay, optionally focused by a prompt.",
     )
-    @app_commands.describe(prompt="Optional focus. The bot still reads this channel's RP.")
+    @app_commands.describe(
+        prompt="Optional focus. The bot still reads this channel's RP."
+    )
     @commands.cooldown(1, max(1, IMAGE_COOLDOWN_SECONDS), commands.BucketType.user)
     async def image_command(ctx: Context, *, prompt: str = "") -> None:
         user_prompt = (prompt or "").strip()
@@ -112,7 +120,9 @@ def setup_image(bot: Bot) -> None:
                         scene_lines=scene_lines,
                     )
                 except ImagePromptError as exc:
-                    await command_reply(ctx, str(exc), linkify=False, definition_menu=False)
+                    await command_reply(
+                        ctx, str(exc), linkify=False, definition_menu=False
+                    )
                     await delete_command(ctx)
                     return
                 image = await generate_image(full_prompt)

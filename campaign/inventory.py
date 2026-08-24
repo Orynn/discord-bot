@@ -39,7 +39,10 @@ def channel_kind(channel: discord.abc.GuildChannel) -> str:
 def collect_guild_channels(guild: discord.Guild) -> list[ChannelRow]:
     rows: list[ChannelRow] = []
     for channel in guild.channels:
-        if isinstance(channel, discord.CategoryChannel) or channel.type == discord.ChannelType.category:
+        if (
+            isinstance(channel, discord.CategoryChannel)
+            or channel.type == discord.ChannelType.category
+        ):
             continue
         category = channel.category
         rows.append(
@@ -64,7 +67,9 @@ def collect_guild_channels(guild: discord.Guild) -> list[ChannelRow]:
     return rows
 
 
-def format_channel_list(guild: discord.Guild, rows: list[ChannelRow] | None = None) -> str:
+def format_channel_list(
+    guild: discord.Guild, rows: list[ChannelRow] | None = None
+) -> str:
     if rows is None:
         rows = collect_guild_channels(guild)
     grouped: dict[str, list[ChannelRow]] = defaultdict(list)
@@ -100,7 +105,9 @@ def format_channel_list(guild: discord.Guild, rows: list[ChannelRow] | None = No
     return "\n".join(lines).rstrip() + "\n"
 
 
-def channel_list_as_json(guild: discord.Guild, rows: list[ChannelRow] | None = None) -> list[dict]:
+def channel_list_as_json(
+    guild: discord.Guild, rows: list[ChannelRow] | None = None
+) -> list[dict]:
     if rows is None:
         rows = collect_guild_channels(guild)
     return [
@@ -122,7 +129,8 @@ def write_channel_export(guild: discord.Guild) -> Path:
     path.write_text(format_channel_list(guild, rows), encoding="utf-8")
     json_path = EXPORT_DIR / f"{guild.id}-channels.json"
     json_path.write_text(
-        json.dumps(channel_list_as_json(guild, rows), ensure_ascii=False, indent=2) + "\n",
+        json.dumps(channel_list_as_json(guild, rows), ensure_ascii=False, indent=2)
+        + "\n",
         encoding="utf-8",
     )
     return path

@@ -5,7 +5,13 @@ from discord.ext.commands.context import Context
 from bot.command_helpers import command_reply, delete_command
 from bot.messaging import send_message
 from config import PREFIX
-from sheets.context import get_sheet_for_owner, resolve_guild_id, resolve_owner, save_owner_sheet, target_label
+from sheets.context import (
+    get_sheet_for_owner,
+    resolve_guild_id,
+    resolve_owner,
+    save_owner_sheet,
+    target_label,
+)
 from sheets.data import CharacterSheet
 from sheets.embeds import build_sheet_embed, sheet_info_embeds
 from sheets.handlers import apply_hp
@@ -118,7 +124,9 @@ def register_core_commands(sheet_group: Group) -> None:
             set_character_name(user_id=owner_id, guild_id=guild_id, name=sheet.name)
 
         label = target_label(member, sheet)
-        await command_reply(ctx, f"{label}: **{field_name}** set to **{value.strip()}**.")
+        await command_reply(
+            ctx, f"{label}: **{field_name}** set to **{value.strip()}**."
+        )
         await delete_command(ctx)
 
     @sheet_group.command(
@@ -151,7 +159,9 @@ def register_core_commands(sheet_group: Group) -> None:
 
         save_owner_sheet(ctx, owner_id, sheet)
         label = target_label(member, sheet)
-        await command_reply(ctx, f"{label}: HP set to **{sheet.hp_current}/{sheet.hp_max}**.")
+        await command_reply(
+            ctx, f"{label}: HP set to **{sheet.hp_current}/{sheet.hp_max}**."
+        )
         await delete_command(ctx)
 
     @sheet_group.command(
@@ -190,13 +200,17 @@ def register_core_commands(sheet_group: Group) -> None:
             try:
                 class_data = await fivetools.search_class(query=sheet.char_class)
                 if sheet.subclass and class_data:
-                    subclass_data = fivetools.find_subclass(char_class=class_data, query=sheet.subclass)
+                    subclass_data = fivetools.find_subclass(
+                        char_class=class_data, query=sheet.subclass
+                    )
             except fivetools.Open5eError:
                 missing.append(f"Class **{sheet.char_class}**")
 
         if sheet.background:
             try:
-                background_data = await fivetools.search_background(query=sheet.background)
+                background_data = await fivetools.search_background(
+                    query=sheet.background
+                )
             except fivetools.Open5eError:
                 missing.append(f"Background **{sheet.background}**")
 

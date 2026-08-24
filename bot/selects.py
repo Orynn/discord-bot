@@ -27,7 +27,9 @@ def select_menus_from_message(message: discord.Message | None) -> list:
     return menus
 
 
-async def replace_message_view(interaction: discord.Interaction, view: discord.ui.View) -> None:
+async def replace_message_view(
+    interaction: discord.Interaction, view: discord.ui.View
+) -> None:
     message = interaction.message
     if message is None:
         return

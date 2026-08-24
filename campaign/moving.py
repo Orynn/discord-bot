@@ -140,9 +140,13 @@ async def _collect_messages(
                 continue
             messages.append(message)
     except (discord.Forbidden, discord.HTTPException) as exc:
-        raise CampaignForumError(f"Impossible de lire le post **{thread.name}** : {exc}") from exc
+        raise CampaignForumError(
+            f"Impossible de lire le post **{thread.name}** : {exc}"
+        ) from exc
     if not messages:
-        raise CampaignForumError(f"Le post **{thread.name}** n'a aucun contenu à déplacer.")
+        raise CampaignForumError(
+            f"Le post **{thread.name}** n'a aucun contenu à déplacer."
+        )
     return messages
 
 
@@ -188,7 +192,9 @@ async def _relink_messages(
             if thread.id in skip_ids:
                 continue
             try:
-                async for message in thread.history(limit=_HISTORY_LIMIT, oldest_first=True):
+                async for message in thread.history(
+                    limit=_HISTORY_LIMIT, oldest_first=True
+                ):
                     content = message.content or ""
                     if not content:
                         continue
@@ -213,7 +219,9 @@ async def _relink_messages(
     return edited
 
 
-async def _existing_in_forum(forum: discord.ForumChannel, title: str) -> discord.Thread | None:
+async def _existing_in_forum(
+    forum: discord.ForumChannel, title: str
+) -> discord.Thread | None:
     needle = title.casefold().strip()
     for thread in await iter_forum_threads(forum):
         if thread.name.casefold() == needle:
@@ -240,14 +248,20 @@ async def move_campaign_post(
     created = False
     if existing is not None and existing.id != thread.id:
         relocated = existing
-        await _emit(on_progress, f"📦 Post déjà dans {target.mention} — mise à jour des liens…")
+        await _emit(
+            on_progress, f"📦 Post déjà dans {target.mention} — mise à jour des liens…"
+        )
     else:
-        await _emit(on_progress, f"📦 Copie de **{thread.name}** vers {target.mention}…")
+        await _emit(
+            on_progress, f"📦 Copie de **{thread.name}** vers {target.mention}…"
+        )
         messages = await _collect_messages(
             thread,
             skip_message_ids=skip_message_ids or set(),
         )
-        relocated = await _copy_messages(target=target, name=thread.name, messages=messages)
+        relocated = await _copy_messages(
+            target=target, name=thread.name, messages=messages
+        )
         created = True
 
     await _emit(on_progress, "🔗 Mise à jour des connexions…")

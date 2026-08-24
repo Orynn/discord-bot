@@ -11,7 +11,9 @@ class TestPlayerCategoryFormat(unittest.TestCase):
         )
 
     def test_uppercases_name(self) -> None:
-        self.assertIn("ARAGORN", format_player_category_name("Aragorn", width=25, emoji="🐉"))
+        self.assertIn(
+            "ARAGORN", format_player_category_name("Aragorn", width=25, emoji="🐉")
+        )
 
     def test_rejects_empty_name(self) -> None:
         with self.assertRaises(ValueError):

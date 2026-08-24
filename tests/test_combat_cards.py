@@ -1,6 +1,6 @@
 import unittest
 
-from combat.cards import parse_damage_roll
+from combat.cards import card_makes_attack_roll, parse_damage_roll
 from combat.deck import _spell_card
 from sheets.data import CharacterSheet
 
@@ -74,3 +74,48 @@ class TestSpellCard(unittest.TestCase):
         self.assertEqual(card.buff, "mage-armor")
         self.assertIn("1d4", card.description)
         self.assertFalse(card.is_healing)
+
+    def test_save_spell_from_5etools_fields(self) -> None:
+        sheet = CharacterSheet(name="Wiz", char_class="Wizard")
+        card = _spell_card(
+            sheet,
+            {
+                "slug": "fireball",
+                "name": "Fireball",
+                "level": 3,
+                "school": "Evocation",
+                "desc": "taking 8d6 Fire damage on a failed save or half as much damage on a successful one.",
+                "entries": [
+                    "Each creature makes a Dexterity saving throw, taking {@damage 8d6} Fire damage on a failed save or half as much damage on a successful one."
+                ],
+                "damageInflict": ["fire"],
+                "savingThrow": ["dexterity"],
+            },
+        )
+        assert card is not None
+        self.assertEqual(card.save_ability, "dex")
+        self.assertTrue(card.save_half)
+        self.assertEqual(card.dice_count, 8)
+        self.assertEqual(card.dice_sides, 6)
+        self.assertFalse(card_makes_attack_roll(card))
+        self.assertIn("DEX save", card.description)
+
+    def test_condition_save_has_no_attack_roll(self) -> None:
+        sheet = CharacterSheet(name="Wiz", char_class="Wizard")
+        card = _spell_card(
+            sheet,
+            {
+                "slug": "hold-person",
+                "name": "Hold Person",
+                "level": 2,
+                "school": "Enchantment",
+                "desc": "Wisdom saving throw or Paralyzed.",
+                "savingThrow": ["wisdom"],
+                "conditionInflict": ["paralyzed"],
+            },
+        )
+        assert card is not None
+        self.assertEqual(card.save_ability, "wis")
+        self.assertEqual(card.inflict_condition, "paralyzed")
+        self.assertEqual(card.dice_count, 0)
+        self.assertFalse(card_makes_attack_roll(card))

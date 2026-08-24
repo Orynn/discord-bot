@@ -25,7 +25,9 @@ class TestTransferCurrency(unittest.TestCase):
         self._tmpdir.cleanup()
 
     def test_transfers_funds_atomically(self) -> None:
-        transfer_currency(guild_id=1, payer_id=1, recipient_id=2, payment=Currency(gp=25))
+        transfer_currency(
+            guild_id=1, payer_id=1, recipient_id=2, payment=Currency(gp=25)
+        )
 
         payer = get_sheet(user_id=1, guild_id=1)
         recipient = get_sheet(user_id=2, guild_id=1)
@@ -35,7 +37,9 @@ class TestTransferCurrency(unittest.TestCase):
 
     def test_rejects_insufficient_funds(self) -> None:
         with self.assertRaises(ValueError):
-            transfer_currency(guild_id=1, payer_id=1, recipient_id=2, payment=Currency(gp=500))
+            transfer_currency(
+                guild_id=1, payer_id=1, recipient_id=2, payment=Currency(gp=500)
+            )
 
         payer = get_sheet(user_id=1, guild_id=1)
         recipient = get_sheet(user_id=2, guild_id=1)
@@ -50,7 +54,11 @@ class TestUpdateSheet(unittest.TestCase):
         self._original_db = db_module.DB_FILE
         db_module.DB_FILE = Path(self._tmpdir.name) / "test.db"
         db_module.init_db()
-        save_sheet(user_id=1, guild_id=1, sheet=CharacterSheet(name="Hero", hp_current=10, hp_max=20))
+        save_sheet(
+            user_id=1,
+            guild_id=1,
+            sheet=CharacterSheet(name="Hero", hp_current=10, hp_max=20),
+        )
 
     def tearDown(self) -> None:
         db_module.DB_FILE = self._original_db

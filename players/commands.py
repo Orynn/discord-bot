@@ -59,10 +59,14 @@ def setup_player(bot: Bot) -> None:
             return
 
         display_name = (
-            name or get_character_name(user_id=member.id, guild_id=ctx.guild.id) or member.display_name
+            name
+            or get_character_name(user_id=member.id, guild_id=ctx.guild.id)
+            or member.display_name
         ).strip()
         if not display_name:
-            await command_reply(ctx, "Provide a name or set the player's character name with `;pcname`.")
+            await command_reply(
+                ctx, "Provide a name or set the player's character name with `;pcname`."
+            )
             await delete_command(ctx)
             return
 
@@ -77,7 +81,9 @@ def setup_player(bot: Bot) -> None:
             await delete_command(ctx)
             return
         except discord.Forbidden:
-            await command_reply(ctx, "Missing permissions to create channels or categories.")
+            await command_reply(
+                ctx, "Missing permissions to create channels or categories."
+            )
             await delete_command(ctx)
             return
         except discord.HTTPException as exc:
@@ -87,8 +93,16 @@ def setup_player(bot: Bot) -> None:
 
         ooc = ctx.guild.get_channel(record["ooc_channel_id"])
         rp = ctx.guild.get_channel(record["roleplay_channel_id"])
-        ooc_mention = ooc.mention if isinstance(ooc, discord.TextChannel) else f"<#{record['ooc_channel_id']}>"
-        rp_mention = rp.mention if isinstance(rp, discord.TextChannel) else f"<#{record['roleplay_channel_id']}>"
+        ooc_mention = (
+            ooc.mention
+            if isinstance(ooc, discord.TextChannel)
+            else f"<#{record['ooc_channel_id']}>"
+        )
+        rp_mention = (
+            rp.mention
+            if isinstance(rp, discord.TextChannel)
+            else f"<#{record['roleplay_channel_id']}>"
+        )
 
         sheet_note = (
             "Character sheet created."
@@ -145,7 +159,9 @@ def setup_player(bot: Bot) -> None:
         assert ctx.guild is not None
         mapped = sync_guild_player_sections(ctx.guild)
         if mapped:
-            await command_reply(ctx, f"Mapped **{mapped}** player section(s) from Discord.")
+            await command_reply(
+                ctx, f"Mapped **{mapped}** player section(s) from Discord."
+            )
         else:
             await command_reply(ctx, "No player sections found on Discord.")
         await delete_command(ctx)
@@ -167,7 +183,9 @@ def setup_player(bot: Bot) -> None:
             await delete_command(ctx)
             return
         except discord.Forbidden:
-            await command_reply(ctx, "Missing permissions to delete channels or categories.")
+            await command_reply(
+                ctx, "Missing permissions to delete channels or categories."
+            )
             await delete_command(ctx)
             return
         except discord.HTTPException as exc:

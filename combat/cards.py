@@ -57,6 +57,9 @@ class CardSnapshot:
     ability: str | None = None
     damage_type_label: str | None = None
     buff: str | None = None
+    save_ability: str | None = None
+    save_half: bool = False
+    inflict_condition: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -112,7 +115,12 @@ AUTO_HIT_SLUGS = frozenset({"magic-missile"})
 
 
 def card_makes_attack_roll(card: CardSnapshot) -> bool:
-    if card.is_healing or card.dice_count <= 0 or card.card_type == "dodge":
+    if (
+        card.save_ability
+        or card.is_healing
+        or card.dice_count <= 0
+        or card.card_type == "dodge"
+    ):
         return False
     slug = (card.spell_slug or "").lower()
     if slug in AUTO_HIT_SLUGS:
@@ -120,11 +128,109 @@ def card_makes_attack_roll(card: CardSnapshot) -> bool:
     return True
 
 
+def normalize_save_ability(value: str | None) -> str | None:
+    if not value:
+        return None
+    return _SAVE_ABILITIES.get(value.strip().lower())
+
+
+def extract_damage_notation(*texts: str | None) -> str | None:
+    for text in texts:
+        if not text:
+            continue
+        tagged = _DAMAGE_TAG.search(text)
+        if tagged:
+            return tagged.group(1).strip()
+        plain = _DAMAGE_TEXT.search(text)
+        if plain:
+            return plain.group(1).replace(" ", "")
+    return None
+
+
+def spell_save_ability(spell: dict) -> str | None:
+    raw = (
+        spell.get("savingThrow")
+        or spell.get("saving_throw")
+        or spell.get("save_ability")
+    )
+    if isinstance(raw, str):
+        found = normalize_save_ability(raw)
+        if found:
+            return found
+    if isinstance(raw, list):
+        for item in raw:
+            found = normalize_save_ability(str(item))
+            if found:
+                return found
+    desc = str(spell.get("desc") or "")
+    match = _SAVE_IN_TEXT.search(desc)
+    if match:
+        return normalize_save_ability(match.group(1))
+    return None
+
+
+def spell_save_half(spell: dict) -> bool:
+    if spell.get("save_half"):
+        return True
+    desc = str(spell.get("desc") or "")
+    return bool(_HALF_ON_SAVE.search(desc))
+
+
+def spell_damage_roll(spell: dict) -> str | None:
+    explicit = spell.get("damage_roll")
+    if explicit:
+        return str(explicit)
+    types = spell.get("damage_types") or spell.get("damageInflict")
+    has_save = bool(spell.get("savingThrow") or spell.get("saving_throw"))
+    if (
+        not types
+        and not has_save
+        and not is_healing_spell(
+            damage_types=list(types or []), desc=str(spell.get("desc") or "")
+        )
+    ):
+        return None
+    entries = spell.get("entries")
+    entry_text = ""
+    if isinstance(entries, list):
+        entry_text = " ".join(part for part in entries if isinstance(part, str))
+    elif isinstance(entries, str):
+        entry_text = entries
+    return extract_damage_notation(entry_text, str(spell.get("desc") or ""))
+
+
 BUFF_BY_SLUG: dict[str, str] = {
     "shield": "shield",
     "mage-armor": "mage-armor",
     "bless": "bless",
 }
+
+_SAVE_ABILITIES: dict[str, str] = {
+    "str": "str",
+    "strength": "str",
+    "dex": "dex",
+    "dexterity": "dex",
+    "con": "con",
+    "constitution": "con",
+    "int": "int",
+    "intelligence": "int",
+    "wis": "wis",
+    "wisdom": "wis",
+    "cha": "cha",
+    "charisma": "cha",
+}
+
+_DAMAGE_TAG = re.compile(r"\{@damage\s+([^}|]+)", re.IGNORECASE)
+_DAMAGE_TEXT = re.compile(r"(\d+d\d+(?:\s*\+\s*\d+)?)", re.IGNORECASE)
+_SAVE_IN_TEXT = re.compile(
+    r"\b(strength|dexterity|constitution|intelligence|wisdom|charisma|str|dex|con|int|wis|cha)"
+    r"\s+saving throw",
+    re.IGNORECASE,
+)
+_HALF_ON_SAVE = re.compile(
+    r"half as much|half damage|demi[- ]d[eé]g[aâ]ts",
+    re.IGNORECASE,
+)
 
 
 def card_buff(card: CardSnapshot) -> str | None:
@@ -140,7 +246,9 @@ def is_healing_spell(*, damage_types: list[str] | None, desc: str) -> bool:
     if damage_types:
         return False
     lowered = desc.lower()
-    return any(word in lowered for word in ("hit point", "regain", "healing", "restore"))
+    return any(
+        word in lowered for word in ("hit point", "regain", "healing", "restore")
+    )
 
 
 def spellcasting_ability(char_class: str) -> str | None:

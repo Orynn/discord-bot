@@ -53,12 +53,25 @@ class TestPlayerStorage(unittest.TestCase):
         save_player_section(
             guild_id=1,
             user_id=42,
-            data={"name": "LEO", "category_id": 100, "ooc_channel_id": 201, "roleplay_channel_id": 202},
+            data={
+                "name": "LEO",
+                "category_id": 100,
+                "ooc_channel_id": 201,
+                "roleplay_channel_id": 202,
+            },
         )
-        self.assertEqual(find_player_id_for_channel(guild_id=1, channel_id=201, category_id=100), 42)
-        self.assertEqual(find_player_id_for_channel(guild_id=1, channel_id=202, category_id=None), 42)
-        self.assertEqual(find_player_id_for_channel(guild_id=1, channel_id=999, category_id=100), 42)
-        self.assertIsNone(find_player_id_for_channel(guild_id=1, channel_id=999, category_id=888))
+        self.assertEqual(
+            find_player_id_for_channel(guild_id=1, channel_id=201, category_id=100), 42
+        )
+        self.assertEqual(
+            find_player_id_for_channel(guild_id=1, channel_id=202, category_id=None), 42
+        )
+        self.assertEqual(
+            find_player_id_for_channel(guild_id=1, channel_id=999, category_id=100), 42
+        )
+        self.assertIsNone(
+            find_player_id_for_channel(guild_id=1, channel_id=999, category_id=888)
+        )
 
 
 class TestDiscoverPlayerSection(unittest.TestCase):
@@ -226,7 +239,11 @@ class TestDiscoverPlayerSection(unittest.TestCase):
         import discord
         from players.discover import sync_guild_player_sections
         from players.setup import ensure_player_sheet
-        from players.storage import find_player_id_for_channel, get_player_section, save_player_section
+        from players.storage import (
+            find_player_id_for_channel,
+            get_player_section,
+            save_player_section,
+        )
 
         ensure_player_sheet(user_id=42, guild_id=1, name="Graosh")
         save_player_section(
@@ -259,10 +276,14 @@ class TestDiscoverPlayerSection(unittest.TestCase):
         guild.me = discord.Object(id=555)
         guild.categories = [category]
         guild.get_member.return_value = None
-        guild.get_channel.side_effect = lambda channel_id: category if channel_id == 100 else None
+        guild.get_channel.side_effect = lambda channel_id: (
+            category if channel_id == 100 else None
+        )
 
         self.assertEqual(sync_guild_player_sections(guild), 1)
-        self.assertEqual(find_player_id_for_channel(guild_id=1, channel_id=201, category_id=100), 42)
+        self.assertEqual(
+            find_player_id_for_channel(guild_id=1, channel_id=201, category_id=100), 42
+        )
         self.assertIsNone(get_player_section(guild_id=1, user_id=99))
         self.assertIsNotNone(get_player_section(guild_id=1, user_id=42))
 
@@ -299,7 +320,9 @@ class TestWelcomeEmbed(unittest.TestCase):
         member.mention = "@Player"
         embed = build_welcome_embed(character_name="Leo", member=member)
         self.assertIn("Leo", embed.title)
-        text = (embed.description or "") + "".join(field.value for field in embed.fields)
+        text = (embed.description or "") + "".join(
+            field.value for field in embed.fields
+        )
         self.assertIn(";sheet show", text)
 
 

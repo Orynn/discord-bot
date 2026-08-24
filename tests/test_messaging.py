@@ -37,7 +37,9 @@ class TestViewKwargs(unittest.TestCase):
         assert _view_kwargs(prepared_view=None, had_view=True, edit=False) == {}
 
     def test_keeps_none_when_editing_to_clear_view(self) -> None:
-        assert _view_kwargs(prepared_view=None, had_view=True, edit=True) == {"view": None}
+        assert _view_kwargs(prepared_view=None, had_view=True, edit=True) == {
+            "view": None
+        }
 
     def test_includes_prepared_view(self) -> None:
         view = discord.ui.View()
@@ -99,7 +101,9 @@ class TestPrepareOutgoing:
         glossary._store.rebuild_index()
 
         embed = discord.Embed(title="Lich")
-        embed.add_field(name="🔮 Spellcasting", value=("Fireball " * 120).strip(), inline=False)
+        embed.add_field(
+            name="🔮 Spellcasting", value=("Fireball " * 120).strip(), inline=False
+        )
         linked = linkify_embed(embed)
         assert any(len(field.value) > DISCORD_FIELD_LIMIT for field in linked.fields)
 

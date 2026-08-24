@@ -22,7 +22,9 @@ class TestSpellSlugs(unittest.TestCase):
         self.assertEqual(normalize_stored_spell_slug(slug), slug)
 
     def test_migrate_deduplicates(self) -> None:
-        migrated, changed = migrate_spell_slugs(["fireball", "srd-2024_fireball", "fireball"])
+        migrated, changed = migrate_spell_slugs(
+            ["fireball", "srd-2024_fireball", "fireball"]
+        )
         self.assertTrue(changed)
         self.assertEqual(migrated, ["fireball"])
 
@@ -136,6 +138,7 @@ class TestMonstersAndCache(unittest.IsolatedAsyncioTestCase):
         self.assertIn("🗡️ Slashing", monster["actions"])
         self.assertNotIn("XPHB", monster["actions"])
         self.assertIn("```", monster["abilities"])
+
     async def test_nested_condition_immunities(self) -> None:
         archmage = await fivetools.search_monster("Archmage")
         self.assertIn("Charmed", archmage["condition_immune"])
@@ -146,7 +149,13 @@ class TestMonstersAndCache(unittest.IsolatedAsyncioTestCase):
         from srd.fivetools.lookup import _format_damage_list
 
         rendered = _format_damage_list(
-            [{"resist": ["bludgeoning"], "preNote": "While wearing the ring:", "note": "nonmagical"}]
+            [
+                {
+                    "resist": ["bludgeoning"],
+                    "preNote": "While wearing the ring:",
+                    "note": "nonmagical",
+                }
+            ]
         )
         self.assertIn("While wearing the ring", rendered)
         self.assertIn("🔨 Bludgeoning", rendered)
@@ -159,7 +168,8 @@ class TestMonstersAndCache(unittest.IsolatedAsyncioTestCase):
 
         dragon = await fivetools.search_monster("Adult Black Dragon")
         self.assertTrue(
-            "1/day each:" in dragon["spellcasting"] or "1/day:" in dragon["spellcasting"],
+            "1/day each:" in dragon["spellcasting"]
+            or "1/day:" in dragon["spellcasting"],
             dragon["spellcasting"],
         )
 
@@ -194,7 +204,9 @@ class TestMonstersAndCache(unittest.IsolatedAsyncioTestCase):
         for field in prepared.fields:
             self.assertLessEqual(len(field.name), 256, field.name)
             self.assertLessEqual(len(field.value), DISCORD_FIELD_LIMIT, field.name)
-        self.assertTrue(any(field.name.startswith("⚔️ Actions") for field in prepared.fields))
+        self.assertTrue(
+            any(field.name.startswith("⚔️ Actions") for field in prepared.fields)
+        )
 
     async def test_search_monster_partial(self) -> None:
         monster = await fivetools.search_monster("Goblin")
@@ -261,9 +273,13 @@ def _compact(value: str) -> str:
 
 class TestSearchQuery(unittest.TestCase):
     def test_parse_search_query_detects_tilde(self) -> None:
-        self.assertEqual(fivetools.parse_search_query("  longsword "), ("longsword", False))
+        self.assertEqual(
+            fivetools.parse_search_query("  longsword "), ("longsword", False)
+        )
         self.assertEqual(fivetools.parse_search_query("~goblin"), ("goblin", True))
-        self.assertEqual(fivetools.parse_search_query("~ Goblin Warrior"), ("Goblin Warrior", True))
+        self.assertEqual(
+            fivetools.parse_search_query("~ Goblin Warrior"), ("Goblin Warrior", True)
+        )
 
 
 if __name__ == "__main__":

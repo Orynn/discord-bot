@@ -2,7 +2,12 @@ import unittest
 
 from sheets.armor import apply_armor_ac, computed_ac, format_ac_field
 from sheets.data import CharacterSheet
-from sheets.equipment import ITEM_KIND_ARMOR, ITEM_KIND_CUSTOM, ITEM_KIND_WEAPON, custom_slug
+from sheets.equipment import (
+    ITEM_KIND_ARMOR,
+    ITEM_KIND_CUSTOM,
+    ITEM_KIND_WEAPON,
+    custom_slug,
+)
 
 
 class TestArmorClass(unittest.TestCase):
@@ -14,7 +19,9 @@ class TestArmorClass(unittest.TestCase):
 
     def test_leather_adds_full_dex(self) -> None:
         sheet = self._sheet(dex=16)
-        sheet.equipment.add_item(slug="leather-armor", name="Leather Armor", kind=ITEM_KIND_ARMOR)
+        sheet.equipment.add_item(
+            slug="leather-armor", name="Leather Armor", kind=ITEM_KIND_ARMOR
+        )
         sheet.equipment.equip("Leather Armor")
         apply_armor_ac(sheet)
         self.assertEqual(sheet.ac, 14)
@@ -22,21 +29,27 @@ class TestArmorClass(unittest.TestCase):
 
     def test_medium_armor_caps_dex_at_two(self) -> None:
         sheet = self._sheet(dex=18)
-        sheet.equipment.add_item(slug="breastplate", name="Breastplate", kind=ITEM_KIND_ARMOR)
+        sheet.equipment.add_item(
+            slug="breastplate", name="Breastplate", kind=ITEM_KIND_ARMOR
+        )
         sheet.equipment.equip("Breastplate")
         apply_armor_ac(sheet)
         self.assertEqual(sheet.ac, 16)
 
     def test_heavy_armor_ignores_dex(self) -> None:
         sheet = self._sheet(dex=16)
-        sheet.equipment.add_item(slug="chain-mail", name="Chain Mail", kind=ITEM_KIND_ARMOR)
+        sheet.equipment.add_item(
+            slug="chain-mail", name="Chain Mail", kind=ITEM_KIND_ARMOR
+        )
         sheet.equipment.equip("Chain Mail")
         apply_armor_ac(sheet)
         self.assertEqual(sheet.ac, 16)
 
     def test_shield_adds_two(self) -> None:
         sheet = self._sheet(dex=16)
-        sheet.equipment.add_item(slug="leather-armor", name="Leather Armor", kind=ITEM_KIND_ARMOR)
+        sheet.equipment.add_item(
+            slug="leather-armor", name="Leather Armor", kind=ITEM_KIND_ARMOR
+        )
         sheet.equipment.add_item(slug="shield", name="Shield", kind=ITEM_KIND_ARMOR)
         sheet.equipment.equip("Leather Armor")
         sheet.equipment.equip("Shield")
@@ -45,7 +58,9 @@ class TestArmorClass(unittest.TestCase):
 
     def test_unequip_returns_to_unarmored(self) -> None:
         sheet = self._sheet(dex=16)
-        sheet.equipment.add_item(slug="leather-armor", name="Leather Armor", kind=ITEM_KIND_ARMOR)
+        sheet.equipment.add_item(
+            slug="leather-armor", name="Leather Armor", kind=ITEM_KIND_ARMOR
+        )
         sheet.equipment.equip("Leather Armor")
         apply_armor_ac(sheet)
         sheet.equipment.unequip("Leather Armor")
@@ -80,7 +95,9 @@ class TestArmorClass(unittest.TestCase):
 
     def test_dex_change_updates_light_armor(self) -> None:
         sheet = self._sheet(dex=10)
-        sheet.equipment.add_item(slug="leather-armor", name="Leather Armor", kind=ITEM_KIND_ARMOR)
+        sheet.equipment.add_item(
+            slug="leather-armor", name="Leather Armor", kind=ITEM_KIND_ARMOR
+        )
         sheet.equipment.equip("Leather Armor")
         apply_armor_ac(sheet)
         self.assertEqual(sheet.ac, 11)

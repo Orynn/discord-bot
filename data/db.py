@@ -204,7 +204,10 @@ def _migrate_json_files() -> None:
     state_file = DATA_DIR / "bot_state.json"
 
     with db_connection() as connection:
-        if sheets_file.exists() and connection.execute("SELECT COUNT(*) FROM sheets").fetchone()[0] == 0:
+        if (
+            sheets_file.exists()
+            and connection.execute("SELECT COUNT(*) FROM sheets").fetchone()[0] == 0
+        ):
             sheets = json.loads(sheets_file.read_text(encoding="utf-8"))
             for user_id, data in sheets.items():
                 connection.execute(
@@ -225,16 +228,23 @@ def _migrate_json_files() -> None:
                     sheet = CharacterSheet(name=name)
                     connection.execute(
                         "INSERT OR REPLACE INTO sheets (user_id, guild_id, data) VALUES (?, ?, ?)",
-                        (user_id, _legacy_guild_id(), json.dumps(sheet.to_dict(), ensure_ascii=False)),
+                        (
+                            user_id,
+                            _legacy_guild_id(),
+                            json.dumps(sheet.to_dict(), ensure_ascii=False),
+                        ),
                     )
 
-        if npc_file.exists() and connection.execute("SELECT COUNT(*) FROM npc_names").fetchone()[0] == 0:
+        if (
+            npc_file.exists()
+            and connection.execute("SELECT COUNT(*) FROM npc_names").fetchone()[0] == 0
+        ):
             names = json.loads(npc_file.read_text(encoding="utf-8"))
             for name in names:
-                    connection.execute(
-                        "INSERT OR IGNORE INTO npc_names (guild_id, name) VALUES (?, ?)",
-                        (_legacy_guild_id(), name),
-                    )
+                connection.execute(
+                    "INSERT OR IGNORE INTO npc_names (guild_id, name) VALUES (?, ?)",
+                    (_legacy_guild_id(), name),
+                )
 
         if state_file.exists():
             row = connection.execute(
@@ -255,7 +265,9 @@ def _migrate_json_files() -> None:
 
 def get_json(key: str) -> Any | None:
     with db_connection() as connection:
-        row = connection.execute("SELECT value FROM kv_store WHERE key = ?", (key,)).fetchone()
+        row = connection.execute(
+            "SELECT value FROM kv_store WHERE key = ?", (key,)
+        ).fetchone()
     if row is None:
         return None
     return json.loads(row["value"])
@@ -271,7 +283,9 @@ def set_json(key: str, value: Any) -> None:
 
 def update_json(key: str, default: Any, updater: Callable[[Any], Any]) -> Any:
     with db_connection() as connection:
-        row = connection.execute("SELECT value FROM kv_store WHERE key = ?", (key,)).fetchone()
+        row = connection.execute(
+            "SELECT value FROM kv_store WHERE key = ?", (key,)
+        ).fetchone()
         current = json.loads(row["value"]) if row is not None else default
         updated = updater(current)
         connection.execute(

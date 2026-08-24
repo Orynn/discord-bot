@@ -22,7 +22,9 @@ class TestSpellSlugMigration(unittest.TestCase):
         save_sheet(
             user_id=1,
             guild_id=1,
-            sheet=CharacterSheet(name="Mage", spells=["srd-2024_fireball", "wotc-srd_shield"]),
+            sheet=CharacterSheet(
+                name="Mage", spells=["srd-2024_fireball", "wotc-srd_shield"]
+            ),
         )
         loaded = get_sheet(user_id=1, guild_id=1)
         assert loaded is not None

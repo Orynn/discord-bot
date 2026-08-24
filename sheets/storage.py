@@ -29,7 +29,9 @@ def save_sheet(*, user_id: int, guild_id: int, sheet: CharacterSheet) -> None:
         )
 
 
-def update_sheet(*, user_id: int, guild_id: int, updater: Callable[[CharacterSheet], None]) -> CharacterSheet:
+def update_sheet(
+    *, user_id: int, guild_id: int, updater: Callable[[CharacterSheet], None]
+) -> CharacterSheet:
     with db_connection() as connection:
         row = connection.execute(
             "SELECT data FROM sheets WHERE user_id = ? AND guild_id = ?",
@@ -42,12 +44,18 @@ def update_sheet(*, user_id: int, guild_id: int, updater: Callable[[CharacterShe
         updater(sheet)
         connection.execute(
             "UPDATE sheets SET data = ? WHERE user_id = ? AND guild_id = ?",
-            (json.dumps(sheet.to_dict(), ensure_ascii=False), str(user_id), str(guild_id)),
+            (
+                json.dumps(sheet.to_dict(), ensure_ascii=False),
+                str(user_id),
+                str(guild_id),
+            ),
         )
         return sheet
 
 
-def transfer_currency(*, guild_id: int, payer_id: int, recipient_id: int, payment: Currency) -> None:
+def transfer_currency(
+    *, guild_id: int, payer_id: int, recipient_id: int, payment: Currency
+) -> None:
     with db_connection() as connection:
         payer_row = connection.execute(
             "SELECT data FROM sheets WHERE user_id = ? AND guild_id = ?",
@@ -69,11 +77,19 @@ def transfer_currency(*, guild_id: int, payer_id: int, recipient_id: int, paymen
         recipient_sheet.currency.add(payment)
         connection.execute(
             "UPDATE sheets SET data = ? WHERE user_id = ? AND guild_id = ?",
-            (json.dumps(payer_sheet.to_dict(), ensure_ascii=False), str(payer_id), str(guild_id)),
+            (
+                json.dumps(payer_sheet.to_dict(), ensure_ascii=False),
+                str(payer_id),
+                str(guild_id),
+            ),
         )
         connection.execute(
             "UPDATE sheets SET data = ? WHERE user_id = ? AND guild_id = ?",
-            (json.dumps(recipient_sheet.to_dict(), ensure_ascii=False), str(recipient_id), str(guild_id)),
+            (
+                json.dumps(recipient_sheet.to_dict(), ensure_ascii=False),
+                str(recipient_id),
+                str(guild_id),
+            ),
         )
 
 

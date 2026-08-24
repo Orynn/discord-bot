@@ -50,21 +50,29 @@ class TestEquipment(unittest.TestCase):
         from sheets.containers import STORED_HANDS, STORED_LOOSE
 
         equipment = Equipment()
-        equipment.add_item(slug=custom_slug("Dagger"), name="Dagger", kind=ITEM_KIND_CUSTOM, quantity=1)
+        equipment.add_item(
+            slug=custom_slug("Dagger"), name="Dagger", kind=ITEM_KIND_CUSTOM, quantity=1
+        )
         equipment.equip("Dagger")
-        equipment.add_item(slug="dagger", name="Dagger", kind=ITEM_KIND_WEAPON, quantity=2)
+        equipment.add_item(
+            slug="dagger", name="Dagger", kind=ITEM_KIND_WEAPON, quantity=2
+        )
         held = next(item for item in equipment.items if item.stored_in == STORED_HANDS)
         self.assertEqual(held.slug, "dagger")
         self.assertEqual(held.kind, ITEM_KIND_WEAPON)
         self.assertTrue(held.equipped)
         self.assertEqual(sum(item.quantity for item in equipment.items), 3)
         self.assertEqual(held.quantity, 2)
-        leftover = next(item for item in equipment.items if item.stored_in == STORED_LOOSE)
+        leftover = next(
+            item for item in equipment.items if item.stored_in == STORED_LOOSE
+        )
         self.assertEqual(leftover.quantity, 1)
 
     def test_format_summary_can_exclude_equipped(self) -> None:
         equipment = Equipment()
-        equipment.add_item(slug="dagger", name="Dagger", kind=ITEM_KIND_WEAPON, quantity=1)
+        equipment.add_item(
+            slug="dagger", name="Dagger", kind=ITEM_KIND_WEAPON, quantity=1
+        )
         equipment.equip("Dagger")
         equipment.add_item(slug="rope", name="Rope", kind="item", quantity=1)
         summary = equipment.format_summary(exclude_equipped=True)
@@ -75,7 +83,9 @@ class TestEquipment(unittest.TestCase):
         self.assertEqual(parse_name_and_quantity("dagger 2"), ("dagger", 2))
         self.assertEqual(parse_name_and_quantity("rope x50"), ("rope", 50))
         self.assertEqual(parse_name_and_quantity("room 101"), ("room 101", None))
-        self.assertEqual(parse_name_and_quantity("long sword 2"), ("long sword 2", None))
+        self.assertEqual(
+            parse_name_and_quantity("long sword 2"), ("long sword 2", None)
+        )
 
     def test_parse_name_quantity_and_weight(self) -> None:
         from sheets.equipment import parse_name_quantity_and_weight
@@ -113,13 +123,19 @@ class TestEquipment(unittest.TestCase):
 
     def test_stored_weight_totals(self) -> None:
         equipment = Equipment()
-        equipment.add_item(slug="anvil", name="Anvil", kind="item", quantity=2, weight_lb=100)
-        equipment.add_item(slug="feather", name="Feather", kind="item", quantity=1, weight_lb=0)
+        equipment.add_item(
+            slug="anvil", name="Anvil", kind="item", quantity=2, weight_lb=100
+        )
+        equipment.add_item(
+            slug="feather", name="Feather", kind="item", quantity=1, weight_lb=0
+        )
         self.assertEqual(equipment.total_weight_lb(), 200)
 
     def test_round_trip_keeps_weight(self) -> None:
         equipment = Equipment(
-            items=[InventoryItem(slug="anvil", name="Anvil", kind="item", weight_lb=100)]
+            items=[
+                InventoryItem(slug="anvil", name="Anvil", kind="item", weight_lb=100)
+            ]
         )
         restored = Equipment.from_dict(equipment.to_dict())
         self.assertEqual(restored.items[0].weight_lb, 100)
@@ -129,11 +145,20 @@ class TestEquipment(unittest.TestCase):
 
         sheet = CharacterSheet(
             name="Hero",
-            abilities={"str": 10, "dex": 10, "con": 10, "int": 10, "wis": 10, "cha": 10},
+            abilities={
+                "str": 10,
+                "dex": 10,
+                "con": 10,
+                "int": 10,
+                "wis": 10,
+                "cha": 10,
+            },
         )
         self.assertEqual(sheet.carrying_capacity_lb(), 150)
         self.assertFalse(sheet.is_overloaded())
-        sheet.equipment.add_item(slug="anvil", name="Anvil", kind="item", quantity=1, weight_lb=151)
+        sheet.equipment.add_item(
+            slug="anvil", name="Anvil", kind="item", quantity=1, weight_lb=151
+        )
         self.assertTrue(sheet.is_overloaded())
         sheet.equipment.remove_item("Anvil")
         sheet.currency = Currency(gp=50)
@@ -146,11 +171,20 @@ class TestEquipment(unittest.TestCase):
         sheet = CharacterSheet(
             name="Hero",
             speed=30,
-            abilities={"str": 10, "dex": 10, "con": 10, "int": 10, "wis": 10, "cha": 10},
+            abilities={
+                "str": 10,
+                "dex": 10,
+                "con": 10,
+                "int": 10,
+                "wis": 10,
+                "cha": 10,
+            },
         )
         self.assertEqual(sheet.effective_speed(), 30)
 
-        sheet.equipment.add_item(slug="anvil", name="Anvil", kind="item", quantity=1, weight_lb=300)
+        sheet.equipment.add_item(
+            slug="anvil", name="Anvil", kind="item", quantity=1, weight_lb=300
+        )
         self.assertTrue(sheet.is_overloaded())
         self.assertEqual(sheet.effective_speed(), 15)
         self.assertIn("15 ft.", sheet.format_speed())
@@ -208,7 +242,9 @@ class TestEquipment(unittest.TestCase):
         held = next(item for item in equipment.items if item.stored_in == STORED_HANDS)
         self.assertEqual(held.quantity, 1)
 
-        added = equipment.add_item(slug="dagger", name="Dagger", kind=ITEM_KIND_WEAPON, quantity=2)
+        added = equipment.add_item(
+            slug="dagger", name="Dagger", kind=ITEM_KIND_WEAPON, quantity=2
+        )
         self.assertEqual(added.stored_in, "backpack")
         self.assertEqual(added.quantity, 2)
         held = next(item for item in equipment.items if item.stored_in == STORED_HANDS)
@@ -261,7 +297,9 @@ class TestEquipment(unittest.TestCase):
         from sheets.equipment import pack_bundle_contents
 
         self.assertIsNone(
-            pack_bundle_contents({"packContents": [{"item": "arrow|xphb", "quantity": 20}]})
+            pack_bundle_contents(
+                {"packContents": [{"item": "arrow|xphb", "quantity": 20}]}
+            )
         )
         pieces = pack_bundle_contents(
             {
@@ -301,7 +339,9 @@ class TestEquipment(unittest.TestCase):
 
         equipment = Equipment()
         equipment.add_item(slug="backpack", name="Backpack", kind="item")
-        equipment.add_item(slug="torch", name="Torch", kind="item", quantity=2, weight_lb=1)
+        equipment.add_item(
+            slug="torch", name="Torch", kind="item", quantity=2, weight_lb=1
+        )
         equipment.add_item(
             slug="torch",
             name="Torch",
@@ -338,7 +378,9 @@ class TestEquipment(unittest.TestCase):
 
         equipment = Equipment()
         equipment.add_item(slug="backpack", name="Backpack", kind="item")
-        equipment.add_item(slug="torch", name="Torch", kind="item", quantity=2, weight_lb=1)
+        equipment.add_item(
+            slug="torch", name="Torch", kind="item", quantity=2, weight_lb=1
+        )
         equipment.hold("Torch")
         equipment.add_item(
             slug="torch",
@@ -352,7 +394,13 @@ class TestEquipment(unittest.TestCase):
         stacked = equipment.put_in("Torch", "backpack")
         self.assertEqual(stacked.stored_in, "backpack")
         self.assertEqual(stacked.quantity, 5)
-        self.assertFalse(any(item.stored_in == STORED_HANDS for item in equipment.items if item.name == "Torch"))
+        self.assertFalse(
+            any(
+                item.stored_in == STORED_HANDS
+                for item in equipment.items
+                if item.name == "Torch"
+            )
+        )
 
         equipment.add_item(slug="bedroll", name="Bedroll", kind="item", weight_lb=7)
         equipment.add_item(
@@ -364,7 +412,9 @@ class TestEquipment(unittest.TestCase):
             auto_stow=False,
         )
         equipment.put_in("all", "backpack")
-        self.assertFalse(any(item.stored_in == STORED_LOOSE for item in equipment.items))
+        self.assertFalse(
+            any(item.stored_in == STORED_LOOSE for item in equipment.items)
+        )
         self.assertEqual(equipment.find_item("Bedroll").stored_in, "backpack")
         self.assertEqual(equipment.find_item("Herbalism Kit").stored_in, "backpack")
 
@@ -372,7 +422,9 @@ class TestEquipment(unittest.TestCase):
         from sheets.containers import BELT_SLOTS, STORED_BELT, STORED_LOOSE, STORED_WORN
 
         equipment = Equipment()
-        equipment.add_item(slug=custom_slug("Potion"), name="Potion", kind=ITEM_KIND_CUSTOM, quantity=5)
+        equipment.add_item(
+            slug=custom_slug("Potion"), name="Potion", kind=ITEM_KIND_CUSTOM, quantity=5
+        )
         equipment.put_in("Potion", "ceinture")
         on_belt = [item for item in equipment.items if item.stored_in == STORED_BELT]
         leftover = [item for item in equipment.items if item.stored_in == STORED_LOOSE]
@@ -386,7 +438,9 @@ class TestEquipment(unittest.TestCase):
         assert on_belt is not None
         self.assertEqual(on_belt.stored_in, STORED_BELT)
 
-        equipment.add_item(slug=custom_slug("Torch"), name="Torch", kind=ITEM_KIND_CUSTOM)
+        equipment.add_item(
+            slug=custom_slug("Torch"), name="Torch", kind=ITEM_KIND_CUSTOM
+        )
         with self.assertRaises(ValueError):
             equipment.hang_on_belt("Torch")
 
@@ -423,7 +477,9 @@ class TestEquipment(unittest.TestCase):
         self.assertEqual(marked.stored_in, STORED_WORN)
 
         bourse = Equipment()
-        bourse.add_item(slug=custom_slug("Bourse"), name="Bourse", kind=ITEM_KIND_CUSTOM)
+        bourse.add_item(
+            slug=custom_slug("Bourse"), name="Bourse", kind=ITEM_KIND_CUSTOM
+        )
         bourse.hang_on_belt("Bourse")
         bourse.mark_as_bag("Bourse", 6)
         marked_bourse = bourse.find_item("Bourse")
@@ -452,7 +508,9 @@ class TestEquipment(unittest.TestCase):
         self.assertEqual(chest.capacity_lb, DEFAULT_BAG_CAPACITY_LB)
         self.assertEqual(chest.stored_in, STORED_WORN)
 
-        equipment.add_item(slug=custom_slug("Torch"), name="Torch", kind=ITEM_KIND_CUSTOM, weight_lb=1)
+        equipment.add_item(
+            slug=custom_slug("Torch"), name="Torch", kind=ITEM_KIND_CUSTOM, weight_lb=1
+        )
         equipment.put_in("Torch", "Coffre")
         torch = equipment.find_item("Torch")
         assert torch is not None
@@ -491,7 +549,9 @@ class TestEquipment(unittest.TestCase):
 
     def test_equip_armor_replaces_previous(self) -> None:
         equipment = Equipment()
-        equipment.add_item(slug="leather-armor", name="Leather Armor", kind=ITEM_KIND_ARMOR)
+        equipment.add_item(
+            slug="leather-armor", name="Leather Armor", kind=ITEM_KIND_ARMOR
+        )
         equipment.add_item(slug="chain-mail", name="Chain Mail", kind=ITEM_KIND_ARMOR)
         equipment.equip("Leather Armor")
         equipment.equip("Chain Mail")
@@ -524,14 +584,18 @@ class TestEquipment(unittest.TestCase):
         self.assertTrue(custom_slug("Healing Potion").startswith("custom:"))
 
     def test_format_item_line_links_indexed_gear(self) -> None:
-        item = InventoryItem(slug="long-sword", name="Long Sword", kind=ITEM_KIND_WEAPON)
+        item = InventoryItem(
+            slug="long-sword", name="Long Sword", kind=ITEM_KIND_WEAPON
+        )
         line = format_item_line(item)
         self.assertIn("[Long Sword](https://5e.tools/items.html#", line)
         self.assertIn("long", line.lower())
         self.assertNotIn("open5e.com", line)
 
     def test_format_item_line_custom_has_no_link(self) -> None:
-        item = InventoryItem(slug=custom_slug("Potion"), name="Potion", kind=ITEM_KIND_CUSTOM)
+        item = InventoryItem(
+            slug=custom_slug("Potion"), name="Potion", kind=ITEM_KIND_CUSTOM
+        )
         line = format_item_line(item)
         self.assertEqual(line, "Potion")
         self.assertNotIn("**", line)

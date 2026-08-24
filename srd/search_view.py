@@ -15,7 +15,13 @@ from srd.embeds import (
     weapon_embed,
 )
 
-_KIND_PRESENTERS: dict[str, tuple[Callable[[str], Awaitable[dict[str, Any]]], Callable[[dict[str, Any]], discord.Embed]]] = {
+_KIND_PRESENTERS: dict[
+    str,
+    tuple[
+        Callable[[str], Awaitable[dict[str, Any]]],
+        Callable[[dict[str, Any]], discord.Embed],
+    ],
+] = {
     "species": (lambda slug: fivetools.get_species(slug=slug), species_embed),
     "weapon": (lambda slug: fivetools.get_weapon(slug=slug), weapon_embed),
     "armor": (lambda slug: fivetools.get_armor(slug=slug), armor_embed),
@@ -54,13 +60,17 @@ class SrdMatchSelect(discord.ui.Select):
     async def callback(self, interaction: discord.Interaction) -> None:
         presenter = _KIND_PRESENTERS.get(self._kind)
         if presenter is None:
-            await send_interaction_message(interaction, content="Unknown lookup type.", ephemeral=True)
+            await send_interaction_message(
+                interaction, content="Unknown lookup type.", ephemeral=True
+            )
             return
         getter, embed_fn = presenter
         try:
             item = await getter(self.values[0])
         except fivetools.FiveToolsError as exc:
-            await send_interaction_message(interaction, content=str(exc), ephemeral=True)
+            await send_interaction_message(
+                interaction, content=str(exc), ephemeral=True
+            )
             return
         await send_interaction_message(
             interaction,

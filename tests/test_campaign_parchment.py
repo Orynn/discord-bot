@@ -2,7 +2,12 @@ import unittest
 
 from PIL import Image
 
-from campaign.parchment import MAX_TEXT_LENGTH, ParchmentError, parse_document_text, render_parchment
+from campaign.parchment import (
+    MAX_TEXT_LENGTH,
+    ParchmentError,
+    parse_document_text,
+    render_parchment,
+)
 
 
 class TestParseDocumentText(unittest.TestCase):
@@ -11,7 +16,9 @@ class TestParseDocumentText(unittest.TestCase):
             parse_document_text("   ")
 
     def test_splits_title_and_body(self) -> None:
-        title, body = parse_document_text("Décret royal -- Par ordre du roi, fermez les portes.")
+        title, body = parse_document_text(
+            "Décret royal -- Par ordre du roi, fermez les portes."
+        )
         self.assertEqual(title, "Décret royal")
         self.assertEqual(body, "Par ordre du roi, fermez les portes.")
 
@@ -27,7 +34,9 @@ class TestParseDocumentText(unittest.TestCase):
 
 class TestRenderParchment(unittest.TestCase):
     def test_renders_png_with_title_and_body(self) -> None:
-        png = render_parchment(title="Décret", body="Par ordre du roi, Padhiver est en alerte.")
+        png = render_parchment(
+            title="Décret", body="Par ordre du roi, Padhiver est en alerte."
+        )
         self.assertTrue(png.getvalue().startswith(b"\x89PNG"))
         image = Image.open(png)
         self.assertEqual(image.format, "PNG")

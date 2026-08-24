@@ -4,7 +4,13 @@ from dataclasses import dataclass
 
 import discord
 
-from sheets.data import ABILITIES, CharacterSheet, fold_lookup_key, format_modifier, lookup_skill
+from sheets.data import (
+    ABILITIES,
+    CharacterSheet,
+    fold_lookup_key,
+    format_modifier,
+    lookup_skill,
+)
 
 DICE_PATTERN = re.compile(
     r"^(\d+)d(\d+)(?:(kh|kl)(\d+))?([+-]\d+)?$",
@@ -70,7 +76,9 @@ class ParsedRollRequest:
 def parse_dice(notation: str) -> ParsedDice:
     match = DICE_PATTERN.match(notation.strip().lower())
     if not match:
-        raise ValueError(f"Invalid dice notation: `{notation}`. Example: `1d20`, `2d6+3`, `2d20kh1`")
+        raise ValueError(
+            f"Invalid dice notation: `{notation}`. Example: `1d20`, `2d6+3`, `2d20kh1`"
+        )
 
     count = int(match.group(1))
     sides = int(match.group(2))
@@ -83,7 +91,9 @@ def parse_dice(notation: str) -> ParsedDice:
     if count > 100:
         raise ValueError("Cannot roll more than 100 dice at once.")
     if keep_mode and (keep_count < 1 or keep_count >= count):
-        raise ValueError("Keep highest/lowest requires kh/kl count between 1 and dice count - 1.")
+        raise ValueError(
+            "Keep highest/lowest requires kh/kl count between 1 and dice count - 1."
+        )
 
     return ParsedDice(
         count=count,
@@ -111,7 +121,14 @@ def parse_roll_args(args: str) -> ParsedRollRequest:
     if not tokens:
         raise ValueError("Missing dice or modifier after advantage/disadvantage.")
 
-    dice_index = next((index for index, token in enumerate(tokens) if DICE_PATTERN.match(token.lower())), None)
+    dice_index = next(
+        (
+            index
+            for index, token in enumerate(tokens)
+            if DICE_PATTERN.match(token.lower())
+        ),
+        None,
+    )
     if dice_index is None:
         return ParsedRollRequest(
             dice=ParsedDice(count=1, sides=20, flat_modifier=0),
@@ -121,7 +138,9 @@ def parse_roll_args(args: str) -> ParsedRollRequest:
 
     dice = parse_dice(tokens[dice_index])
     modifier_tokens = tokens[:dice_index] + tokens[dice_index + 1 :]
-    return ParsedRollRequest(dice=dice, modifier_tokens=modifier_tokens, advantage=advantage)
+    return ParsedRollRequest(
+        dice=dice, modifier_tokens=modifier_tokens, advantage=advantage
+    )
 
 
 def validate_roll_request(request: ParsedRollRequest) -> None:
@@ -146,7 +165,9 @@ def _match_ability(text: str) -> str | None:
     return ABILITY_ALIASES.get(token)
 
 
-def resolve_sheet_modifier(sheet: CharacterSheet | None, tokens: list[str]) -> tuple[int, str]:
+def resolve_sheet_modifier(
+    sheet: CharacterSheet | None, tokens: list[str]
+) -> tuple[int, str]:
     if not tokens:
         return 0, ""
 
@@ -209,7 +230,10 @@ def _is_ability_check(tokens: list[str]) -> bool:
     if not tokens or _is_saving_throw(tokens):
         return False
     text = " ".join(tokens)
-    return _match_skill(text) is not None or _match_ability(text.replace("_", " ")) is not None
+    return (
+        _match_skill(text) is not None
+        or _match_ability(text.replace("_", " ")) is not None
+    )
 
 
 def execute_roll(
@@ -342,7 +366,11 @@ def _format_roll_values(result: RollResult) -> str:
 
     if result.kept_rolls != result.dice_rolls:
         keep_match = _KEEP_PATTERN.search(result.dice_notation)
-        label = "Keep highest" if keep_match and keep_match.group(1).lower() == "kh" else "Keep lowest"
+        label = (
+            "Keep highest"
+            if keep_match and keep_match.group(1).lower() == "kh"
+            else "Keep lowest"
+        )
         rolled = ", ".join(str(value) for value in result.dice_rolls)
         kept = ", ".join(str(value) for value in result.kept_rolls)
         return f"🎯 {label}\n{rolled} → **{kept}**"

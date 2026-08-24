@@ -77,7 +77,7 @@ def _help_embed(
     footer_parts = [f"{index + 1}/{total}"]
     if section.footer:
         footer_parts.append(section.footer)
-    footer_parts.append("Buttons switch sections")
+    footer_parts.append("Les boutons changent de section")
     embed.set_footer(text=" · ".join(footer_parts))
     return embed
 
@@ -87,152 +87,153 @@ def build_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
         _section(
             key="overview",
             emoji="📖",
-            label="Quick start",
-            button="Start",
-            intro="Three steps to play, then open a guide when you need it.",
+            label="Pour commencer",
+            button="Début",
+            intro="Trois étapes pour jouer, puis ouvre un guide si besoin.",
             fields=(
                 (
-                    "🚀 First session",
-                    f"**1.** `{prefix}sheet create <name>` or `/sheet create`\n"
-                    f"**2.** `{prefix}init add @you` or `/init add`\n"
-                    f"**3.** `{prefix}combat board` or `/combat board` *(after start)*",
+                    "🚀 Première session",
+                    f"**1.** `{prefix}sheet create <nom>` ou `/sheet create`\n"
+                    f"**2.** `{prefix}init add @toi` ou `/init add`\n"
+                    f"**3.** `{prefix}combat board` ou `/combat board` *(après le start)*",
                 ),
                 (
                     "📚 Guides",
-                    f"`{prefix}help sheet` · `{prefix}help combat` · `{prefix}help srd` · `{prefix}help hunger` · `/help`",
+                    f"`{prefix}help sheet` · `{prefix}help combat` · `{prefix}help srd` · `{prefix}help hunger` · `/help`\n"
+                    f"`{prefix}commande -h` — l’aide de n’importe quelle commande (`--help` aussi)",
                 ),
             ),
-            footer="Tip: /help and ;help are the same · ;aide works too",
+            footer="Astuce : /help et ;help c’est pareil · ;aide aussi · -h partout",
             color=HELP_COLOR,
         ),
         _section(
             key="roleplay",
             emoji="🎭",
-            label="Roleplay",
+            label="Jeu de rôle",
             button="RP",
             fields=(
                 (
-                    "🗣️ In character",
-                    f"`{prefix}pcname <name>` — set your character name\n"
-                    f"`{prefix}pc <text>` · `{prefix}speak` — speak in character\n"
-                    f"`{prefix}pc (action) <text>` — action + dialogue",
+                    "🗣️ En personnage",
+                    f"`{prefix}pcname <nom>` — nom du personnage\n"
+                    f"`{prefix}pc <texte>` · `{prefix}speak` — parler en personnage\n"
+                    f"`{prefix}pc (action) <texte>` — action + dialogue",
                 ),
                 (
                     "🎬 Narration",
-                    f"`{prefix}desc <text>` — narrate a scene (italic)\n"
-                    f"`{prefix}image [prompt]` · `{prefix}dessine` — illustrate this channel's RP\n"
-                    f"`{prefix}image` — local CPU model when ready, otherwise Pollinations\n"
-                    f"`{prefix}get naked` — a gif of dismay\n"
-                    f"`{prefix}time` — your campaign date (Calendar of Harptos)\n"
-                    f"`{prefix}hunger` · `{prefix}faim` — hunger follows that clock",
+                    f"`{prefix}desc <texte>` — narrer une scène (italique)\n"
+                    f"`{prefix}image [prompt]` · `{prefix}dessine` — illustrer le RP de ce salon\n"
+                    f"`{prefix}image` — modèle local CPU s’il est prêt, sinon Pollinations\n"
+                    f"`{prefix}get naked` — un gif de consternation\n"
+                    f"`{prefix}time` — ta date de campagne (calendrier de Harptos)\n"
+                    f"`{prefix}hunger` · `{prefix}faim` — la faim suit cette horloge",
                 ),
             ),
-            footer=f"Tip: {prefix}help hunger",
+            footer=f"Astuce : {prefix}help hunger",
             color=HELP_ROLEPLAY_COLOR,
         ),
         _section(
             key="sheet",
             emoji="📋",
-            label="Character sheet",
-            button="Sheet",
-            intro=f"Full guide: `{prefix}help sheet`",
+            label="Fiche de personnage",
+            button="Fiche",
+            intro=f"Guide complet : `{prefix}help sheet`",
             fields=(
                 (
-                    "🧰 Setup",
-                    f"`{prefix}sheet create <name>` · `show` · `set` · `delete`\n"
-                    f"`{prefix}sheet import` — D&D Beyond PDF *(attach file; fills spells + gear)*",
+                    "🧰 Création",
+                    f"`{prefix}sheet create <nom>` · `show` · `set` · `delete`\n"
+                    f"`{prefix}sheet import` — PDF D&D Beyond *(joindre le fichier ; sorts + équipement)*",
                 ),
                 (
-                    "❤️ Play",
+                    "❤️ En jeu",
                     f"`{prefix}sheet hp` · `money` · `gear` · `prof`\n"
                     f"`{prefix}sheet spells` · `slots` · `condition` · `rest` · `info`",
                 ),
             ),
-            footer=f"Tip: {prefix}sheet slots auto",
+            footer=f"Astuce : {prefix}sheet slots auto",
             color=HELP_SHEET_COLOR,
         ),
         _section(
             key="combat",
             emoji="🃏",
-            label="Card combat",
+            label="Combat à cartes",
             button="Combat",
-            intro=f"Full guide: `{prefix}help combat`",
+            intro=f"Guide complet : `{prefix}help combat`",
             fields=(
                 (
-                    "▶️ Flow",
+                    "▶️ Déroulement",
                     f"`{prefix}init add` → `{prefix}combat start` → `{prefix}combat board`\n"
-                    "Decks come from your sheet and your 5etools export.",
+                    "Les decks viennent de ta fiche et de l’export 5etools.",
                 ),
                 (
-                    "🎯 On your turn",
+                    "🎯 À ton tour",
                     f"`{prefix}combat hand`\n"
-                    f"`{prefix}combat play <card> [target]`\n"
+                    f"`{prefix}combat play <carte> [cible]`\n"
                     f"`{prefix}combat pass`",
                 ),
             ),
-            footer=f"Tip: {prefix}combat play weapon Goblin",
+            footer=f"Astuce : {prefix}combat play weapon Gobelin",
             color=HELP_COMBAT_COLOR,
         ),
         _section(
             key="initiative",
             emoji="⚡",
-            label="Initiative & party",
+            label="Initiative & groupe",
             button="Init",
             fields=(
                 (
-                    "⚡ Turn order",
-                    f"`{prefix}init add @player` — roll from your sheet\n"
-                    f"`{prefix}init add Name 2` — add an NPC (+2)\n"
+                    "⚡ Ordre de tour",
+                    f"`{prefix}init add @joueur` — jet depuis la fiche\n"
+                    f"`{prefix}init add Nom 2` — ajouter un PNJ (+2)\n"
                     f"`{prefix}init next` · `{prefix}init show`",
                 ),
                 (
-                    "💰 Party",
-                    f"`{prefix}party money show` — shared treasury",
+                    "💰 Groupe",
+                    f"`{prefix}party money show` — trésor commun",
                 ),
             ),
-            footer=f"Tip: {prefix}init next",
+            footer=f"Astuce : {prefix}init next",
             color=HELP_INIT_COLOR,
         ),
         _section(
             key="dice",
             emoji="🎲",
-            label="Dice",
-            button="Dice",
+            label="Dés",
+            button="Dés",
             fields=(
                 (
-                    "🎲 Rolls",
+                    "🎲 Jets",
                     f"`{prefix}roll` · `{prefix}r` — `1d20`, `athletics`, `discrétion`\n"
                     f"`adv` / `avantage` · `dis` / `désavantage` · `2d20kh1`\n"
-                    "Heroic inspiration on the sheet is spent automatically on a 1d20 "
-                    "(unless you already asked for advantage).",
+                    "L’inspiration héroïque de la fiche est dépensée automatiquement sur un 1d20 "
+                    "(sauf si tu as déjà demandé l’avantage).",
                 ),
                 (
-                    "💻 Slash commands",
-                    "`/` opens the same commands: `/help` · `/roll` · `/sheet show` · "
+                    "💻 Commandes slash",
+                    "`/` ouvre les mêmes commandes : `/help` · `/roll` · `/sheet show` · "
                     "`/combat board` · `/init next` · `/srd`",
                 ),
             ),
-            footer=f"Tip: {prefix}roll adv perception",
+            footer=f"Astuce : {prefix}roll adv perception",
             color=HELP_DICE_COLOR,
         ),
         _section(
             key="lookup",
             emoji="🔎",
-            label="Lookup",
+            label="Règles",
             button="SRD",
-            intro=f"Full guide: `{prefix}help srd`",
+            intro=f"Guide complet : `{prefix}help srd`",
             fields=(
                 (
                     "📖 5etools",
-                    f"`{prefix}srd <type> <name>` — spell, monster, class, item…\n"
-                    f"`/srd` — pick a type, then a name",
+                    f"`{prefix}srd <type> <name>` — sort, monstre, classe, objet…\n"
+                    f"`/srd` — choisir un type, puis un nom",
                 ),
                 (
                     "💻 Slash",
-                    "`/srd` — pick a type, then a name",
+                    "`/srd` — choisir un type, puis un nom",
                 ),
             ),
-            footer=f"Also: background, feat, armor, item · {prefix}help srd",
+            footer=f"Aussi : background, feat, armor, item · {prefix}help srd",
             color=HELP_LOOKUP_COLOR,
         ),
     ]
@@ -247,12 +248,12 @@ def build_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
                 fields=(
                     (
                         "🎭 Roleplay & lore",
-                        f"`{prefix}npc <name> <text>` · `{prefix}say` — make an NPC speak\n"
-                        f"`{prefix}campaign [query]` · `{prefix}lore` — browse CAMPAIGN forums\n"
-                        f"`{prefix}campaign post lieux <title> -- <text>` — new post *(attach an image)*\n"
+                        f"`{prefix}npc <nom> <texte>` · `{prefix}say` — faire parler un PNJ\n"
+                        f"`{prefix}campaign [recherche]` · `{prefix}lore` — parcourir les forums CAMPAGNE\n"
+                        f"`{prefix}campaign post lieux <titre> -- <texte>` — nouveau post *(joindre une image)*\n"
                         f"`{prefix}campaign document Titre -- texte` — parchemin illustré\n"
-                        f"`{prefix}campaign forum lieux` — extra forum (defaults are created on startup)\n"
-                        f"`{prefix}campaign channels` — file of every channel + category\n"
+                        f"`{prefix}campaign forum lieux` — forum en plus (les défauts sont créés au démarrage)\n"
+                        f"`{prefix}campaign channels` — liste de tous les salons + catégories\n"
                         f"`{prefix}campaign wiki Eauprofonde` — aperçu du wiki FR des Royaumes Oubliés\n"
                         f"`{prefix}campaign import Padhiver` — cette page · `import Padhiver --liens` — + infobox\n"
                         f"`{prefix}campaign repair` — remplit « Import des liens… » et « … suite sur le wiki. »\n"
@@ -260,38 +261,38 @@ def build_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
                         f"`{prefix}campaign audit` — vérifie le forum de chaque post wiki (`audit fix` pour corriger)",
                     ),
                     (
-                        "📋 Sheets & rolls",
-                        f"Put `@player` before args to manage another sheet / roll\n"
+                        "📋 Fiches & jets",
+                        f"Mets `@joueur` avant les arguments pour une autre fiche / un autre jet\n"
                         f"`{prefix}sheet hp @Alice 12` · `{prefix}roll @Alice athletics`\n"
-                        f"`{prefix}sheet money set|add @player <amount>`",
+                        f"`{prefix}sheet money set|add @joueur <montant>`",
                     ),
                     (
                         "⚔️ Initiative & combat",
-                        f"`{prefix}init remove <name>` · `{prefix}init clear`\n"
-                        f"`{prefix}combat start` · `{prefix}combat end` · `{prefix}combat add <name> <hp>`\n"
-                        f"See `{prefix}help combat` for the full card combat guide.",
+                        f"`{prefix}init remove <nom>` · `{prefix}init clear`\n"
+                        f"`{prefix}combat start [monstre] [2h]` · `{prefix}combat end` · `{prefix}combat add <nom> <pv>`\n"
+                        f"Voir `{prefix}help combat` pour le guide complet.",
                     ),
                     (
-                        "💰 Party & players",
-                        f"`{prefix}party money set|add|spend <amount>`\n"
-                        f"`{prefix}player setup @member [name]` — category + sheet + welcome\n"
-                        f"`{prefix}player list` · `{prefix}player sync` · `{prefix}player remove @member`",
+                        "💰 Groupe & joueurs",
+                        f"`{prefix}party money set|add|spend <montant>`\n"
+                        f"`{prefix}player setup @membre [nom]` — catégorie + fiche + bienvenue\n"
+                        f"`{prefix}player list` · `{prefix}player sync` · `{prefix}player remove @membre`",
                     ),
                     (
-                        "⏳ Campaign time",
-                        f"In a player section, omit @player — the channel picks the target\n"
-                        f"`{prefix}time advance 2h` — every sheet · `{prefix}time advance @player 2h`\n"
+                        "⏳ Temps de campagne",
+                        f"Dans une section joueur, omets @joueur — le salon choisit la cible\n"
+                        f"`{prefix}time advance 2h` — toutes les fiches · `{prefix}time advance @joueur 2h`\n"
                         f"`{prefix}time set 12 Hammer 1492 14:00` · `{prefix}time dawn|noon|dusk|midnight`\n"
-                        "Each new calendar day ticks that player's hunger",
+                        "Chaque nouveau jour de calendrier fait avancer la faim de ce joueur",
                     ),
                     (
-                        "🍖 Hunger",
-                        f"`{prefix}hunger all` — party status\n"
-                        f"`{prefix}hunger eat @player` · `half` — stamp a meal on that clock\n"
-                        f"`{prefix}hunger skip @player` — clock +1 day, no meal · `{prefix}hunger set @player 2`",
+                        "🍖 Faim",
+                        f"`{prefix}hunger all` — état du groupe\n"
+                        f"`{prefix}hunger eat @joueur` · `half` — noter un repas sur cette horloge\n"
+                        f"`{prefix}hunger skip @joueur` — horloge +1 jour, sans repas · `{prefix}hunger set @joueur 2`",
                     ),
                 ),
-                footer="Only visible to server administrators",
+                footer="Visible seulement pour le staff",
                 color=HELP_ADMIN_COLOR,
             )
         )
@@ -304,91 +305,92 @@ def build_combat_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSecti
         _section(
             key="start",
             emoji="🎯",
-            label="Getting started",
-            button="Start",
+            label="Pour commencer",
+            button="Début",
             fields=(
                 (
-                    "🧰 Prepare characters",
-                    f"`{prefix}sheet create <name>` · `{prefix}sheet set class fighter`\n"
-                    f"`{prefix}sheet spells add fire-bolt` — spells from your 5etools export\n"
-                    f"`{prefix}sheet slots auto` — track spell slots *(optional)*",
+                    "🧰 Préparer les persos",
+                    f"`{prefix}sheet create <nom>` · `{prefix}sheet set class fighter`\n"
+                    f"`{prefix}sheet spells add fire-bolt` — sorts de l’export 5etools\n"
+                    f"`{prefix}sheet slots auto` — suivre les emplacements *(optionnel)*",
                 ),
                 (
-                    "⚔️ Set up the fight",
-                    "Run these in that player's OOC or roleplay channel — each section has its own fight.\n"
-                    f"`{prefix}init add @player` · `{prefix}init add Goblin 2`\n"
-                    f"`{prefix}combat start` — deal decks *(admin)*\n"
-                    f"`{prefix}combat board` — open the play table",
+                    "⚔️ Lancer le combat",
+                    "Dans le salon OOC ou roleplay du joueur — chaque section a son propre combat.\n"
+                    f"`{prefix}init add @joueur` · `{prefix}init add Gobelin 2`\n"
+                    f"`{prefix}combat start [monstre] [2h]` — ajoute le joueur de la section, le monstre, et avance l’horloge *(staff)*\n"
+                    f"`{prefix}combat board` — ouvrir la table",
                 ),
             ),
-            footer=f"Tip: run {prefix}init show to check turn order",
+            footer=f"Astuce : {prefix}init show pour voir l’ordre",
             color=HELP_COLOR,
         ),
         _section(
             key="play",
             emoji="🃏",
-            label="Playing your turn",
-            button="Play",
+            label="Jouer son tour",
+            button="Jouer",
             fields=(
                 (
-                    "🖥️ Board",
-                    f"`{prefix}combat board` — card dropdown, spell pages, End turn, View hand",
+                    "🖥️ Table",
+                    f"`{prefix}combat board` — menu de cartes, pages de sorts, Fin de tour, Voir la main",
                 ),
                 (
-                    "⌨️ Commands",
-                    f"`{prefix}combat play <card> [target]`\n"
-                    f"`{prefix}combat hand` — your current cards\n"
-                    f"`{prefix}combat pass` — end turn without playing",
+                    "⌨️ Commandes",
+                    f"`{prefix}combat play <carte> [cible]`\n"
+                    f"`{prefix}combat hand` — tes cartes actuelles\n"
+                    f"`{prefix}combat pass` — finir le tour sans jouer",
                 ),
                 (
-                    "📌 Examples",
-                    f"`{prefix}combat play weapon Goblin`\n"
-                    f"`{prefix}combat play fire-bolt Goblin`\n"
+                    "📌 Exemples",
+                    f"`{prefix}combat play weapon Gobelin`\n"
+                    f"`{prefix}combat play fire-bolt Gobelin`\n"
                     f"`{prefix}combat play cure-wounds @Alice`",
                 ),
             ),
-            footer="Tip: card names match spell names from your export or weapon/dodge",
+            footer="Astuce : les noms de cartes suivent les sorts de l’export, ou weapon/dodge",
             color=HELP_COMBAT_COLOR,
         ),
         _section(
             key="deck",
             emoji="📚",
-            label="What's in your deck",
+            label="Dans le deck",
             button="Deck",
             fields=(
                 (
-                    "⚔️ Always included",
-                    "• **Weapon Attack** — equipped weapon dice + ability + proficiency\n"
-                    "• **Dodge** — halve all damage until your next turn",
+                    "⚔️ Toujours là",
+                    "• **Attaque d’arme** — dés de l’arme équipée + caractéristique + maîtrise\n"
+                    "• **Esquive** — moitié des dégâts jusqu’à ton prochain tour",
                 ),
                 (
-                    "✨ From your sheet",
-                    f"• Spells listed in `{prefix}sheet spells`\n"
-                    "• Every known spell is always in the play menu — pick a target when you cast\n"
-                    "• One legal target skips the picker · extra spells paginate past Discord's 25-option cap\n"
-                    "• Weapon and damaging spells roll d20 vs AC (conditions can grant adv/dis)\n"
-                    "• Shield negates the next hit · Mage Armor −1d4 · Bless +1d4 damage\n"
-                    "• Cantrips also appear in the draw · leveled spells use slots\n"
-                    "• Attacks, heals, Dodge, and buffs (Shield, Mage Armor, Bless…)\n"
-                    "• Homebrew spells get a generic attack card",
+                    "✨ Depuis la fiche",
+                    f"• Sorts listés dans `{prefix}sheet spells`\n"
+                    "• Chaque sort connu est toujours dans le menu — choisis une cible en le lançant\n"
+                    "• Une seule cible légale saute le menu · les sorts en trop paginent au-delà de 25 options Discord\n"
+                    "• Arme et sorts d’attaque : d20 vs CA (les états peuvent donner av/désav)\n"
+                    "• Sorts à jet de sauvegarde : DD de la fiche (demi-dégâts ou état selon le sort)\n"
+                    "• Bouclier annule le prochain coup · Armure du mage −1d4 · Bénédiction +1d4 dégâts\n"
+                    "• Les tours de magie apparaissent aussi à la pioche · les sorts de niveau consomment des emplacements\n"
+                    "• Attaques, soins, Esquive, et buffs (Bouclier, Armure du mage, Bénédiction…)\n"
+                    "• Les sorts homebrew ont une carte d’attaque générique",
                 ),
                 (
-                    "♻️ Discard",
-                    "Played cards go to a discard pile. When the deck is empty, it is shuffled back in.",
+                    "♻️ Défausse",
+                    "Les cartes jouées vont à la défausse. Deck vide : on mélange et on recommence.",
                 ),
                 (
-                    "🏁 Victory",
-                    "Players vs monsters. Combat ends when one side is down. Attacks target the other side.",
+                    "🏁 Victoire",
+                    "Joueurs contre monstres. Le combat s’arrête quand un camp est à terre. Les attaques visent l’autre camp.",
                 ),
                 (
-                    "❤️ HP",
-                    "Player HP is shown on the board. Monster HP stays hidden. "
-                    "Players at 0 HP stay in the fight and roll death saves (already on the sheet). "
-                    f"`{prefix}combat add Wolf` loads the SRD profile (attack, AC, 1–2 traits). "
-                    f"Damage and healing still update `{prefix}sheet hp` for players.",
+                    "❤️ PV",
+                    "Les PV des joueurs s’affichent. Ceux des monstres restent cachés. "
+                    "Un PJ à 0 PV reste dans le combat et fait des jets de mort (déjà sur la fiche). "
+                    f"`{prefix}combat add Loup` charge le profil SRD (attaque, CA, 1–2 traits). "
+                    f"Dégâts et soins mettent à jour `{prefix}sheet hp` pour les joueurs.",
                 ),
             ),
-            footer=f"Tip: {prefix}srd spell fireball to preview a spell",
+            footer=f"Astuce : {prefix}srd spell fireball pour voir un sort",
             color=HELP_MAGIC_COLOR,
         ),
         _section(
@@ -396,18 +398,18 @@ def build_combat_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSecti
             emoji="⚡",
             label="Initiative",
             button="Init",
-            intro=f"Card combat uses the same turn order as `{prefix}init`. One tracker per player section.",
+            intro=f"Le combat à cartes utilise le même ordre que `{prefix}init`. Un tracker par section joueur.",
             fields=(
                 (
-                    "⚡ Commands",
-                    f"`{prefix}init add @player` — rolls d20 + DEX from sheet\n"
-                    f"`{prefix}init add Name 2` — NPC with a fixed bonus\n"
-                    f"`{prefix}init next` — advance turn manually\n"
-                    f"`{prefix}init show` — display the order\n"
-                    f"`{prefix}init clear` — this player's section only",
+                    "⚡ Commandes",
+                    f"`{prefix}init add @joueur` — d20 + DEX de la fiche\n"
+                    f"`{prefix}init add Nom 2` — PNJ avec un bonus fixe\n"
+                    f"`{prefix}init next` — passer le tour à la main\n"
+                    f"`{prefix}init show` — afficher l’ordre\n"
+                    f"`{prefix}init clear` — cette section joueur seulement",
                 ),
             ),
-            footer=f"Tip: {prefix}init next also works outside card combat",
+            footer=f"Astuce : {prefix}init next marche aussi hors combat à cartes",
             color=HELP_INIT_COLOR,
         ),
     ]
@@ -422,18 +424,18 @@ def build_combat_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSecti
                 fields=(
                     (
                         "🃏 Combat",
-                        f"Only in a player OOC/roleplay channel — FOX and MAX can fight at the same time.\n"
-                        f"`{prefix}combat start` — start card combat from this section's initiative\n"
-                        f"`{prefix}combat end` — stop this section's fight\n"
-                        f"`{prefix}combat add Goblin` — add a monster from the SRD (HP stays hidden)\n"
-                        f"`{prefix}combat add Name 30` — custom HP · `{prefix}combat add @player` — linked player",
+                        f"Seulement dans un salon OOC/roleplay du joueur — FOX et MAX peuvent se battre en même temps.\n"
+                        f"`{prefix}combat start [monstre] [2h]` — ajoute le joueur de la section + le monstre, puis lance le combat\n"
+                        f"`{prefix}combat end` — arrêter le combat de cette section\n"
+                        f"`{prefix}combat add Gobelin` — ajouter un monstre SRD (PV cachés)\n"
+                        f"`{prefix}combat add Nom 30` — PV perso · `{prefix}combat add @joueur` — joueur lié",
                     ),
                     (
                         "⚡ Initiative",
-                        f"`{prefix}init remove <name>` · `{prefix}init clear`",
+                        f"`{prefix}init remove <nom>` · `{prefix}init clear`",
                     ),
                 ),
-                footer="Only visible to server administrators",
+                footer="Visible seulement pour le staff",
                 color=HELP_ADMIN_COLOR,
             )
         )
@@ -446,48 +448,48 @@ def build_srd_help_sections(*, prefix: str) -> list[HelpSection]:
         _section(
             key="lookup",
             emoji="🔎",
-            label="Look up rules",
-            button="Lookup",
-            intro="Official 2024 rules and your 5etools homebrew.",
+            label="Chercher une règle",
+            button="Recherche",
+            intro="Règles officielles 2024 et ton homebrew 5etools.",
             fields=(
                 (
-                    "📖 Command",
+                    "📖 Commande",
                     f"`{prefix}srd <type> <name>`",
                 ),
                 (
-                    "✨ Magic & characters",
+                    "✨ Magie & persos",
                     "`spell` · `class` · `species` · `background` · `feat`",
                 ),
                 (
-                    "⚔️ Combat & gear",
+                    "⚔️ Combat & matériel",
                     "`monster` · `condition` · `weapon` · `armor` · `item`",
                 ),
             ),
-            footer=f"Example: {prefix}srd spell fireball",
+            footer=f"Exemple : {prefix}srd spell fireball",
             color=HELP_LOOKUP_COLOR,
         ),
         _section(
             key="search",
             emoji="💻",
-            label="Search tips",
-            button="Tips",
+            label="Astuces de recherche",
+            button="Astuces",
             fields=(
                 (
                     "💻 Slash",
-                    "`/srd` — choose a type, then start typing a name",
+                    "`/srd` — choisir un type, puis taper un nom",
                 ),
                 (
-                    "🏷️ Shortcuts",
+                    "🏷️ Raccourcis",
                     f"`{prefix}srd race` → species · `{prefix}srd cond` → condition\n"
                     f"`{prefix}srd creature` → monster · `{prefix}srd gear` → item",
                 ),
                 (
-                    "🔎 Approximate",
-                    f"Partial names open a list: `{prefix}srd item potion`\n"
-                    f"`{prefix}srd monster ~goblin` — list close names even if **Goblin** exists",
+                    "🔎 Approximatif",
+                    f"Un nom partiel ouvre une liste : `{prefix}srd item potion`\n"
+                    f"`{prefix}srd monster ~goblin` — noms proches même si **Goblin** existe",
                 ),
             ),
-            footer="Partial names work · 2024 rules win over 2014 reprints",
+            footer="Les noms partiels marchent · les règles 2024 priment sur les reprints 2014",
             color=HELP_LOOKUP_COLOR,
         ),
     ]
@@ -498,20 +500,20 @@ def build_sheet_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSectio
         _section(
             key="setup",
             emoji="🧰",
-            label="Setup",
-            button="Setup",
+            label="Création",
+            button="Création",
             fields=(
                 (
-                    "📋 Character",
-                    f"`{prefix}sheet create <name>` — create\n"
-                    f"`{prefix}sheet import` — D&D Beyond PDF *(attach file; fills spells + gear)*\n"
-                    f"`{prefix}sheet show` — display\n"
-                    f"`{prefix}sheet delete` — delete",
+                    "📋 Personnage",
+                    f"`{prefix}sheet create <nom>` — créer\n"
+                    f"`{prefix}sheet import` — PDF D&D Beyond *(joindre le fichier ; sorts + équipement)*\n"
+                    f"`{prefix}sheet show` — afficher\n"
+                    f"`{prefix}sheet delete` — supprimer",
                 ),
                 (
-                    "✏️ Edit",
-                    f"`{prefix}sheet set <field> <value>` — name, species, class, level, stats…\n"
-                    f"`{prefix}sheet info` — 5etools info for species / class / background",
+                    "✏️ Modifier",
+                    f"`{prefix}sheet set <champ> <valeur>` — nom, espèce, classe, niveau, caracs…\n"
+                    f"`{prefix}sheet info` — infos 5etools pour espèce / classe / historique",
                 ),
             ),
             color=HELP_SHEET_COLOR,
@@ -519,27 +521,27 @@ def build_sheet_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSectio
         _section(
             key="resources",
             emoji="💰",
-            label="Resources",
-            button="Gear",
+            label="Ressources",
+            button="Matos",
             fields=(
                 (
-                    "❤️ Survival",
-                    f"`{prefix}sheet hp <current> [max]` — hit points\n"
-                    f"`{prefix}sheet money` — wallet (`show` / `spend` / `pay`)",
+                    "❤️ Survie",
+                    f"`{prefix}sheet hp <actuel> [max]` — points de vie\n"
+                    f"`{prefix}sheet money` — bourse (`show` / `spend` / `pay`)",
                 ),
                 (
-                    "🎒 Equipment & skills",
-                    f"`{prefix}sheet gear` — equipment from your 5etools export\n"
-                    f"`{prefix}sheet gear add <name> [qty] [2kg]` · `remove` · `equip` · `show`\n"
-                    f"`{prefix}sheet gear equip` updates AC from armor, shield, and Dex\n"
-                    f"`{prefix}sheet gear put <item|all> in <bag|belt>` · `hold` · `belt` · `stow`\n"
-                    f"`{prefix}sheet gear let <item> [qty] [at <place>] [-- note]` — leave gear\n"
-                    f"`{prefix}sheet gear take <item> [qty] [at <place>]` — pick it up\n"
-                    f"`{prefix}sheet gear weight <name> <kg>` — custom item weight (STR × 7.5 kg)\n"
-                    f"`{prefix}sheet gear bag <name> [kg]` — mark a custom item as a bag (default 15 kg)\n"
-                    "Over capacity slows speed (does not block carrying)\n"
-                    f"`{prefix}sheet prof save <ability>` — save proficiency\n"
-                    f"`{prefix}sheet prof skill <skill> [expertise]` — skill proficiency",
+                    "🎒 Équipement & compétences",
+                    f"`{prefix}sheet gear` — équipement de l’export 5etools\n"
+                    f"`{prefix}sheet gear add <nom> [qté] [2kg]` · `remove` · `equip` · `show`\n"
+                    f"`{prefix}sheet gear equip` met à jour la CA selon armure, bouclier et Dex\n"
+                    f"`{prefix}sheet gear put <objet|all> in <sac|ceinture>` · `hold` · `belt` · `stow`\n"
+                    f"`{prefix}sheet gear let <objet> [qté] [at <lieu>] [-- note]` — laisser du matériel\n"
+                    f"`{prefix}sheet gear take <objet> [qté] [at <lieu>]` — le reprendre\n"
+                    f"`{prefix}sheet gear weight <nom> <kg>` — poids d’un objet perso (FOR × 7,5 kg)\n"
+                    f"`{prefix}sheet gear bag <nom> [kg]` — marquer un objet perso comme sac (15 kg par défaut)\n"
+                    "Au-delà de la capacité, la vitesse baisse (porter reste possible)\n"
+                    f"`{prefix}sheet prof save <carac>` — maîtrise de sauvegarde\n"
+                    f"`{prefix}sheet prof skill <compétence> [expertise]` — maîtrise de compétence",
                 ),
             ),
             color=HELP_COLOR,
@@ -547,19 +549,19 @@ def build_sheet_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSectio
         _section(
             key="magic",
             emoji="✨",
-            label="Magic",
-            button="Magic",
+            label="Magie",
+            button="Magie",
             fields=(
                 (
-                    "📖 Spells",
-                    f"`{prefix}sheet spells` — known spells list\n"
-                    f"`{prefix}sheet spells add|remove|show <name>`",
+                    "📖 Sorts",
+                    f"`{prefix}sheet spells` — sorts connus\n"
+                    f"`{prefix}sheet spells add|remove|show <nom>`",
                 ),
                 (
-                    "🔮 Slots",
-                    f"`{prefix}sheet slots` — spell slot tracking\n"
-                    f"`{prefix}sheet slots use <level> [count]` — ex: `{prefix}sheet slots use 1`\n"
-                    f"`{prefix}sheet slots recover` · `set` · `auto` (PHB from class/level)",
+                    "🔮 Emplacements",
+                    f"`{prefix}sheet slots` — suivi des emplacements\n"
+                    f"`{prefix}sheet slots use <niveau> [nombre]` — ex. : `{prefix}sheet slots use 1`\n"
+                    f"`{prefix}sheet slots recover` · `set` · `auto` (PHB selon classe/niveau)",
                 ),
             ),
             color=HELP_MAGIC_COLOR,
@@ -567,32 +569,32 @@ def build_sheet_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSectio
         _section(
             key="status",
             emoji="❤️",
-            label="Status & rest",
-            button="Status",
+            label="États & repos",
+            button="États",
             fields=(
                 (
-                    "📌 Conditions",
-                    f"`{prefix}sheet condition <name>` — toggle condition\n"
-                    f"`{prefix}sheet inspire` — heroic inspiration\n"
+                    "📌 États",
+                    f"`{prefix}sheet condition <nom>` — activer/désactiver un état\n"
+                    f"`{prefix}sheet inspire` — inspiration héroïque\n"
                     f"`{prefix}sheet deathsave success|failure`",
                 ),
                 (
-                    "🍖 Hunger",
-                    f"Tied to that player's `{prefix}time` clock · a meal covers that calendar day\n"
-                    f"`{prefix}hunger` · `{prefix}faim` — status (3 + Con days, then 1 exhaustion/day)\n"
-                    f"`{prefix}hunger eat` — consume a ration · `half` — half rations\n"
-                    f"`{prefix}time advance 1d` — ticks hunger at midnight *(DM)*",
+                    "🍖 Faim",
+                    f"Liée à l’horloge `{prefix}time` de ce joueur · un repas couvre ce jour de calendrier\n"
+                    f"`{prefix}hunger` · `{prefix}faim` — état (3 + Con jours, puis 1 épuisement/jour)\n"
+                    f"`{prefix}hunger eat` — manger une ration · `half` — demi-rations\n"
+                    f"`{prefix}time advance 1d` — avance la faim à minuit *(MJ)*",
                 ),
                 (
-                    "🏕️ Rest",
-                    f"`{prefix}sheet rest short [dice]` — warlock pact slots recover\n"
-                    f"`{prefix}sheet rest long` — HP, hit dice, spell slots, and +8h on that player's `{prefix}time`\n"
-                    f"`{prefix}time rest long [@player]` — that player's clock +8 hours *(DM)*\n"
-                    f"`{prefix}time rest long` — every character sheet *(DM)*",
+                    "🏕️ Repos",
+                    f"`{prefix}sheet rest short [dés]` — les emplacements de pacte du warlock reviennent\n"
+                    f"`{prefix}sheet rest long` — PV, dés de vie, emplacements, et +8 h sur le `{prefix}time` de ce joueur\n"
+                    f"`{prefix}time rest long [@joueur]` — horloge de ce joueur +8 heures *(MJ)*\n"
+                    f"`{prefix}time rest long` — toutes les fiches *(MJ)*",
                 ),
                 (
-                    "🔎 Lookup",
-                    f"`{prefix}help srd` — spells, monsters, items, conditions…",
+                    "🔎 Recherche",
+                    f"`{prefix}help srd` — sorts, monstres, objets, états…",
                 ),
             ),
             color=HELP_STATUS_COLOR,
@@ -606,16 +608,16 @@ def build_sheet_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSectio
                 emoji="🛡️",
                 label="Admin",
                 button="Admin",
-                intro="Put `@player` before arguments, or run the command in that player's section.",
+                intro="Mets `@joueur` avant les arguments, ou lance la commande dans sa section.",
                 fields=(
                     (
-                        "👤 Other players",
+                        "👤 Autres joueurs",
                         f"`{prefix}sheet show @Alice` · `{prefix}sheet hp @Alice 12` · `{prefix}sheet slots use @Alice 1`\n"
-                        f"`{prefix}sheet money set|add @player <amount>`\n"
-                        f"`{prefix}sheet create @player <name>` · `{prefix}sheet import @player` · `{prefix}sheet delete @player`",
+                        f"`{prefix}sheet money set|add @joueur <montant>`\n"
+                        f"`{prefix}sheet create @joueur <nom>` · `{prefix}sheet import @joueur` · `{prefix}sheet delete @joueur`",
                     ),
                 ),
-                footer="Only visible to server administrators",
+                footer="Visible seulement pour le staff",
                 color=HELP_ADMIN_COLOR,
             )
         )
@@ -626,36 +628,36 @@ def build_sheet_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSectio
 def build_hunger_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
     fields: list[tuple[str, str]] = [
         (
-            "🍖 Your character",
-            "Hunger follows this player's campaign clock. A meal covers that calendar day; "
-            "the next midnight starts a missed day.\n"
-            f"`{prefix}hunger` · `{prefix}faim` — status (last meal + days without food)\n"
-            f"`{prefix}hunger eat` · `manger` — eat a ration (resets hunger)\n"
-            f"`{prefix}hunger half` · `demi` — half rations (counts as 0.5 day)",
+            "🍖 Ton personnage",
+            "La faim suit l’horloge de campagne de ce joueur. Un repas couvre ce jour de calendrier ; "
+            "le minuit suivant commence un jour manqué.\n"
+            f"`{prefix}hunger` · `{prefix}faim` — état (dernier repas + jours sans manger)\n"
+            f"`{prefix}hunger eat` · `manger` — manger une ration (remet la faim à zéro)\n"
+            f"`{prefix}hunger half` · `demi` — demi-rations (compte pour 0,5 jour)",
         ),
         (
             "📜 PHB",
-            "You can go **3 + Constitution modifier** days without food (minimum 1).\n"
-            "Each day past that limit adds 1 exhaustion.",
+            "Tu tiens **3 + modificateur de Constitution** jours sans manger (minimum 1).\n"
+            "Chaque jour au-delà ajoute 1 épuisement.",
         ),
     ]
     if is_admin:
         fields.append(
             (
-                "🛡️ DM",
-                f"`{prefix}time advance 1d` — ticks hunger at each new calendar day\n"
-                f"`{prefix}hunger skip @player` — clock +1 day, no meal\n"
-                f"`{prefix}hunger set @player 2` · `{prefix}hunger all` · `{prefix}hunger eatall`",
+                "🛡️ MJ",
+                f"`{prefix}time advance 1d` — avance la faim à chaque nouveau jour de calendrier\n"
+                f"`{prefix}hunger skip @joueur` — horloge +1 jour, sans repas\n"
+                f"`{prefix}hunger set @joueur 2` · `{prefix}hunger all` · `{prefix}hunger eatall`",
             )
         )
     return [
         _section(
             key="hunger",
             emoji="🍖",
-            label="Hunger",
-            button="Hunger",
+            label="Faim",
+            button="Faim",
             fields=tuple(fields),
-            footer=f"Tip: {prefix}time shows hunger on the same clock",
+            footer=f"Astuce : {prefix}time affiche la faim sur la même horloge",
             color=HELP_STATUS_COLOR,
         )
     ]
@@ -695,22 +697,22 @@ def build_simple_help_embed(
 # Compatibility helpers used by older call sites / tests.
 def build_help_embeds(*, prefix: str, is_admin: bool) -> list[discord.Embed]:
     sections = build_help_sections(prefix=prefix, is_admin=is_admin)
-    return [build_help_embed(title="Arkann — commands", sections=sections, index=0)]
+    return [build_help_embed(title="Arkann — commandes", sections=sections, index=0)]
 
 
 def build_sheet_help_embeds(*, prefix: str, is_admin: bool) -> list[discord.Embed]:
     sections = build_sheet_help_sections(prefix=prefix, is_admin=is_admin)
-    return [build_help_embed(title="Character sheet", sections=sections, index=0)]
+    return [build_help_embed(title="Fiche de personnage", sections=sections, index=0)]
 
 
 def build_combat_help_embeds(*, prefix: str, is_admin: bool) -> list[discord.Embed]:
     sections = build_combat_help_sections(prefix=prefix, is_admin=is_admin)
-    return [build_help_embed(title="Card combat", sections=sections, index=0)]
+    return [build_help_embed(title="Combat à cartes", sections=sections, index=0)]
 
 
 def build_combat_help_message(*, prefix: str, is_admin: bool) -> str:
     sections = build_combat_help_sections(prefix=prefix, is_admin=is_admin)
-    parts = ["**Card combat**"]
+    parts = ["**Combat à cartes**"]
     for section in sections:
         parts.append(f"\n{section.emoji} **{section.label}**\n{section.body}")
     return "\n".join(parts)
@@ -718,7 +720,7 @@ def build_combat_help_message(*, prefix: str, is_admin: bool) -> str:
 
 def build_help_message(*, prefix: str, is_admin: bool) -> str:
     sections = build_help_sections(prefix=prefix, is_admin=is_admin)
-    parts = ["**Arkann — commands**"]
+    parts = ["**Arkann — commandes**"]
     for section in sections:
         parts.append(f"\n{section.emoji} **{section.label}**\n{section.body}")
     return "\n".join(parts)
@@ -726,7 +728,7 @@ def build_help_message(*, prefix: str, is_admin: bool) -> str:
 
 def build_sheet_help_message(*, prefix: str, is_admin: bool) -> str:
     sections = build_sheet_help_sections(prefix=prefix, is_admin=is_admin)
-    parts = ["**Character sheet**"]
+    parts = ["**Fiche de personnage**"]
     for section in sections:
         parts.append(f"\n{section.emoji} **{section.label}**\n{section.body}")
     return "\n".join(parts)

@@ -7,7 +7,12 @@ from bot.command_helpers import command_reply, delete_command
 from bot.help_text import HELP_COLOR
 from bot.messaging import send_message
 from config import PREFIX
-from sheets.context import get_sheet_for_owner, resolve_guild_id, save_owner_sheet, target_label
+from sheets.context import (
+    get_sheet_for_owner,
+    resolve_guild_id,
+    save_owner_sheet,
+    target_label,
+)
 from sheets.currency import parse_currency
 from sheets.storage import get_sheet, transfer_currency
 
@@ -19,7 +24,9 @@ def register_money_commands(sheet_group: Group) -> None:
         invoke_without_command=True,
         help="Manage character wallet (50 gp, 5 gp 3 sp).",
     )
-    async def sheet_money_group(ctx: Context, member: discord.Member | None = None) -> None:
+    async def sheet_money_group(
+        ctx: Context, member: discord.Member | None = None
+    ) -> None:
         result = await get_sheet_for_owner(ctx, member)
         if result is None:
             return
@@ -51,7 +58,9 @@ def register_money_commands(sheet_group: Group) -> None:
         name="show",
         help=f"Display wallet. Usage: `{PREFIX}sheet money show [@player]`",
     )
-    async def sheet_money_show(ctx: Context, member: discord.Member | None = None) -> None:
+    async def sheet_money_show(
+        ctx: Context, member: discord.Member | None = None
+    ) -> None:
         result = await get_sheet_for_owner(ctx, member)
         if result is None:
             return
@@ -85,7 +94,9 @@ def register_money_commands(sheet_group: Group) -> None:
 
         save_owner_sheet(ctx, owner_id, sheet)
         label = target_label(member, sheet)
-        await command_reply(ctx, f"{label}: wallet set to **{sheet.currency.format()}**.")
+        await command_reply(
+            ctx, f"{label}: wallet set to **{sheet.currency.format()}**."
+        )
         await delete_command(ctx)
 
     @sheet_money_group.command(
@@ -191,7 +202,9 @@ def register_money_commands(sheet_group: Group) -> None:
 
         recipient_sheet = get_sheet(user_id=recipient.id, guild_id=guild_id)
         if recipient_sheet is None:
-            await command_reply(ctx, f"**{recipient.display_name}** has no character sheet.")
+            await command_reply(
+                ctx, f"**{recipient.display_name}** has no character sheet."
+            )
             return
 
         try:

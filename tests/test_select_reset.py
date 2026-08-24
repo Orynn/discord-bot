@@ -9,11 +9,17 @@ from srd.definition_view import (
     entries_from_select_options,
 )
 from srd.glossary import GlossaryEntry
-from sheets.spell_view import SPELL_SELECT_PREFIX, SpellSelectView, spell_view_from_message
+from sheets.spell_view import (
+    SPELL_SELECT_PREFIX,
+    SpellSelectView,
+    spell_view_from_message,
+)
 
 
 def _entry(name: str = "Fireball") -> GlossaryEntry:
-    return GlossaryEntry(name=name, kind="spell", slug=name.lower(), url="", parent_slug=None)
+    return GlossaryEntry(
+        name=name, kind="spell", slug=name.lower(), url="", parent_slug=None
+    )
 
 
 class _FakeRow:
@@ -79,20 +85,35 @@ class TestDefinitionSelectReset(unittest.TestCase):
 
 class TestSpellSelectReset(unittest.TestCase):
     def test_rebuilds_all_chunks_from_message(self) -> None:
-        entries = [(f"slug-{index}", f"Spell {index:02d}", "1st-level") for index in range(26)]
+        entries = [
+            (f"slug-{index}", f"Spell {index:02d}", "1st-level") for index in range(26)
+        ]
         original = SpellSelectView(entries)
         self.assertEqual(len(original.children), 2)
         message = _FakeMessage([_FakeRow([child]) for child in original.children])
 
         rebuilt = spell_view_from_message(message)
         self.assertIsNotNone(rebuilt)
-        rebuilt_values = [option.value for child in rebuilt.children for option in child.options]
-        original_values = [option.value for child in original.children for option in child.options]
+        rebuilt_values = [
+            option.value for child in rebuilt.children for option in child.options
+        ]
+        original_values = [
+            option.value for child in original.children for option in child.options
+        ]
         self.assertEqual(sorted(rebuilt_values), sorted(original_values))
         self.assertTrue(
-            all(not option.default for child in rebuilt.children for option in child.options)
+            all(
+                not option.default
+                for child in rebuilt.children
+                for option in child.options
+            )
         )
-        self.assertTrue(all(child.custom_id.startswith(SPELL_SELECT_PREFIX) for child in rebuilt.children))
+        self.assertTrue(
+            all(
+                child.custom_id.startswith(SPELL_SELECT_PREFIX)
+                for child in rebuilt.children
+            )
+        )
 
     def test_single_spell_is_not_preselected(self) -> None:
         view = SpellSelectView([("fireball", "Fireball", "3rd-level")])

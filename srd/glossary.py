@@ -40,7 +40,9 @@ class _GlossaryStore:
     dirty: bool = False
 
     def rebuild_index(self) -> None:
-        self.by_length = sorted(self.by_key.values(), key=lambda entry: len(entry.name), reverse=True)
+        self.by_length = sorted(
+            self.by_key.values(), key=lambda entry: len(entry.name), reverse=True
+        )
         self.matcher = _compile_matcher(self.by_length)
         self.dirty = False
 
@@ -138,7 +140,9 @@ def _register_skills() -> None:
     index = get_index()
     for skill in SKILL_ABILITIES:
         display_name = format_skill_name(skill)
-        indexed = index.skills_by_slug.get(skill) or index.skills_by_name.get(display_name.lower())
+        indexed = index.skills_by_slug.get(skill) or index.skills_by_name.get(
+            display_name.lower()
+        )
         if indexed is not None:
             register_item(
                 name=indexed["name"],
@@ -184,7 +188,9 @@ async def load(*, force_refresh: bool = False) -> None:
                 )
             _store.rebuild_index()
             _store.loaded = True
-            logger.info("Rules glossary loaded from cache (%s entries).", len(_store.by_key))
+            logger.info(
+                "Rules glossary loaded from cache (%s entries).", len(_store.by_key)
+            )
             _register_skills()
             _store.rebuild_index()
             return
@@ -194,11 +200,15 @@ async def load(*, force_refresh: bool = False) -> None:
         for item in items:
             if endpoint == "classes" and item.get("subclass_of"):
                 parent = item["subclass_of"]
-                parent_key = parent.get("key") if isinstance(parent, dict) else str(parent)
+                parent_key = (
+                    parent.get("key") if isinstance(parent, dict) else str(parent)
+                )
                 register_item(
                     name=item["name"],
                     kind="subclass",
-                    slug=fivetools.short_slug(item.get("slug") or item.get("key") or item["name"]),
+                    slug=fivetools.short_slug(
+                        item.get("slug") or item.get("key") or item["name"]
+                    ),
                     source=item_source(item),
                     parent_slug=fivetools.short_slug(parent_key),
                 )
@@ -212,7 +222,9 @@ async def load(*, force_refresh: bool = False) -> None:
             continue
         register_from_api_item(item=normalized, kind="condition")
 
-    for item in (await fivetools.fetch_all(endpoint="weapons")) + (await fivetools.fetch_all(endpoint="armor")):
+    for item in (await fivetools.fetch_all(endpoint="weapons")) + (
+        await fivetools.fetch_all(endpoint="armor")
+    ):
         kind = "weapon" if item.get("weapon") else "armor"
         register_from_api_item(item=item, kind=kind)
 

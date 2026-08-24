@@ -64,7 +64,9 @@ class TestResolveOwner(unittest.IsolatedAsyncioTestCase):
             owner_id = await resolve_owner(ctx, member)
         self.assertIsNone(owner_id)
         reply.assert_awaited_once()
-        self.assertIn("cannot consult another player's information", reply.await_args.args[1])
+        self.assertIn(
+            "cannot consult another player's information", reply.await_args.args[1]
+        )
 
     async def test_staff_without_mention_uses_player_section(self) -> None:
         ctx = MagicMock()
@@ -97,7 +99,9 @@ class TestResolveOwner(unittest.IsolatedAsyncioTestCase):
         ctx.guild.owner_id = 1
 
         with unittest.mock.patch("sheets.context.infer_player_id", return_value=None):
-            with unittest.mock.patch("sheets.context.command_reply", new=AsyncMock()) as reply:
+            with unittest.mock.patch(
+                "sheets.context.command_reply", new=AsyncMock()
+            ) as reply:
                 owner_id = await resolve_owner(ctx, None)
         self.assertIsNone(owner_id)
         reply.assert_awaited_once()

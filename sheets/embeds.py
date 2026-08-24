@@ -4,7 +4,14 @@ from sheets.armor import format_ac_field
 from sheets.data import ABILITIES, CharacterSheet, ability_modifier, format_modifier
 from sheets.hunger import format_hunger_line, hunger_state
 from sheets.skills import format_skills_block
-from srd.embeds import SHEET_COLOR, background_embed, class_embed, species_embed, titled, truncate
+from srd.embeds import (
+    SHEET_COLOR,
+    background_embed,
+    class_embed,
+    species_embed,
+    titled,
+    truncate,
+)
 
 DISCORD_EMBED_DESCRIPTION_LIMIT = 4096
 
@@ -74,7 +81,9 @@ def build_sheet_embed(sheet: CharacterSheet) -> discord.Embed:
     if hunger_state(sheet) != "fed" or sheet.fed_today:
         status_bits.append(f"🍖 {format_hunger_line(sheet)}")
     if sheet.conditions:
-        status_bits.append("Conditions: " + ", ".join(c.title() for c in sheet.conditions))
+        status_bits.append(
+            "Conditions: " + ", ".join(c.title() for c in sheet.conditions)
+        )
     if sheet.death_save_successes or sheet.death_save_failures:
         status_bits.append(
             f"Death saves: {sheet.death_save_successes} successes / "
@@ -96,7 +105,11 @@ def build_sheet_embed(sheet: CharacterSheet) -> discord.Embed:
             spell_parts.append(sheet.format_spells_summary())
         if sheet.homebrew_spells:
             homebrew = ", ".join(sheet.homebrew_spells[:5])
-            extra = f" (+{len(sheet.homebrew_spells) - 5} more)" if len(sheet.homebrew_spells) > 5 else ""
+            extra = (
+                f" (+{len(sheet.homebrew_spells) - 5} more)"
+                if len(sheet.homebrew_spells) > 5
+                else ""
+            )
             spell_parts.append(f"Homebrew: {homebrew}{extra}")
         embed.add_field(name="✨ Spells", value="\n".join(spell_parts), inline=False)
 

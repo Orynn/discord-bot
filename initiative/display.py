@@ -1,7 +1,12 @@
 import discord
 
 from bot.help_text import HELP_INIT_COLOR
-from initiative.storage import InitiativeEntry, InitiativeState, get_initiative, save_initiative
+from initiative.storage import (
+    InitiativeEntry,
+    InitiativeState,
+    get_initiative,
+    save_initiative,
+)
 
 
 def format_initiative(state: InitiativeState) -> str:
@@ -24,11 +29,15 @@ def build_initiative_embed(
     if active is not None:
         title = f"⚡ Initiative — {active.name}'s turn"
     embed = discord.Embed(title=title, description=notice, color=HELP_INIT_COLOR)
-    embed.add_field(name="Turn order", value=format_initiative(state) or "—", inline=False)
+    embed.add_field(
+        name="Turn order", value=format_initiative(state) or "—", inline=False
+    )
     return embed
 
 
-def advance_turn(*, guild_id: int, scope_id: int) -> tuple[InitiativeState, InitiativeEntry] | None:
+def advance_turn(
+    *, guild_id: int, scope_id: int
+) -> tuple[InitiativeState, InitiativeEntry] | None:
     state = get_initiative(guild_id=guild_id, scope_id=scope_id)
     if not state or not state.order:
         return None

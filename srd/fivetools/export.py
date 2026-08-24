@@ -13,7 +13,9 @@ REPO_URL = "https://github.com/5etools-mirror-3/5etools-src.git"
 
 
 def _entry_from_body(body: dict[str, Any]) -> dict[str, Any]:
-    serialized = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    serialized = json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode(
+        "utf-8"
+    )
     checksum = hashlib.md5(serialized).hexdigest()
     return {
         "head": {
@@ -47,7 +49,9 @@ def build_export(data_dir: Path, *, merge_path: Path | None) -> dict[str, Any]:
         existing = load_json(merge_path)
         async_block = existing.get("async") or {}
         homebrew_entries = list(async_block.get("HOMEBREW_2_STORAGE") or [])
-        sync_metas = list(existing.get("sync", {}).get("HOMEBREW_2_STORAGE_METAS") or [])
+        sync_metas = list(
+            existing.get("sync", {}).get("HOMEBREW_2_STORAGE_METAS") or []
+        )
         sync_style = dict(existing.get("syncStyle") or {})
 
     return {

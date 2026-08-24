@@ -25,7 +25,10 @@ def _plain_name(name: str | None) -> str:
 
 
 def _unwrap_channel(channel: Any) -> Any:
-    if isinstance(channel, discord.Thread) and getattr(channel, "parent", None) is not None:
+    if (
+        isinstance(channel, discord.Thread)
+        and getattr(channel, "parent", None) is not None
+    ):
         return channel.parent
     return channel
 
@@ -74,7 +77,9 @@ def _looks_like_player_section(channel: Any, category: Any) -> bool:
         return False
     if _label_from_category_name(getattr(category, "name", None)):
         children = getattr(category, "channels", None) or []
-        if any(_is_player_channel_name(getattr(child, "name", None)) for child in children):
+        if any(
+            _is_player_channel_name(getattr(child, "name", None)) for child in children
+        ):
             return True
         if _is_player_channel_name(getattr(category, "name", None)):
             return True
@@ -103,7 +108,10 @@ def _overwrite_allows_view(overwrite: Any) -> bool:
             return False
         if getattr(deny, "view_channel", False):
             return False
-        return bool(getattr(allow, "view_channel", False) or getattr(allow, "read_messages", False))
+        return bool(
+            getattr(allow, "view_channel", False)
+            or getattr(allow, "read_messages", False)
+        )
     return False
 
 
@@ -118,7 +126,9 @@ def _skip_user_id(guild: discord.Guild, user_id: int, dest: Any = None) -> bool:
     if dest is not None and getattr(dest, "bot", False):
         return True
     member = dest if isinstance(dest, discord.Member) else guild.get_member(user_id)
-    if member is not None and (getattr(member, "bot", False) or is_staff_member(guild, member)):
+    if member is not None and (
+        getattr(member, "bot", False) or is_staff_member(guild, member)
+    ):
         return True
     return False
 
@@ -174,7 +184,9 @@ def _member_ids_with_view(guild: discord.Guild, target: Any) -> list[int]:
     return ids
 
 
-def _player_from_overwrites(guild: discord.Guild, channel: Any, category: Any) -> int | None:
+def _player_from_overwrites(
+    guild: discord.Guild, channel: Any, category: Any
+) -> int | None:
     candidates: list[int] = []
     for target in (channel, category):
         if target is None:
@@ -184,7 +196,11 @@ def _player_from_overwrites(guild: discord.Guild, channel: Any, category: Any) -
                 candidates.append(user_id)
     if not candidates:
         return None
-    sheeted = [user_id for user_id in candidates if get_sheet(user_id=user_id, guild_id=guild.id)]
+    sheeted = [
+        user_id
+        for user_id in candidates
+        if get_sheet(user_id=user_id, guild_id=guild.id)
+    ]
     if len(sheeted) == 1:
         return sheeted[0]
     if len(candidates) == 1:
@@ -202,7 +218,9 @@ def _player_from_overwrites(guild: discord.Guild, channel: Any, category: Any) -
     return None
 
 
-def _remember_section(*, guild: discord.Guild, user_id: int, channel: Any, category: Any) -> None:
+def _remember_section(
+    *, guild: discord.Guild, user_id: int, channel: Any, category: Any
+) -> None:
     if category is None and channel is None:
         return
     existing = get_player_section(guild_id=guild.id, user_id=user_id) or {}
@@ -305,7 +323,9 @@ def discover_player_id(*, guild: discord.Guild, channel: Any) -> int | None:
         )
         return None
     try:
-        _remember_section(guild=guild, user_id=found, channel=channel, category=category)
+        _remember_section(
+            guild=guild, user_id=found, channel=channel, category=category
+        )
     except Exception:
         logger.exception("Could not remember player section for %s", found)
     return found
@@ -330,10 +350,16 @@ def sync_guild_player_sections(guild: discord.Guild) -> int:
         if _ignored_category(category):
             continue
         children = list(getattr(category, "channels", None) or [])
-        if not any(_is_player_channel_name(getattr(child, "name", None)) for child in children):
+        if not any(
+            _is_player_channel_name(getattr(child, "name", None)) for child in children
+        ):
             continue
         channel = next(
-            (child for child in children if _is_player_channel_name(getattr(child, "name", None))),
+            (
+                child
+                for child in children
+                if _is_player_channel_name(getattr(child, "name", None))
+            ),
             None,
         )
         found = _player_from_overwrites(guild, channel, category)
@@ -343,7 +369,9 @@ def sync_guild_player_sections(guild: discord.Guild) -> int:
                 found = find_user_id_by_character_name(guild_id=guild.id, name=label)
         if found is None:
             continue
-        _remember_section(guild=guild, user_id=found, channel=channel, category=category)
+        _remember_section(
+            guild=guild, user_id=found, channel=channel, category=category
+        )
         saved += 1
     _prune_missing_player_sections(guild)
     return saved

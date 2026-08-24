@@ -24,7 +24,9 @@ def _history(messages: list):
 
 
 def _message(content: str, *, message_id: int = 1) -> SimpleNamespace:
-    return SimpleNamespace(id=message_id, content=content, attachments=[], edit=AsyncMock())
+    return SimpleNamespace(
+        id=message_id, content=content, attachments=[], edit=AsyncMock()
+    )
 
 
 def _thread(
@@ -82,8 +84,12 @@ class TestRewriteMovedLinks(unittest.TestCase):
             old_section="📍 lieux",
             new_section="🧝 race",
         )
-        self.assertIn("🧝 race — [Padhiver](https://discord.com/channels/1/99)", updated)
-        self.assertIn("👤 pnj — [Elminster](https://discord.com/channels/1/20)", updated)
+        self.assertIn(
+            "🧝 race — [Padhiver](https://discord.com/channels/1/99)", updated
+        )
+        self.assertIn(
+            "👤 pnj — [Elminster](https://discord.com/channels/1/20)", updated
+        )
         self.assertNotIn("https://discord.com/channels/1/10", updated)
 
     def test_replaces_jump_url_with_message_id(self) -> None:
@@ -99,8 +105,12 @@ class TestRewriteMovedLinks(unittest.TestCase):
         self.assertEqual(updated, "[Padhiver](https://discord.com/channels/1/99)")
 
     def test_move_notes(self) -> None:
-        self.assertTrue(is_move_note("_Déplacé vers https://discord.com/channels/1/2 (pnj)._"))
-        self.assertTrue(is_move_note("_Recatégorisé vers https://example.com (lieux)._"))
+        self.assertTrue(
+            is_move_note("_Déplacé vers https://discord.com/channels/1/2 (pnj)._")
+        )
+        self.assertTrue(
+            is_move_note("_Recatégorisé vers https://example.com (lieux)._")
+        )
         self.assertFalse(is_move_note("**Padhiver** est une cité."))
 
 
@@ -116,10 +126,14 @@ class TestMoveCampaignPost(unittest.IsolatedAsyncioTestCase):
         lieux = _forum(1, "📍 lieux", [source])
         pnj = _forum(2, "👤 pnj", [linked])
         race = _forum(3, "🧝 race", [])
-        race.create_thread = AsyncMock(return_value=SimpleNamespace(thread=created, message=None))
+        race.create_thread = AsyncMock(
+            return_value=SimpleNamespace(thread=created, message=None)
+        )
 
         with (
-            patch("campaign.moving.list_campaign_forums", return_value=[lieux, pnj, race]),
+            patch(
+                "campaign.moving.list_campaign_forums", return_value=[lieux, pnj, race]
+            ),
             patch("campaign.moving.asyncio.sleep", new_callable=AsyncMock),
         ):
             result = await move_campaign_post(
@@ -146,7 +160,9 @@ class TestMoveCampaignPost(unittest.IsolatedAsyncioTestCase):
         created = _thread(99, "Padhiver", parent_id=3, messages=[])
         lieux = _forum(1, "📍 lieux", [source])
         race = _forum(3, "🧝 race", [])
-        race.create_thread = AsyncMock(return_value=SimpleNamespace(thread=created, message=None))
+        race.create_thread = AsyncMock(
+            return_value=SimpleNamespace(thread=created, message=None)
+        )
 
         with (
             patch("campaign.moving.list_campaign_forums", return_value=[lieux, race]),
@@ -173,7 +189,10 @@ class TestMoveCampaignPost(unittest.IsolatedAsyncioTestCase):
         race = _forum(3, "🧝 race", [existing])
 
         with (
-            patch("campaign.moving.list_campaign_forums", return_value=[lieux, pantheon, race]),
+            patch(
+                "campaign.moving.list_campaign_forums",
+                return_value=[lieux, pantheon, race],
+            ),
             patch("campaign.moving.asyncio.sleep", new_callable=AsyncMock),
         ):
             result = await move_campaign_post(

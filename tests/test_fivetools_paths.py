@@ -1,7 +1,11 @@
 import unittest
 
 from srd.fivetools.loader import get_index, reload_index
-from srd.fivetools.paths import has_official_source, is_available, is_official_mirror_entry
+from srd.fivetools.paths import (
+    has_official_source,
+    is_available,
+    is_official_mirror_entry,
+)
 
 
 class TestFiveToolsPaths(unittest.TestCase):
@@ -17,7 +21,9 @@ class TestFiveToolsPaths(unittest.TestCase):
             }
         }
         self.assertTrue(is_official_mirror_entry(entry))
-        self.assertFalse(is_official_mirror_entry({"head": {"filename": "My Homebrew.json"}}))
+        self.assertFalse(
+            is_official_mirror_entry({"head": {"filename": "My Homebrew.json"}})
+        )
 
 
 class TestFiveToolsOfficialData(unittest.TestCase):
@@ -32,7 +38,9 @@ class TestFiveToolsOfficialData(unittest.TestCase):
 
     def test_no_phb_spells_from_official_source(self) -> None:
         index = get_index()
-        phb_spells = [s["name"] for s in index.spells_by_name.values() if s.get("source") == "PHB"]
+        phb_spells = [
+            s["name"] for s in index.spells_by_name.values() if s.get("source") == "PHB"
+        ]
         self.assertEqual(phb_spells, [])
 
     def test_wizard_uses_xphb(self) -> None:

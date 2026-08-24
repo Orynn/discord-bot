@@ -1,6 +1,10 @@
 import discord
 
-from bot.selects import replace_message_view, select_menus_from_message, fresh_component_id
+from bot.selects import (
+    replace_message_view,
+    select_menus_from_message,
+    fresh_component_id,
+)
 from srd import fivetools
 from srd.embeds import (
     armor_embed,
@@ -23,8 +27,14 @@ _KIND_GETTERS = {
     "spell": (lambda entry: fivetools.get_spell(slug=entry.slug), spell_embed),
     "species": (lambda entry: fivetools.get_species(slug=entry.slug), species_embed),
     "class": (lambda entry: fivetools.get_class(slug=entry.slug), class_embed),
-    "background": (lambda entry: fivetools.get_background(slug=entry.slug), background_embed),
-    "condition": (lambda entry: fivetools.get_condition(slug=entry.slug), condition_embed),
+    "background": (
+        lambda entry: fivetools.get_background(slug=entry.slug),
+        background_embed,
+    ),
+    "condition": (
+        lambda entry: fivetools.get_condition(slug=entry.slug),
+        condition_embed,
+    ),
     "feat": (lambda entry: fivetools.get_feat(slug=entry.slug), feat_embed),
     "weapon": (lambda entry: fivetools.get_weapon(slug=entry.slug), weapon_embed),
     "armor": (lambda entry: fivetools.get_armor(slug=entry.slug), armor_embed),
@@ -36,7 +46,9 @@ _KIND_GETTERS = {
 
 async def build_definition_embed(entry: GlossaryEntry) -> discord.Embed:
     if entry.kind == "subrace":
-        return species_embed(await fivetools.get_species(slug=entry.parent_slug or entry.slug))
+        return species_embed(
+            await fivetools.get_species(slug=entry.parent_slug or entry.slug)
+        )
 
     if entry.kind == "subclass" and entry.parent_slug:
         char_class = await fivetools.get_class(slug=entry.parent_slug)
@@ -45,7 +57,9 @@ async def build_definition_embed(entry: GlossaryEntry) -> discord.Embed:
 
     pair = _KIND_GETTERS.get(entry.kind)
     if pair is None:
-        raise fivetools.Open5eNotFoundError(f"No definition available for {entry.name}.")
+        raise fivetools.Open5eNotFoundError(
+            f"No definition available for {entry.name}."
+        )
     getter, embed_fn = pair
     return embed_fn(await getter(entry))
 
@@ -115,12 +129,16 @@ class DefinitionSelect(discord.ui.Select):
                 if entry.kind == "class":
                     from srd.class_view import class_lookup_message
 
-                    embed, view = class_lookup_message(await fivetools.get_class(slug=entry.slug))
+                    embed, view = class_lookup_message(
+                        await fivetools.get_class(slug=entry.slug)
+                    )
                 elif entry.kind == "subclass" and entry.parent_slug:
                     from srd.class_view import class_lookup_message
 
                     char_class = await fivetools.get_class(slug=entry.parent_slug)
-                    subclass = fivetools.find_subclass(char_class=char_class, query=entry.name)
+                    subclass = fivetools.find_subclass(
+                        char_class=char_class, query=entry.name
+                    )
                     embed, view = class_lookup_message(char_class, subclass=subclass)
                 else:
                     embed = await build_definition_embed(entry=entry)
@@ -167,7 +185,12 @@ def entries_from_select_options(options) -> list[GlossaryEntry]:
         parts = value.split("|")
         if len(parts) < 4:
             continue
-        kind, slug, parent_slug, name = parts[0], parts[1], parts[2], "|".join(parts[3:])
+        kind, slug, parent_slug, name = (
+            parts[0],
+            parts[1],
+            parts[2],
+            "|".join(parts[3:]),
+        )
         entries.append(
             GlossaryEntry(
                 name=name,
@@ -180,7 +203,9 @@ def entries_from_select_options(options) -> list[GlossaryEntry]:
     return entries
 
 
-def definition_view_from_message(message: discord.Message | None) -> DefinitionSelectView | None:
+def definition_view_from_message(
+    message: discord.Message | None,
+) -> DefinitionSelectView | None:
     for menu in select_menus_from_message(message):
         if getattr(menu, "custom_id", None) != DEFINITION_SELECT_ID:
             continue

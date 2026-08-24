@@ -7,12 +7,19 @@ from bot.command_helpers import command_reply, delete_command
 from bot.messaging import send_message
 from combat.cards import WEAPON_CARD_ID, DODGE_CARD_ID, CardSnapshot
 from combat.display import build_combat_embed, build_hand_embed
-from combat.engine import add_combatant, can_control_combatant, end_turn, play_card, start_combat
+from combat.engine import (
+    add_combatant,
+    can_control_combatant,
+    end_turn,
+    play_card,
+    start_combat,
+)
 from combat.scope import PLAYER_COMBAT_ONLY, scope_id_for_channel
+from combat.setup import advance_section_clock, ensure_section_fight, parse_start_args
 from combat.storage import clear_combat, get_combat, lock_for
 from combat.view import build_combat_view
 from config import PREFIX
-from sheets.context import parse_mention_and_text
+from sheets.context import infer_player_id, parse_mention_and_text
 
 
 def _scope_id(ctx: Context) -> int | None:
@@ -61,19 +68,38 @@ def setup_combat(bot: Bot) -> None:
             )
         await delete_command(ctx)
 
-    @combat_group.command(name="start", help=f"Start card combat from initiative. `{PREFIX}combat start`")
+    @combat_group.command(
+        name="start",
+        help=f"Start card combat. `{PREFIX}combat start [monster] [2h]`",
+    )
     @guild_only
     @admin_only
-    async def combat_start(ctx: Context) -> None:
+    async def combat_start(ctx: Context, *, args: str = "") -> None:
         scope_id = await _require_player_scope(ctx)
         if scope_id is None:
             return
+        monster_name, minutes = parse_start_args(args)
+        player_id = infer_player_id(ctx)
+        clock_note = None
         try:
             async with lock_for(guild_id=ctx.guild.id, scope_id=scope_id):
+                await ensure_section_fight(
+                    guild_id=ctx.guild.id,
+                    channel_id=ctx.channel.id,
+                    scope_id=scope_id,
+                    player_id=player_id,
+                    monster_name=monster_name,
+                )
                 state = await start_combat(
                     guild_id=ctx.guild.id,
                     channel_id=ctx.channel.id,
                     scope_id=scope_id,
+                )
+            if minutes and player_id is not None:
+                clock_note = advance_section_clock(
+                    guild_id=ctx.guild.id,
+                    user_id=player_id,
+                    minutes=minutes,
                 )
         except ValueError as exc:
             await command_reply(ctx, str(exc))
@@ -82,6 +108,7 @@ def setup_combat(bot: Bot) -> None:
 
         await send_message(
             ctx,
+            content=clock_note,
             embed=build_combat_embed(state),
             view=build_combat_view(state),
             definition_menu=False,
@@ -99,7 +126,9 @@ def setup_combat(bot: Bot) -> None:
             return
         state = get_combat(guild_id=ctx.guild.id, scope_id=scope_id)
         if state is None:
-            await command_reply(ctx, "No card combat in progress. Use `;combat start` first.")
+            await command_reply(
+                ctx, "No card combat in progress. Use `;combat start` first."
+            )
             await delete_command(ctx)
             return
 
@@ -127,7 +156,11 @@ def setup_combat(bot: Bot) -> None:
             return
 
         combatant = next(
-            (entry for entry in state.combatants.values() if entry.user_id == ctx.author.id),
+            (
+                entry
+                for entry in state.combatants.values()
+                if entry.user_id == ctx.author.id
+            ),
             None,
         )
         if combatant is None:
@@ -176,7 +209,10 @@ def setup_combat(bot: Bot) -> None:
                     scope_id=scope_id,
                 ):
                     if active.user_id is None:
-                        await command_reply(ctx, f"Only the DM or this player can play for **{active.name}**.")
+                        await command_reply(
+                            ctx,
+                            f"Only the DM or this player can play for **{active.name}**.",
+                        )
                     else:
                         await command_reply(ctx, f"It is **{active.name}**'s turn.")
                     await delete_command(ctx)
@@ -184,7 +220,9 @@ def setup_combat(bot: Bot) -> None:
 
                 card_id = _resolve_card_id(card, active.card_catalog)
                 if card_id is None:
-                    labels = ", ".join(sorted(card.label for card in active.card_catalog.values()))
+                    labels = ", ".join(
+                        sorted(card.label for card in active.card_catalog.values())
+                    )
                     await command_reply(ctx, f"Unknown card. Your hand uses: {labels}")
                     await delete_command(ctx)
                     return
@@ -246,7 +284,12 @@ def setup_combat(bot: Bot) -> None:
         else:
             _, args = parse_mention_and_text(ctx, args)
         if member is not None:
-            parts = args.replace(f"<@{member.id}>", "").replace(f"<@!{member.id}>", "").strip().rsplit(maxsplit=1)
+            parts = (
+                args.replace(f"<@{member.id}>", "")
+                .replace(f"<@!{member.id}>", "")
+                .strip()
+                .rsplit(maxsplit=1)
+            )
             hp = int(parts[-1]) if parts and parts[-1].isdigit() else None
             try:
                 combatant = await add_combatant(
@@ -279,13 +322,17 @@ def setup_combat(bot: Bot) -> None:
 
         if combatant.user_id is None:
             traits = f" · {', '.join(combatant.traits)}" if combatant.traits else ""
-            reply = f"Added **{combatant.name}**{traits} with {len(combatant.hand)} cards."
+            reply = (
+                f"Added **{combatant.name}**{traits} with {len(combatant.hand)} cards."
+            )
         else:
             reply = f"Added **{combatant.name}** ({combatant.hp} HP) with {len(combatant.hand)} cards."
         await command_reply(ctx, reply)
         await delete_command(ctx)
 
-    @combat_group.command(name="pass", help=f"End your turn without playing. `{PREFIX}combat pass`")
+    @combat_group.command(
+        name="pass", help=f"End your turn without playing. `{PREFIX}combat pass`"
+    )
     @guild_only
     async def combat_pass(ctx: Context) -> None:
         scope_id = await _require_player_scope(ctx)
@@ -312,7 +359,10 @@ def setup_combat(bot: Bot) -> None:
                     scope_id=scope_id,
                 ):
                     if active.user_id is None:
-                        await command_reply(ctx, f"Only the DM or this player can play for **{active.name}**.")
+                        await command_reply(
+                            ctx,
+                            f"Only the DM or this player can play for **{active.name}**.",
+                        )
                     else:
                         await command_reply(ctx, f"It is **{active.name}**'s turn.")
                     await delete_command(ctx)

@@ -17,7 +17,9 @@ def setup_pc(bot: Bot) -> None:
     async def pcname_command(ctx: Context, *, name: str) -> None:
         name = name.strip()
         if not name:
-            await command_reply(ctx, f"Character name cannot be empty. Usage: `{PREFIX}pcname <name>`")
+            await command_reply(
+                ctx, f"Character name cannot be empty. Usage: `{PREFIX}pcname <name>`"
+            )
             return
 
         guild_id = resolve_guild_id(ctx)

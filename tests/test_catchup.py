@@ -15,7 +15,9 @@ from bot.catchup import (
 )
 
 
-def _message(*, message_id: int, content: str = "hello", bot: bool = False) -> MagicMock:
+def _message(
+    *, message_id: int, content: str = "hello", bot: bool = False
+) -> MagicMock:
     message = MagicMock(spec=discord.Message)
     message.id = message_id
     message.content = content
@@ -40,7 +42,9 @@ def _history(messages: list[MagicMock]):
     return history
 
 
-def _text_channel(*, channel_id: int = 42, messages: list[MagicMock] | None = None) -> MagicMock:
+def _text_channel(
+    *, channel_id: int = 42, messages: list[MagicMock] | None = None
+) -> MagicMock:
     channel = MagicMock(spec=discord.TextChannel)
     channel.id = channel_id
     channel.guild = MagicMock()
@@ -91,7 +95,9 @@ class TestCatchupOrphanThreads(unittest.IsolatedAsyncioTestCase):
         channel.guild = MagicMock()
         channel.guild.me = MagicMock()
         channel.parent = None
-        channel.permissions_for.side_effect = discord.ClientException("Parent channel not found")
+        channel.permissions_for.side_effect = discord.ClientException(
+            "Parent channel not found"
+        )
 
         processed = await _catch_up_channel(MagicMock(), channel, last_ids={})
         self.assertEqual(processed, 0)
@@ -110,7 +116,9 @@ class TestCatchupOrphanThreads(unittest.IsolatedAsyncioTestCase):
 
 class TestCatchupCursor(unittest.IsolatedAsyncioTestCase):
     async def test_advances_cursor_past_non_commands(self) -> None:
-        messages = [_message(message_id=100 + index, content="chat") for index in range(5)]
+        messages = [
+            _message(message_id=100 + index, content="chat") for index in range(5)
+        ]
         channel = _text_channel(messages=messages)
         with patch("bot.catchup.mark_channel_message_processed") as mark:
             processed = await _catch_up_channel(MagicMock(), channel, last_ids={})
@@ -118,7 +126,9 @@ class TestCatchupCursor(unittest.IsolatedAsyncioTestCase):
         mark.assert_called_with(channel_id=42, message_id=104)
 
     async def test_pages_beyond_first_window(self) -> None:
-        messages = [_message(message_id=index + 1, content="chat") for index in range(3)]
+        messages = [
+            _message(message_id=index + 1, content="chat") for index in range(3)
+        ]
         channel = _text_channel(messages=messages)
         with (
             patch("bot.catchup.CATCHUP_MAX_MESSAGES", 2),

@@ -18,7 +18,11 @@ def _packed_feature_pages(features: list[dict]) -> list[tuple[str, str]]:
         nonlocal chunks, start_level, end_level, size
         if not chunks or start_level is None:
             return
-        title = f"Level {start_level}" if start_level == end_level else f"Levels {start_level}–{end_level}"
+        title = (
+            f"Level {start_level}"
+            if start_level == end_level
+            else f"Levels {start_level}–{end_level}"
+        )
         pages.append((title, "\n\n".join(chunks)))
         chunks = []
         start_level = None
@@ -39,7 +43,9 @@ def _packed_feature_pages(features: list[dict]) -> list[tuple[str, str]]:
     return pages
 
 
-def build_class_pages(char_class: dict, subclass: dict | None = None) -> list[discord.Embed]:
+def build_class_pages(
+    char_class: dict, subclass: dict | None = None
+) -> list[discord.Embed]:
     pages = [class_embed(char_class, subclass=subclass)]
     source_title = char_class.get("document__title", "5etools")
     url = (subclass or char_class).get("url") or char_class.get("url")
@@ -103,12 +109,16 @@ class ClassPagesView(discord.ui.View):
         )
 
     @discord.ui.button(label="Prev", style=discord.ButtonStyle.secondary)
-    async def prev_page(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+    async def prev_page(
+        self, interaction: discord.Interaction, _button: discord.ui.Button
+    ) -> None:
         self.index = max(0, self.index - 1)
         await self._show(interaction)
 
     @discord.ui.button(label="Next", style=discord.ButtonStyle.secondary)
-    async def next_page(self, interaction: discord.Interaction, _button: discord.ui.Button) -> None:
+    async def next_page(
+        self, interaction: discord.Interaction, _button: discord.ui.Button
+    ) -> None:
         self.index = min(len(self.pages) - 1, self.index + 1)
         await self._show(interaction)
 

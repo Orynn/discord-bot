@@ -51,8 +51,13 @@ SRD_TYPE_CHOICES = [
 
 
 def setup_slash(bot: Bot) -> None:
-    @bot.tree.command(name="srd", description="Look up rules content from your 5etools export")
-    @app_commands.describe(content_type="Type of content", name="Name to search. Prefix ~ to list close matches")
+    @bot.tree.command(
+        name="srd", description="Look up rules content from your 5etools export"
+    )
+    @app_commands.describe(
+        content_type="Type of content",
+        name="Name to search. Prefix ~ to list close matches",
+    )
     @app_commands.choices(content_type=SRD_TYPE_CHOICES)
     async def slash_srd(
         interaction: discord.Interaction,
@@ -69,7 +74,9 @@ def setup_slash(bot: Bot) -> None:
             candidates = lookup_candidates(kind, text, force_list=force_fuzzy)
             if candidates is not None:
                 if not candidates:
-                    raise fivetools.FiveToolsNotFoundError(f"No {kind} found matching '{text}'.")
+                    raise fivetools.FiveToolsNotFoundError(
+                        f"No {kind} found matching '{text}'."
+                    )
                 if len(candidates) > 1:
                     await send_interaction_message(
                         interaction,
@@ -83,11 +90,15 @@ def setup_slash(bot: Bot) -> None:
                 item = await search(query=text)
             if kind == "class":
                 embed, view = class_lookup_message(item)
-                await send_interaction_message(interaction, embed=embed, view=view, ephemeral=True)
+                await send_interaction_message(
+                    interaction, embed=embed, view=view, ephemeral=True
+                )
                 return
             embed = embed_fn(item)
         except fivetools.Open5eError as exc:
-            await send_interaction_message(interaction, content=str(exc), ephemeral=True)
+            await send_interaction_message(
+                interaction, content=str(exc), ephemeral=True
+            )
             return
         await send_interaction_message(interaction, embed=embed, ephemeral=True)
 

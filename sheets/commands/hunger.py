@@ -12,7 +12,12 @@ from campaign.clock import MINUTES_PER_DAY
 from campaign.clock_storage import get_clock, save_clock
 from config import PREFIX
 from players.storage import list_player_user_ids
-from sheets.context import get_sheet_for_owner, parse_mention_and_text, save_owner_sheet, target_label
+from sheets.context import (
+    get_sheet_for_owner,
+    parse_mention_and_text,
+    save_owner_sheet,
+    target_label,
+)
 from sheets.data import CharacterSheet
 from sheets.hunger import (
     consume_ration,
@@ -31,10 +36,18 @@ from sheets.storage import get_sheet, list_sheet_user_ids
 
 
 def _party_user_ids(guild_id: int, *, fallback_id: int) -> list[int]:
-    ids = [user_id for user_id in list_player_user_ids(guild_id=guild_id) if not is_staff_user_id(user_id)]
+    ids = [
+        user_id
+        for user_id in list_player_user_ids(guild_id=guild_id)
+        if not is_staff_user_id(user_id)
+    ]
     if ids:
         return ids
-    ids = [user_id for user_id in list_sheet_user_ids(guild_id=guild_id) if not is_staff_user_id(user_id)]
+    ids = [
+        user_id
+        for user_id in list_sheet_user_ids(guild_id=guild_id)
+        if not is_staff_user_id(user_id)
+    ]
     return ids or [fallback_id]
 
 
@@ -81,7 +94,9 @@ def _party_embed(lines: list[str], *, notice: str | None = None) -> discord.Embe
     )
     if notice:
         embed.add_field(name="Change", value=notice, inline=False)
-    embed.set_footer(text=f"One tracker per player · DM: {PREFIX}hunger @player · {PREFIX}hunger all")
+    embed.set_footer(
+        text=f"One tracker per player · DM: {PREFIX}hunger @player · {PREFIX}hunger all"
+    )
     return embed
 
 
@@ -145,7 +160,10 @@ async def _eat(
     if not half:
         ration = consume_ration(sheet)
         if ration is None and require_ration and not is_staff(ctx):
-            await command_reply(ctx, f"**{sheet.name}** has no rations. Add some with `{PREFIX}sheet gear add rations`.")
+            await command_reply(
+                ctx,
+                f"**{sheet.name}** has no rations. Add some with `{PREFIX}sheet gear add rations`.",
+            )
             await delete_command(ctx)
             return
     if half:
@@ -162,7 +180,9 @@ async def _eat(
     save_owner_sheet(ctx, owner_id, sheet)
     await send_message(
         ctx,
-        embed=_hunger_embed(sheet, who=target_label(member, sheet), notice=notice, clock=clock),
+        embed=_hunger_embed(
+            sheet, who=target_label(member, sheet), notice=notice, clock=clock
+        ),
         definition_menu=False,
     )
     await delete_command(ctx)
@@ -170,7 +190,10 @@ async def _eat(
 
 async def _skip(ctx: Context, member: discord.Member | None) -> None:
     if not is_staff(ctx):
-        await command_reply(ctx, "Only the DM can skip a meal day. Use `;time advance 1d` to move the clock.")
+        await command_reply(
+            ctx,
+            "Only the DM can skip a meal day. Use `;time advance 1d` to move the clock.",
+        )
         await delete_command(ctx)
         return
     result = await get_sheet_for_owner(ctx, member)
@@ -260,8 +283,12 @@ async def _eat_all(ctx: Context, *, half: bool) -> None:
         save_owner_sheet(ctx, user_id, sheet)
         lines.append(_sheet_line(ctx.guild.id, user_id, sheet))
         fed += 1
-    notice = f"Half rations for {fed} character(s)." if half else f"Fed {fed} character(s)."
-    await send_message(ctx, embed=_party_embed(lines, notice=notice), definition_menu=False)
+    notice = (
+        f"Half rations for {fed} character(s)." if half else f"Fed {fed} character(s)."
+    )
+    await send_message(
+        ctx, embed=_party_embed(lines, notice=notice), definition_menu=False
+    )
     await delete_command(ctx)
 
 
@@ -309,30 +336,48 @@ def setup_hunger(bot: Bot) -> None:
         )
         await delete_command(ctx)
 
-    @hunger_group.command(name="eat", aliases=["manger", "feed"], help="Eat a ration; stamps a full meal on this player's clock.")
+    @hunger_group.command(
+        name="eat",
+        aliases=["manger", "feed"],
+        help="Eat a ration; stamps a full meal on this player's clock.",
+    )
     @guild_only
     async def hunger_eat(ctx: Context, member: discord.Member | None = None) -> None:
         await _eat(ctx, member, half=False, require_ration=True)
 
-    @hunger_group.command(name="half", aliases=["demi"], help="Stamp half rations on this player's clock (0.5 missed day).")
+    @hunger_group.command(
+        name="half",
+        aliases=["demi"],
+        help="Stamp half rations on this player's clock (0.5 missed day).",
+    )
     @guild_only
     async def hunger_half(ctx: Context, member: discord.Member | None = None) -> None:
         await _eat(ctx, member, half=True, require_ration=False)
 
-    @hunger_group.command(name="skip", aliases=["starve", "jeune"], help="Advance that player's clock by 1 day with no meal. (DM)")
+    @hunger_group.command(
+        name="skip",
+        aliases=["starve", "jeune"],
+        help="Advance that player's clock by 1 day with no meal. (DM)",
+    )
     @guild_only
     async def hunger_skip(ctx: Context, member: discord.Member | None = None) -> None:
         await _skip(ctx, member)
 
-    @hunger_group.command(name="set", help="Set days without food. Example: `2` or `0`.")
+    @hunger_group.command(
+        name="set", help="Set days without food. Example: `2` or `0`."
+    )
     @app_commands.describe(days="Days without food, e.g. 0, 2, 2.5")
     @guild_only
-    async def hunger_set(ctx: Context, member: discord.Member | None = None, *, days: str) -> None:
+    async def hunger_set(
+        ctx: Context, member: discord.Member | None = None, *, days: str
+    ) -> None:
         if member is None:
             member, days = parse_mention_and_text(ctx, days)
         await _set(ctx, member, days)
 
-    @hunger_group.command(name="all", aliases=["party"], help="Show every player's hunger.")
+    @hunger_group.command(
+        name="all", aliases=["party"], help="Show every player's hunger."
+    )
     @guild_only
     async def hunger_all(ctx: Context) -> None:
         await _show_all(ctx)

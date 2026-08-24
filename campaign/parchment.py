@@ -51,7 +51,9 @@ def parse_document_text(raw: str) -> tuple[str | None, str]:
     return None, text
 
 
-def _load_font(candidates: tuple[Path, ...], size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+def _load_font(
+    candidates: tuple[Path, ...], size: int
+) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     for path in candidates:
         if path.is_file():
             return ImageFont.truetype(str(path), size=size)
@@ -136,13 +138,19 @@ def _draw_ornaments(draw: ImageDraw.ImageDraw, width: int, height: int) -> None:
 
     mid_y_top = inset + 28
     mid_y_bot = height - inset - 28
-    draw.line((inset + 48, mid_y_top, width - inset - 48, mid_y_top), fill=_BORDER, width=1)
-    draw.line((inset + 48, mid_y_bot, width - inset - 48, mid_y_bot), fill=_BORDER, width=1)
+    draw.line(
+        (inset + 48, mid_y_top, width - inset - 48, mid_y_top), fill=_BORDER, width=1
+    )
+    draw.line(
+        (inset + 48, mid_y_bot, width - inset - 48, mid_y_bot), fill=_BORDER, width=1
+    )
 
 
 def _draw_seal(draw: ImageDraw.ImageDraw, width: int, height: int) -> None:
     cx, cy = width // 2, height - 78
-    draw.ellipse((cx - 28, cy - 28, cx + 28, cy + 28), fill=_SEAL, outline=_SEAL_DARK, width=3)
+    draw.ellipse(
+        (cx - 28, cy - 28, cx + 28, cy + 28), fill=_SEAL, outline=_SEAL_DARK, width=3
+    )
     draw.ellipse((cx - 18, cy - 18, cx + 18, cy + 18), outline=(196, 150, 84), width=2)
     draw.polygon(
         [(cx, cy - 10), (cx + 8, cy + 8), (cx - 8, cy + 8)],
@@ -171,12 +179,23 @@ def render_parchment(*, title: str | None, body: str) -> io.BytesIO:
     while font_size >= 16:
         body_font = _load_font(_FONT_REGULAR, font_size)
         title_font = _load_font(_FONT_BOLD, font_size + 8)
-        body_lines = _wrap_lines(measure, body_text, body_font, max_width) if body_text else []
-        title_lines = _wrap_lines(measure, title_text, title_font, max_width) if title_text else []
+        body_lines = (
+            _wrap_lines(measure, body_text, body_font, max_width) if body_text else []
+        )
+        title_lines = (
+            _wrap_lines(measure, title_text, title_font, max_width)
+            if title_text
+            else []
+        )
         line_h = int(_line_height(body_font) * 1.45)
         title_h = int(_line_height(title_font) * 1.35) if title_lines else 0
         title_block = title_h * len(title_lines) + (28 if title_lines else 0)
-        needed = _MARGIN_TOP + title_block + line_h * max(len(body_lines), 1) + _MARGIN_BOTTOM
+        needed = (
+            _MARGIN_TOP
+            + title_block
+            + line_h * max(len(body_lines), 1)
+            + _MARGIN_BOTTOM
+        )
         if needed <= _MAX_HEIGHT:
             break
         font_size -= 2
@@ -193,7 +212,9 @@ def render_parchment(*, title: str | None, body: str) -> io.BytesIO:
         y += title_h
     if title_lines:
         y += 18
-        draw.line((_MARGIN_X + 40, y, _WIDTH - _MARGIN_X - 40, y), fill=_INK_SOFT, width=1)
+        draw.line(
+            (_MARGIN_X + 40, y, _WIDTH - _MARGIN_X - 40, y), fill=_INK_SOFT, width=1
+        )
         y += 22
 
     for line in body_lines:

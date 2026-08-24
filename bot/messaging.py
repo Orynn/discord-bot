@@ -17,7 +17,9 @@ def prepare_outgoing(
     linkify: bool = True,
     definition_menu: bool = True,
     view: discord.ui.View | None = None,
-) -> tuple[str | None, discord.Embed | None, list[discord.Embed] | None, discord.ui.View | None]:
+) -> tuple[
+    str | None, discord.Embed | None, list[discord.Embed] | None, discord.ui.View | None
+]:
     prepared_content = content
     prepared_embed = embed
     prepared_embeds = embeds

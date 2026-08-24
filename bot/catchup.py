@@ -99,10 +99,14 @@ def _is_catchup_allowed(ctx: commands.Context) -> bool:
     name = ctx.command.qualified_name
     if name in CATCHUP_BLOCKED_COMMANDS:
         return False
-    return not any(name.startswith(f"{blocked} ") for blocked in CATCHUP_BLOCKED_COMMANDS)
+    return not any(
+        name.startswith(f"{blocked} ") for blocked in CATCHUP_BLOCKED_COMMANDS
+    )
 
 
-def _catchup_after(channel_id: int, last_ids: dict[str, int]) -> discord.Object | datetime:
+def _catchup_after(
+    channel_id: int, last_ids: dict[str, int]
+) -> discord.Object | datetime:
     min_after = datetime.now(timezone.utc) - timedelta(hours=CATCHUP_MAX_AGE_HOURS)
     last_id = last_ids.get(str(channel_id))
     if last_id is None:
@@ -155,7 +159,9 @@ async def _catch_up_channel(
         return 0
     if isinstance(channel, discord.Thread) and channel.parent is None:
         return 0
-    if isinstance(channel, discord.Thread) and isinstance(channel.parent, discord.ForumChannel):
+    if isinstance(channel, discord.Thread) and isinstance(
+        channel.parent, discord.ForumChannel
+    ):
         return 0
 
     try:
@@ -236,7 +242,9 @@ async def catch_up_missed_commands(bot: Bot) -> int:
                     continue
                 seen.add(channel.id)
                 try:
-                    processed += await _catch_up_channel(bot=bot, channel=channel, last_ids=last_ids)
+                    processed += await _catch_up_channel(
+                        bot=bot, channel=channel, last_ids=last_ids
+                    )
                 except discord.ClientException:
                     continue
     finally:

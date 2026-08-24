@@ -7,7 +7,12 @@ from typing import Any
 from urllib.parse import quote
 
 from srd.fivetools.edition import edition_rank, url_target
-from srd.fivetools.loader import FiveToolsIndex, ensure_index_loaded, get_index, peek_index
+from srd.fivetools.loader import (
+    FiveToolsIndex,
+    ensure_index_loaded,
+    get_index,
+    peek_index,
+)
 from srd.fivetools_parser import (
     clean_tags,
     damage_type,
@@ -122,7 +127,9 @@ def item_source(item: dict[str, Any]) -> str:
     return _item_source(item)
 
 
-def _document_fields(item: dict[str, Any], *, slug: str | None = None, kind: str = "item") -> dict[str, Any]:
+def _document_fields(
+    item: dict[str, Any], *, slug: str | None = None, kind: str = "item"
+) -> dict[str, Any]:
     source = _item_source(item)
     resolved_slug = slug or item.get("slug") or slugify(item["name"])
     index = get_index()
@@ -156,10 +163,15 @@ def entry_url_for_item(kind: str, item: dict[str, Any]) -> str:
 def _contains_as_word(haystack: str, needle: str) -> bool:
     if not needle or not haystack:
         return False
-    return re.search(rf"(?<![a-z0-9]){re.escape(needle)}(?![a-z0-9])", haystack) is not None
+    return (
+        re.search(rf"(?<![a-z0-9]){re.escape(needle)}(?![a-z0-9])", haystack)
+        is not None
+    )
 
 
-def _pick_best_match(items: Iterable[dict[str, Any]], query: str) -> dict[str, Any] | None:
+def _pick_best_match(
+    items: Iterable[dict[str, Any]], query: str
+) -> dict[str, Any] | None:
     query_lower = query.lower().strip()
     if not query_lower:
         return None
@@ -171,7 +183,9 @@ def _pick_best_match(items: Iterable[dict[str, Any]], query: str) -> dict[str, A
         if name == query_lower:
             if exact is None or edition_rank(item) > edition_rank(exact):
                 exact = item
-        elif _contains_as_word(name, query_lower) or _contains_as_word(query_lower, name):
+        elif _contains_as_word(name, query_lower) or _contains_as_word(
+            query_lower, name
+        ):
             partial.append(item)
     if exact is not None:
         return exact
@@ -242,13 +256,19 @@ def collect_name_matches(
         key = name.lower()
         rank = edition_rank(item)
         current = best_by_name.get(key)
-        if current is None or score < current[0] or (score == current[0] and rank > current[1]):
+        if (
+            current is None
+            or score < current[0]
+            or (score == current[0] and rank > current[1])
+        ):
             best_by_name[key] = (score, rank, item)
     ordered = sorted(best_by_name.values(), key=lambda row: (row[0], -row[1]))
     return [row[2] for row in ordered[:limit]]
 
 
-def collect_search_matches(kind: str, query: str, *, limit: int = 25) -> list[dict[str, Any]]:
+def collect_search_matches(
+    kind: str, query: str, *, limit: int = 25
+) -> list[dict[str, Any]]:
     store_name = _KIND_NAME_STORES.get(kind)
     if not store_name:
         return []
@@ -285,7 +305,9 @@ def lookup_candidates(
     return collect_search_matches(kind, query)
 
 
-def _lookup_by_slug(index: FiveToolsIndex, slug: str, store: dict[str, dict[str, Any]]) -> dict[str, Any]:
+def _lookup_by_slug(
+    index: FiveToolsIndex, slug: str, store: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
     cleaned = short_slug(slug)
     matches: list[dict[str, Any]] = []
     seen: set[int] = set()
@@ -313,7 +335,9 @@ def _lookup_by_slug(index: FiveToolsIndex, slug: str, store: dict[str, dict[str,
     return max(matches, key=edition_rank)
 
 
-def _lookup_by_query(store_by_name: dict[str, dict[str, Any]], query: str, *, label: str) -> dict[str, Any]:
+def _lookup_by_query(
+    store_by_name: dict[str, dict[str, Any]], query: str, *, label: str
+) -> dict[str, Any]:
     text, _force_fuzzy = parse_search_query(query)
     if not text:
         raise FiveToolsNotFoundError(f"No {label} found matching '{query}'.")
@@ -333,7 +357,9 @@ def _lookup_by_query(store_by_name: dict[str, dict[str, Any]], query: str, *, la
 def normalize_spell(item: dict[str, Any]) -> dict[str, Any]:
     slug = item.get("slug") or slugify(item["name"])
     components = item.get("components")
-    material = components.get("m") if isinstance(components, dict) else item.get("material")
+    material = (
+        components.get("m") if isinstance(components, dict) else item.get("material")
+    )
     higher = render_entries(item.get("entriesHigherLevel"))
     return {
         **item,
@@ -385,7 +411,10 @@ def _format_proficiencies(value: Any) -> str:
             elif isinstance(entry, dict):
                 if "choose" in entry:
                     choose = entry["choose"]
-                    from_list = ", ".join(skill.replace("_", " ").title() for skill in choose.get("from", [])[:6])
+                    from_list = ", ".join(
+                        skill.replace("_", " ").title()
+                        for skill in choose.get("from", [])[:6]
+                    )
                     count = choose.get("count", 1)
                     parts.append(f"Choose {count} from {from_list}")
                 else:
@@ -398,18 +427,24 @@ def _format_proficiencies(value: Any) -> str:
 
 def _normalize_class_features(features: list[dict[str, Any]]) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
-    for feature in sorted(features, key=lambda item: (item.get("level") or 0, item.get("name") or "")):
+    for feature in sorted(
+        features, key=lambda item: (item.get("level") or 0, item.get("name") or "")
+    ):
         name = str(feature.get("name") or "").strip()
         desc = render_entries(feature.get("entries"))
         if not name or not desc:
             continue
         if name.lower() in {"subclass feature", "subclass features"}:
             continue
-        normalized.append({"level": feature.get("level") or 0, "name": name, "desc": desc})
+        normalized.append(
+            {"level": feature.get("level") or 0, "name": name, "desc": desc}
+        )
     return normalized
 
 
-def normalize_class(item: dict[str, Any], *, archetypes: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def normalize_class(
+    item: dict[str, Any], *, archetypes: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
     slug = item.get("slug") or slugify(item["name"])
     index = get_index()
     features = index.class_features(slug)
@@ -428,7 +463,11 @@ def normalize_class(item: dict[str, Any], *, archetypes: list[dict[str, Any]] | 
     if item.get("spellcastingAbility"):
         spellcasting = str(item["spellcastingAbility"]).upper()
     elif primary:
-        abilities = [next(iter(entry.keys())).upper() for entry in primary if isinstance(entry, dict)]
+        abilities = [
+            next(iter(entry.keys())).upper()
+            for entry in primary
+            if isinstance(entry, dict)
+        ]
         if abilities:
             spellcasting = "/".join(abilities)
 
@@ -441,9 +480,13 @@ def normalize_class(item: dict[str, Any], *, archetypes: list[dict[str, Any]] | 
         "hit_dice": f"d{hd.get('faces', 8)}" if hd.get("faces") else "—",
         "hp_at_1st_level": f"{hd.get('faces', 8)} + CON" if hd.get("faces") else "—",
         "spellcasting_ability": spellcasting,
-        "prof_saving_throws": ", ".join(str(score).upper() for score in prof) if prof else "—",
+        "prof_saving_throws": ", ".join(str(score).upper() for score in prof)
+        if prof
+        else "—",
         "prof_skills": _format_proficiencies(starting.get("skills")),
-        "prof_armor": _format_proficiencies(starting.get("armor") or starting.get("armorProficiencies")),
+        "prof_armor": _format_proficiencies(
+            starting.get("armor") or starting.get("armorProficiencies")
+        ),
         "prof_weapons": _format_proficiencies(starting.get("weapons")),
         "desc": feature_blurb,
         "features": _normalize_class_features(features),
@@ -521,7 +564,11 @@ def normalize_weapon(item: dict[str, Any]) -> dict[str, Any]:
     slug = item.get("slug") or slugify(item["name"])
     props = item.get("property") or []
     prop_names = [index.property_name(str(code)) for code in props]
-    category = f"{item.get('weaponCategory', '—').title()}" if item.get("weaponCategory") else "—"
+    category = (
+        f"{item.get('weaponCategory', '—').title()}"
+        if item.get("weaponCategory")
+        else "—"
+    )
     range_text = "Melee"
     if item.get("range"):
         range_text = f"{item['range']}/{item.get('longRange', item['range'])} ft."
@@ -543,7 +590,9 @@ def normalize_weapon(item: dict[str, Any]) -> dict[str, Any]:
 
 def normalize_armor(item: dict[str, Any]) -> dict[str, Any]:
     slug = item.get("slug") or slugify(item["name"])
-    category = "Heavy" if item.get("heavy") else "Medium" if item.get("medium") else "Light"
+    category = (
+        "Heavy" if item.get("heavy") else "Medium" if item.get("medium") else "Light"
+    )
     return {
         **item,
         **_document_fields(item, slug=slug, kind="armor"),
@@ -698,7 +747,9 @@ def _format_alignment(value: Any) -> str:
         return _ALIGNMENT_PARTS.get(value.upper(), value).title()
     if isinstance(value, list):
         if len(value) == 2 and all(isinstance(part, str) for part in value):
-            return " ".join(_ALIGNMENT_PARTS.get(part.upper(), part.title()) for part in value)
+            return " ".join(
+                _ALIGNMENT_PARTS.get(part.upper(), part.title()) for part in value
+            )
         if len(value) == 1:
             return _format_alignment(value[0])
     if isinstance(value, dict) and value.get("special"):
@@ -836,7 +887,8 @@ def normalize_monster(item: dict[str, Any]) -> dict[str, Any]:
         "saves": _format_mapping(item.get("save")),
         "skills": _format_mapping(item.get("skill")),
         "senses": _format_monster_senses(item),
-        "languages": ", ".join(str(part) for part in item.get("languages") or []) or "—",
+        "languages": ", ".join(str(part) for part in item.get("languages") or [])
+        or "—",
         "vulnerable": _format_damage_list(item.get("vulnerable")),
         "resist": _format_damage_list(item.get("resist")),
         "immune": _format_damage_list(item.get("immune")),
@@ -922,22 +974,48 @@ def _fetch(
 
 
 async def get_spell(slug: str) -> dict[str, Any]:
-    return _fetch("spells_by_slug", slug=slug, normalizer=normalize_spell, endpoint="spells", label="spell")
+    return _fetch(
+        "spells_by_slug",
+        slug=slug,
+        normalizer=normalize_spell,
+        endpoint="spells",
+        label="spell",
+    )
 
 
 async def search_spell(query: str) -> dict[str, Any]:
-    return _fetch("spells_by_name", query=query, normalizer=normalize_spell, endpoint="spells", label="spell")
+    return _fetch(
+        "spells_by_name",
+        query=query,
+        normalizer=normalize_spell,
+        endpoint="spells",
+        label="spell",
+    )
 
 
 async def get_species(slug: str) -> dict[str, Any]:
-    return _fetch("races_by_slug", slug=slug, normalizer=normalize_species, endpoint="species", label="species")
+    return _fetch(
+        "races_by_slug",
+        slug=slug,
+        normalizer=normalize_species,
+        endpoint="species",
+        label="species",
+    )
 
 
 async def search_species(query: str) -> dict[str, Any]:
-    return _fetch("races_by_name", query=query, normalizer=normalize_species, endpoint="species", label="species")
+    return _fetch(
+        "races_by_name",
+        query=query,
+        normalizer=normalize_species,
+        endpoint="species",
+        label="species",
+    )
 
 
-def _subclass_matches_class(subclass: dict[str, Any], char_class: dict[str, Any]) -> bool:
+def _subclass_matches_class(
+    subclass: dict[str, Any], char_class: dict[str, Any]
+) -> bool:
     parent_slug = char_class.get("slug") or slugify(char_class["name"])
     if subclass.get("class_slug") == parent_slug:
         return True
@@ -954,10 +1032,14 @@ def _class_archetypes(char_class: dict[str, Any]) -> list[dict[str, Any]]:
             class_name=subclass.get("className", char_class["name"]),
             short_name=subclass.get("shortName") or subclass["name"],
         )
-        level_three = next((feature for feature in features if feature.get("level") == 3), None)
+        level_three = next(
+            (feature for feature in features if feature.get("level") == 3), None
+        )
         desc = render_entries(level_three.get("entries")) if level_three else ""
         subclass_source = _item_source(subclass)
-        subclass_slug = subclass.get("slug") or slugify(subclass.get("shortName") or subclass["name"])
+        subclass_slug = subclass.get("slug") or slugify(
+            subclass.get("shortName") or subclass["name"]
+        )
         archetypes.append(
             {
                 "name": subclass["name"],
@@ -1041,43 +1123,103 @@ async def get_skill(slug: str) -> dict[str, Any]:
 
 
 async def get_feat(slug: str) -> dict[str, Any]:
-    return _fetch("feats_by_slug", slug=slug, normalizer=normalize_feat, endpoint="feats", label="feat")
+    return _fetch(
+        "feats_by_slug",
+        slug=slug,
+        normalizer=normalize_feat,
+        endpoint="feats",
+        label="feat",
+    )
 
 
 async def search_feat(query: str) -> dict[str, Any]:
-    return _fetch("feats_by_name", query=query, normalizer=normalize_feat, endpoint="feats", label="feat")
+    return _fetch(
+        "feats_by_name",
+        query=query,
+        normalizer=normalize_feat,
+        endpoint="feats",
+        label="feat",
+    )
 
 
 async def get_weapon(slug: str) -> dict[str, Any]:
-    return _fetch("weapons_by_slug", slug=slug, normalizer=normalize_weapon, endpoint="weapons", label="weapon")
+    return _fetch(
+        "weapons_by_slug",
+        slug=slug,
+        normalizer=normalize_weapon,
+        endpoint="weapons",
+        label="weapon",
+    )
 
 
 async def search_weapon(query: str) -> dict[str, Any]:
-    return _fetch("weapons_by_name", query=query, normalizer=normalize_weapon, endpoint="weapons", label="weapon")
+    return _fetch(
+        "weapons_by_name",
+        query=query,
+        normalizer=normalize_weapon,
+        endpoint="weapons",
+        label="weapon",
+    )
 
 
 async def get_armor(slug: str) -> dict[str, Any]:
-    return _fetch("armor_by_slug", slug=slug, normalizer=normalize_armor, endpoint="armor", label="armor")
+    return _fetch(
+        "armor_by_slug",
+        slug=slug,
+        normalizer=normalize_armor,
+        endpoint="armor",
+        label="armor",
+    )
 
 
 async def search_armor(query: str) -> dict[str, Any]:
-    return _fetch("armor_by_name", query=query, normalizer=normalize_armor, endpoint="armor", label="armor")
+    return _fetch(
+        "armor_by_name",
+        query=query,
+        normalizer=normalize_armor,
+        endpoint="armor",
+        label="armor",
+    )
 
 
 async def get_item(slug: str) -> dict[str, Any]:
-    return _fetch("items_by_slug", slug=slug, normalizer=normalize_item, endpoint="items", label="item")
+    return _fetch(
+        "items_by_slug",
+        slug=slug,
+        normalizer=normalize_item,
+        endpoint="items",
+        label="item",
+    )
 
 
 async def search_item(query: str) -> dict[str, Any]:
-    return _fetch("items_by_name", query=query, normalizer=normalize_item, endpoint="items", label="item")
+    return _fetch(
+        "items_by_name",
+        query=query,
+        normalizer=normalize_item,
+        endpoint="items",
+        label="item",
+    )
 
 
 async def get_monster(slug: str) -> dict[str, Any]:
-    return _fetch("monsters_by_slug", slug=slug, normalizer=normalize_monster, endpoint="monsters", label="monster")
+    return _fetch(
+        "monsters_by_slug",
+        slug=slug,
+        normalizer=normalize_monster,
+        endpoint="monsters",
+        label="monster",
+    )
 
 
 async def search_monster(query: str) -> dict[str, Any]:
-    return _fetch("monsters_by_name", query=query, normalizer=normalize_monster, endpoint="monsters", label="monster")
+    return _fetch(
+        "monsters_by_name",
+        query=query,
+        normalizer=normalize_monster,
+        endpoint="monsters",
+        label="monster",
+    )
 
 
 def suggest_names(kind: str, query: str, *, limit: int = 25) -> list[str]:
@@ -1127,7 +1269,11 @@ async def search_equipment(query: str) -> dict[str, Any]:
         exact = store.get(cleaned.lower())
         if exact is not None:
             normalized = normalizer(exact)
-            normalized["kind"] = {"weapons": "weapon", "armor": "armor", "items": "item"}[endpoint]
+            normalized["kind"] = {
+                "weapons": "weapon",
+                "armor": "armor",
+                "items": "item",
+            }[endpoint]
             register_glossary_item(normalized, endpoint)
             return normalized
 
@@ -1137,7 +1283,9 @@ async def search_equipment(query: str) -> dict[str, Any]:
             return await search_fn(query)
         except FiveToolsNotFoundError as exc:
             last_error = exc
-    raise last_error or FiveToolsNotFoundError(f"No equipment found matching '{query}'.")
+    raise last_error or FiveToolsNotFoundError(
+        f"No equipment found matching '{query}'."
+    )
 
 
 async def get_equipment(slug: str, *, kind: str | None = None) -> dict[str, Any]:

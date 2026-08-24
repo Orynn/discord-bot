@@ -7,9 +7,13 @@ from bot.messaging import prepare_outgoing
 
 
 class HelpSectionButton(discord.ui.Button):
-    def __init__(self, *, section_index: int, section: HelpSection, selected: bool) -> None:
+    def __init__(
+        self, *, section_index: int, section: HelpSection, selected: bool
+    ) -> None:
         super().__init__(
-            style=discord.ButtonStyle.primary if selected else discord.ButtonStyle.secondary,
+            style=discord.ButtonStyle.primary
+            if selected
+            else discord.ButtonStyle.secondary,
             emoji=section.emoji,
             label=section.button_label or section.label,
             row=0 if section_index < 5 else 1,

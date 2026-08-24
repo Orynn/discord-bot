@@ -5,7 +5,12 @@ from discord.ext.commands.context import Context
 from bot.checks import is_admin
 from bot.command_helpers import command_reply, delete_command
 from config import PREFIX
-from sheets.context import format_skill_name, get_sheet_for_owner, save_owner_sheet, target_label
+from sheets.context import (
+    format_skill_name,
+    get_sheet_for_owner,
+    save_owner_sheet,
+    target_label,
+)
 from sheets.data import ABILITIES, lookup_skill
 
 
@@ -51,14 +56,18 @@ def register_proficiency_commands(sheet_group: Group) -> None:
 
         ability = ability.lower()
         if ability not in ABILITIES:
-            await command_reply(ctx, f"Unknown ability. Choose from: {', '.join(ABILITIES)}")
+            await command_reply(
+                ctx, f"Unknown ability. Choose from: {', '.join(ABILITIES)}"
+            )
             return
 
         added = sheet.toggle_save_proficiency(ability=ability)
         save_owner_sheet(ctx, owner_id, sheet)
         status = "added" if added else "removed"
         label = target_label(member, sheet)
-        await command_reply(ctx, f"{label}: save proficiency for **{ability.upper()}** {status}.")
+        await command_reply(
+            ctx, f"{label}: save proficiency for **{ability.upper()}** {status}."
+        )
         await delete_command(ctx)
 
     @sheet_prof_group.command(
@@ -104,11 +113,15 @@ def register_proficiency_commands(sheet_group: Group) -> None:
                 await command_reply(ctx, str(exc))
                 return
             status = "added" if added else "removed"
-            await command_reply(ctx, f"{label}: expertise for **{skill_label}** {status}.")
+            await command_reply(
+                ctx, f"{label}: expertise for **{skill_label}** {status}."
+            )
         else:
             added = sheet.toggle_skill_proficiency(skill=skill)
             status = "added" if added else "removed"
-            await command_reply(ctx, f"{label}: proficiency for **{skill_label}** {status}.")
+            await command_reply(
+                ctx, f"{label}: proficiency for **{skill_label}** {status}."
+            )
 
         save_owner_sheet(ctx, owner_id, sheet)
         await delete_command(ctx)

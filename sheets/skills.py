@@ -13,15 +13,21 @@ def skill_rule_slug(skill: str) -> str:
 def skill_url(skill: str) -> str:
     display_name = format_skill_name(skill)
     index = get_index()
-    indexed = index.skills_by_slug.get(skill) or index.skills_by_name.get(display_name.lower())
+    indexed = index.skills_by_slug.get(skill) or index.skills_by_name.get(
+        display_name.lower()
+    )
     if indexed is not None:
         return entry_url_for_item("skill", indexed)
     return entry_url("skill", display_name, source=DEFAULT_SOURCE)
 
 
-def format_skill_line(*, skill: str, ability: str, modifier: str, marks: str = "") -> str:
+def format_skill_line(
+    *, skill: str, ability: str, modifier: str, marks: str = ""
+) -> str:
     name = format_skill_name(skill)
-    return f"{markdown_link(name, skill_url(skill))} ({ability.upper()}) {modifier}{marks}"
+    return (
+        f"{markdown_link(name, skill_url(skill))} ({ability.upper()}) {modifier}{marks}"
+    )
 
 
 def format_skills_block(sheet) -> str:

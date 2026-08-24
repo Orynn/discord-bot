@@ -1,6 +1,12 @@
 import discord
 
-from combat.cards import CardSnapshot, card_description, card_label, is_spellbook_card, lookup_card
+from combat.cards import (
+    CardSnapshot,
+    card_description,
+    card_label,
+    is_spellbook_card,
+    lookup_card,
+)
 from combat.storage import CombatState
 
 
@@ -54,7 +60,9 @@ def format_combatants(state: CombatState) -> str:
         if combatant.traits:
             extras.append(", ".join(combatant.traits))
         if combatant.effects:
-            effect_labels = ", ".join(_effect_label(combatant, effect_id) for effect_id in combatant.effects)
+            effect_labels = ", ".join(
+                _effect_label(combatant, effect_id) for effect_id in combatant.effects
+            )
             if effect_labels:
                 extras.append(effect_labels)
         if combatant.user_id is not None and combatant.hp <= 0:
@@ -89,7 +97,9 @@ def build_combat_embed(state: CombatState) -> discord.Embed:
 
     embed = discord.Embed(title=title, color=COMBAT_COLOR)
     embed.add_field(name="⚔️ Combatants", value=format_combatants(state), inline=False)
-    embed.add_field(name="📜 Recent actions", value=format_combat_log(state), inline=False)
+    embed.add_field(
+        name="📜 Recent actions", value=format_combat_log(state), inline=False
+    )
     if active is not None and active.hand:
         preview = ", ".join(
             card_label(card)
@@ -98,21 +108,23 @@ def build_combat_embed(state: CombatState) -> discord.Embed:
         )
         embed.set_footer(text=f"🖐️ {active.name}'s hand: {preview}")
     else:
-        embed.set_footer(text="Decks come from character sheets and your 5etools export")
+        embed.set_footer(
+            text="Decks come from character sheets and your 5etools export"
+        )
     return embed
 
 
 def format_spellbook(catalog: dict[str, CardSnapshot]) -> str:
-    spells = [
-        card for card in catalog.values() if is_spellbook_card(card)
-    ]
+    spells = [card for card in catalog.values() if is_spellbook_card(card)]
     if not spells:
         return ""
     spells.sort(key=lambda card: (card.spell_level, card.label.lower()))
     return "\n".join(f"• {card_description(card)}" for card in spells)
 
 
-def build_hand_embed(*, combatant_name: str, hand: list[str], catalog: dict[str, CardSnapshot]) -> discord.Embed:
+def build_hand_embed(
+    *, combatant_name: str, hand: list[str], catalog: dict[str, CardSnapshot]
+) -> discord.Embed:
     embed = discord.Embed(
         title=f"🖐️ {combatant_name}'s hand",
         description=format_hand(hand, catalog),
@@ -123,5 +135,7 @@ def build_hand_embed(*, combatant_name: str, hand: list[str], catalog: dict[str,
         if len(spellbook) > 1024:
             spellbook = spellbook[:1021] + "…"
         embed.add_field(name="📖 Spellbook", value=spellbook, inline=False)
-    embed.set_footer(text="Every known spell is in the play menu. One target is chosen automatically.")
+    embed.set_footer(
+        text="Every known spell is in the play menu. One target is chosen automatically."
+    )
     return embed

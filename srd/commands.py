@@ -34,7 +34,11 @@ async def _send_lookup(
 
 
 async def _handle_lookup_error(ctx: Context, exc: Exception) -> None:
-    message = str(exc) if isinstance(exc, fivetools.FiveToolsError) else "An unexpected error occurred."
+    message = (
+        str(exc)
+        if isinstance(exc, fivetools.FiveToolsError)
+        else "An unexpected error occurred."
+    )
     await command_reply(ctx, message)
     await delete_command(ctx)
 
@@ -52,18 +56,49 @@ def setup_srd(bot: Bot) -> None:
 
     lookups = (
         ("spell", (), fivetools.search_spell, spell_embed, "Look up a spell"),
-        ("species", ("race",), fivetools.search_species, species_embed, "Look up a species"),
+        (
+            "species",
+            ("race",),
+            fivetools.search_species,
+            species_embed,
+            "Look up a species",
+        ),
         ("class", (), fivetools.search_class, class_embed, "Look up a class"),
-        ("background", (), fivetools.search_background, background_embed, "Look up a background"),
+        (
+            "background",
+            (),
+            fivetools.search_background,
+            background_embed,
+            "Look up a background",
+        ),
         ("feat", (), fivetools.search_feat, feat_embed, "Look up a feat"),
-        ("condition", ("cond",), fivetools.search_condition, condition_embed, "Look up a condition"),
-        ("monster", ("statblock", "creature"), fivetools.search_monster, monster_embed, "Look up a monster"),
+        (
+            "condition",
+            ("cond",),
+            fivetools.search_condition,
+            condition_embed,
+            "Look up a condition",
+        ),
+        (
+            "monster",
+            ("statblock", "creature"),
+            fivetools.search_monster,
+            monster_embed,
+            "Look up a monster",
+        ),
         ("weapon", (), fivetools.search_weapon, weapon_embed, "Look up a weapon"),
         ("armor", (), fivetools.search_armor, armor_embed, "Look up armor"),
-        ("item", ("gear",), fivetools.search_item, item_embed, "Look up adventuring gear"),
+        (
+            "item",
+            ("gear",),
+            fivetools.search_item,
+            item_embed,
+            "Look up adventuring gear",
+        ),
     )
 
     for name, aliases, search, embed_fn, title in lookups:
+
         @srd_group.command(
             name=name,
             aliases=list(aliases),
@@ -80,12 +115,16 @@ def setup_srd(bot: Bot) -> None:
             try:
                 text, force_fuzzy = parse_search_query(query)
                 if not text:
-                    await _handle_lookup_error(ctx, fivetools.FiveToolsNotFoundError("Missing search text."))
+                    await _handle_lookup_error(
+                        ctx, fivetools.FiveToolsNotFoundError("Missing search text.")
+                    )
                     return
                 candidates = lookup_candidates(_kind, text, force_list=force_fuzzy)
                 if candidates is not None:
                     if not candidates:
-                        raise fivetools.FiveToolsNotFoundError(f"No {_kind} found matching '{text}'.")
+                        raise fivetools.FiveToolsNotFoundError(
+                            f"No {_kind} found matching '{text}'."
+                        )
                     if len(candidates) > 1:
                         await send_message(
                             ctx,

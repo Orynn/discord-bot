@@ -2,7 +2,11 @@ import discord
 from urllib.parse import quote, unquote
 
 from bot.messaging import send_interaction_message
-from bot.selects import fresh_component_id, replace_message_view, select_menus_from_message
+from bot.selects import (
+    fresh_component_id,
+    replace_message_view,
+    select_menus_from_message,
+)
 from srd import fivetools
 from srd.embeds import kind_embed_color, spell_embed, titled
 from srd.fivetools import entry_url
@@ -25,12 +29,12 @@ def homebrew_name_from_slug(slug: str) -> str:
 
 
 class PersistentSpellSelect(discord.ui.Select):
-    def __init__(self, chunk_index: int, spell_entries: list[tuple[str, str, str]] | None = None) -> None:
+    def __init__(
+        self, chunk_index: int, spell_entries: list[tuple[str, str, str]] | None = None
+    ) -> None:
         if spell_entries:
             placeholder = (
-                "Choose a spell…"
-                if chunk_index == 0
-                else f"Spells {chunk_index + 1}"
+                "Choose a spell…" if chunk_index == 0 else f"Spells {chunk_index + 1}"
             )
             options = [
                 discord.SelectOption(
@@ -108,7 +112,10 @@ class SpellSelectView(discord.ui.View):
         super().__init__(timeout=None)
         if spell_entries:
             sorted_entries = sorted(spell_entries, key=lambda entry: entry[1].lower())
-            chunks = [sorted_entries[index : index + 25] for index in range(0, len(sorted_entries), 25)]
+            chunks = [
+                sorted_entries[index : index + 25]
+                for index in range(0, len(sorted_entries), 25)
+            ]
             for index, chunk in enumerate(chunks[:5]):
                 self.add_item(PersistentSpellSelect(index, chunk))
         else:
@@ -122,7 +129,13 @@ def spell_entries_from_select_options(options) -> list[tuple[str, str, str]]:
         value = getattr(option, "value", "")
         if not value or value == "noop":
             continue
-        entries.append((value, getattr(option, "label", value), getattr(option, "description", None) or ""))
+        entries.append(
+            (
+                value,
+                getattr(option, "label", value),
+                getattr(option, "description", None) or "",
+            )
+        )
     return entries
 
 
@@ -156,7 +169,9 @@ def format_spell_lines(spell_entries: list[tuple[str, str, str]]) -> str:
     return "\n".join(lines)
 
 
-def build_spell_list_embed(*, title: str, spell_entries: list[tuple[str, str, str]]) -> discord.Embed:
+def build_spell_list_embed(
+    *, title: str, spell_entries: list[tuple[str, str, str]]
+) -> discord.Embed:
     description = format_spell_lines(spell_entries)
     if len(description) > 4096:
         description = f"{description[:4093]}..."
@@ -170,7 +185,9 @@ def build_spell_list_embed(*, title: str, spell_entries: list[tuple[str, str, st
     return embed
 
 
-def build_sheet_spell_view(spell_entries: list[tuple[str, str, str]]) -> SpellSelectView | None:
+def build_sheet_spell_view(
+    spell_entries: list[tuple[str, str, str]],
+) -> SpellSelectView | None:
     if not spell_entries:
         return None
     return SpellSelectView(spell_entries)

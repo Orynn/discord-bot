@@ -14,9 +14,7 @@ _ENDING_PUNCTUATION: FrozenSet[str] = frozenset(".!?,;:")
 
 def _is_already_bold(text: str, start: int, end: int) -> bool:
     return (
-        start >= 2
-        and text[start - 2 : start] == "**"
-        and text[end : end + 2] == "**"
+        start >= 2 and text[start - 2 : start] == "**" and text[end : end + 2] == "**"
     )
 
 
@@ -38,13 +36,18 @@ def _format_known_names(text: str, *, guild_id: int) -> str:
     selected: list[tuple[int, int, str]] = []
     occupied: list[tuple[int, int]] = []
     for start, end, original in candidates:
-        if any(not (end <= occ_start or start >= occ_end) for occ_start, occ_end in occupied):
+        if any(
+            not (end <= occ_start or start >= occ_end)
+            for occ_start, occ_end in occupied
+        ):
             continue
         selected.append((start, end, original))
         occupied.append((start, end))
 
     result = text
-    for start, end, original in sorted(selected, key=lambda item: item[0], reverse=True):
+    for start, end, original in sorted(
+        selected, key=lambda item: item[0], reverse=True
+    ):
         result = f"{result[:start]}**{original}**{result[end:]}"
     return result
 

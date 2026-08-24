@@ -9,7 +9,11 @@ import discord
 
 from data.db import db_connection
 from sheets.containers import SPECIAL_LOCATIONS, custom_container_capacity
-from sheets.equipment import InventoryItem, format_item_line, parse_name_quantity_and_weight
+from sheets.equipment import (
+    InventoryItem,
+    format_item_line,
+    parse_name_quantity_and_weight,
+)
 
 LIST_ALIASES = frozenset({"list", "here", "ici", "show", "places"})
 _NOTE_SEPARATORS = (" -- ", " — ", " – ")
@@ -73,7 +77,9 @@ class PlaceStash:
         }
 
     @classmethod
-    def from_dict(cls, *, guild_id: int, place_key: str, data: dict[str, Any]) -> "PlaceStash":
+    def from_dict(
+        cls, *, guild_id: int, place_key: str, data: dict[str, Any]
+    ) -> "PlaceStash":
         entries = [StashEntry.from_dict(entry) for entry in data.get("entries") or []]
         return cls(
             guild_id=guild_id,
@@ -131,17 +137,21 @@ class PlaceStash:
         exact = [
             entry
             for entry in self.entries
-            if entry.item.name.lower() == query_lower or entry.item.slug.lower() == query_lower
+            if entry.item.name.lower() == query_lower
+            or entry.item.slug.lower() == query_lower
         ]
         if exact:
             return exact
         return [
             entry
             for entry in self.entries
-            if query_lower in entry.item.name.lower() or query_lower in entry.item.slug.lower()
+            if query_lower in entry.item.name.lower()
+            or query_lower in entry.item.slug.lower()
         ]
 
-    def take_items(self, query: str, *, quantity: int | None = None) -> list[InventoryItem]:
+    def take_items(
+        self, query: str, *, quantity: int | None = None
+    ) -> list[InventoryItem]:
         matches = self.find_entries(query)
         if not matches:
             return []
@@ -155,7 +165,8 @@ class PlaceStash:
             nested_entries = [
                 child
                 for child in self.entries
-                if child is not entry and _is_nested_in(child.item, entry.item, self.entries)
+                if child is not entry
+                and _is_nested_in(child.item, entry.item, self.entries)
             ]
             skip = {id(entry), *(id(child) for child in nested_entries)}
             taken = [entry.item, *[child.item for child in nested_entries]]
@@ -181,7 +192,11 @@ class PlaceStash:
         lines: list[str] = []
         for entry in self.entries:
             parent = entry.item.stored_in
-            nested = bool(parent) and parent not in SPECIAL_LOCATIONS and parent in parent_slugs
+            nested = (
+                bool(parent)
+                and parent not in SPECIAL_LOCATIONS
+                and parent in parent_slugs
+            )
             if nested:
                 continue
             lines.append(_format_stash_line(entry, nested=False))
@@ -226,7 +241,9 @@ def parse_let_args(text: str) -> LetArgs:
     elif not cleaned:
         list_only = True
 
-    item, quantity, _ = parse_name_quantity_and_weight(cleaned) if cleaned else ("", None, None)
+    item, quantity, _ = (
+        parse_name_quantity_and_weight(cleaned) if cleaned else ("", None, None)
+    )
     if item.lower() in LIST_ALIASES:
         list_only = True
         all_places = item.lower() == "places"
@@ -342,7 +359,9 @@ def _is_container_item(item: InventoryItem) -> bool:
     return custom_container_capacity(item.name) is not None
 
 
-def _is_nested_in(item: InventoryItem, container: InventoryItem, entries: list[StashEntry]) -> bool:
+def _is_nested_in(
+    item: InventoryItem, container: InventoryItem, entries: list[StashEntry]
+) -> bool:
     current = item.stored_in
     seen: set[str] = set()
     slugs = {entry.item.slug: entry.item for entry in entries}
@@ -359,7 +378,9 @@ def _prefer_stash_entry(entries: list[StashEntry]) -> StashEntry:
     return sorted(
         entries,
         key=lambda entry: (
-            1 if entry.item.stored_in and entry.item.stored_in not in SPECIAL_LOCATIONS else 0,
+            1
+            if entry.item.stored_in and entry.item.stored_in not in SPECIAL_LOCATIONS
+            else 0,
             -entry.item.quantity,
         ),
     )[0]

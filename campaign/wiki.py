@@ -139,7 +139,18 @@ _INFOBOX_SECTION = {
 _CATEGORY_SECTION: tuple[tuple[tuple[str, ...], str], ...] = (
     (("ethnie", "ethnies", "race", "races", "ethnicities"), "race"),
     (("classe", "classes", "prestige class", "classe de prestige"), "classe"),
-    (("divinités", "divinité", "deities", "gods", "greater deities", "lesser deities", "dead powers"), "pantheon"),
+    (
+        (
+            "divinités",
+            "divinité",
+            "deities",
+            "gods",
+            "greater deities",
+            "lesser deities",
+            "dead powers",
+        ),
+        "pantheon",
+    ),
     (
         (
             "organisation",
@@ -216,7 +227,19 @@ _CATEGORY_SECTION: tuple[tuple[tuple[str, ...], str], ...] = (
         ),
         "lieux",
     ),
-    (("évènement", "evenement", "guerre", "bataille", "events", "adventures", "wars", "battles"), "quêtes"),
+    (
+        (
+            "évènement",
+            "evenement",
+            "guerre",
+            "bataille",
+            "events",
+            "adventures",
+            "wars",
+            "battles",
+        ),
+        "quêtes",
+    ),
 )
 
 _INFOBOX_FIELDS = (
@@ -379,9 +402,7 @@ GENERIC_SKIP = frozenset(
     }
 )
 
-_WIKI_INTERNAL = re.compile(
-    r"\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]"
-)
+_WIKI_INTERNAL = re.compile(r"\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]")
 
 
 def _normalize_template_name(raw: str) -> str:
@@ -399,6 +420,7 @@ def _is_skipped_template(name: str) -> bool:
         if key.startswith(f"{skipped}_") or key.startswith(f"{skipped}/"):
             return True
     return False
+
 
 _session: aiohttp.ClientSession | None = None
 
@@ -436,7 +458,11 @@ class WikiPage:
     def discord_chunks(self) -> list[str]:
         attribution = f"\n\n— [{WIKI_NAME}]({self.url}) · CC BY-SA"
         starter_budget = _STARTER_LIMIT - len(attribution)
-        parts = [self.summary, self.body] if self.summary and self.body else [self.summary or self.body]
+        parts = (
+            [self.summary, self.body]
+            if self.summary and self.body
+            else [self.summary or self.body]
+        )
         text = "\n\n".join(part for part in parts if part).strip()
         if not text:
             text = f"**{self.title}**"
@@ -565,14 +591,18 @@ def _dedupe_titles(*groups: list[str], limit: int) -> list[str]:
     return titles
 
 
-def collect_infobox_titles(wikitext: str, *, limit: int = MAX_RELATED_PAGES) -> list[str]:
+def collect_infobox_titles(
+    wikitext: str, *, limit: int = MAX_RELATED_PAGES
+) -> list[str]:
     raw, _remaining = _first_infobox_and_rest(wikitext)
     if not raw:
         return []
     return _dedupe_titles(extract_wiki_links(raw), limit=limit)
 
 
-def collect_related_titles(wikitext: str, *, limit: int = MAX_RELATED_PAGES) -> list[str]:
+def collect_related_titles(
+    wikitext: str, *, limit: int = MAX_RELATED_PAGES
+) -> list[str]:
     raw, remaining = _first_infobox_and_rest(wikitext)
     infobox_links = extract_wiki_links(raw) if raw else []
     return _dedupe_titles(infobox_links, extract_wiki_links(remaining), limit=limit)
@@ -580,7 +610,9 @@ def collect_related_titles(wikitext: str, *, limit: int = MAX_RELATED_PAGES) -> 
 
 def rewrite_imported_links(text: str, jump_urls: dict[str, str]) -> str:
     rewritten = text
-    for title, jump_url in sorted(jump_urls.items(), key=lambda item: len(item[0]), reverse=True):
+    for title, jump_url in sorted(
+        jump_urls.items(), key=lambda item: len(item[0]), reverse=True
+    ):
         wiki_url = wiki_page_url(title)
         rewritten = rewritten.replace(f"(<{wiki_url}>)", f"({jump_url})")
         rewritten = rewritten.replace(f"({wiki_url})", f"({jump_url})")
@@ -615,7 +647,9 @@ def connections_block(
 _FOLLOW_LINKS_FLAG = re.compile(r"(?:(?<=\s)|^)--liens\b", re.IGNORECASE)
 
 
-def split_import_query(query: str, extra_sections: tuple[str, ...] = ()) -> tuple[str | None, str, bool]:
+def split_import_query(
+    query: str, extra_sections: tuple[str, ...] = ()
+) -> tuple[str | None, str, bool]:
     text = query.strip()
     if not text:
         raise WikiError(
@@ -638,7 +672,9 @@ def split_import_query(query: str, extra_sections: tuple[str, ...] = ()) -> tupl
 
 
 def _category_needle_hits(category: str, needle: str) -> bool:
-    cleaned = re.sub(r"^(?:category|catégorie):\s*", "", category, flags=re.IGNORECASE).casefold()
+    cleaned = re.sub(
+        r"^(?:category|catégorie):\s*", "", category, flags=re.IGNORECASE
+    ).casefold()
     token = needle.casefold().strip()
     if not token:
         return False
@@ -670,7 +706,10 @@ def guess_section(
     if infobox_name:
         mapped = _INFOBOX_SECTION.get(_normalize_template_name(infobox_name))
         if mapped == "organisations" and any(
-            any(_category_needle_hits(category, needle) for needle in ("classe", "classes"))
+            any(
+                _category_needle_hits(category, needle)
+                for needle in ("classe", "classes")
+            )
             for category in categories
         ):
             return "classe"
@@ -713,7 +752,7 @@ def parse_template(raw: str) -> tuple[str, dict[str, str]]:
     buf: list[str] = []
     depth = 0
     for char in inner:
-        if char == "{" :
+        if char == "{":
             depth += 1
             buf.append(char)
             continue
@@ -860,7 +899,9 @@ def _category_names(entries: list[dict]) -> list[str]:
     names: list[str] = []
     for entry in entries:
         title = str(entry.get("title") or entry.get("*") or "")
-        title = re.sub(r"^(?:Category|Catégorie):", "", title, flags=re.IGNORECASE).strip()
+        title = re.sub(
+            r"^(?:Category|Catégorie):", "", title, flags=re.IGNORECASE
+        ).strip()
         if title:
             names.append(title)
     return names
@@ -998,10 +1039,14 @@ async def fetch_wiki_page(query: str, *, suggest: bool = True) -> WikiPage:
     url = page.get("fullurl") or f"{WIKI_BASE}{page['title'].replace(' ', '_')}"
     skip_self = page["title"].casefold()
     outgoing = tuple(
-        title for title in collect_related_titles(wikitext) if title.casefold() != skip_self
+        title
+        for title in collect_related_titles(wikitext)
+        if title.casefold() != skip_self
     )
     infobox_outgoing = tuple(
-        title for title in collect_infobox_titles(wikitext) if title.casefold() != skip_self
+        title
+        for title in collect_infobox_titles(wikitext)
+        if title.casefold() != skip_self
     )
     return WikiPage(
         title=page["title"],
@@ -1069,7 +1114,9 @@ async def fetch_wiki_cluster(
         seen_pages.add(key)
         pages.append(related)
         enqueue(_follow_titles(related, infobox_only=infobox_only), hop=hop + 1)
-        if on_progress is not None and (len(pages) == 2 or len(pages) % 5 == 0 or not queue):
+        if on_progress is not None and (
+            len(pages) == 2 or len(pages) % 5 == 0 or not queue
+        ):
             await on_progress(
                 f"📖 Récupération des pages wiki… **{len(pages)}/{cap}** (`{related.title}`)"
             )
@@ -1092,7 +1139,9 @@ def is_allowed_thumbnail_url(url: str) -> bool:
     host = (parsed.hostname or "").casefold()
     if not host:
         return False
-    return any(host == domain or host.endswith(f".{domain}") for domain in _ALLOWED_THUMB_HOSTS)
+    return any(
+        host == domain or host.endswith(f".{domain}") for domain in _ALLOWED_THUMB_HOSTS
+    )
 
 
 async def download_thumbnail(url: str) -> discord.File | None:

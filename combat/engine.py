@@ -31,6 +31,10 @@ from sheets.storage import get_sheet, update_sheet
 DEFAULT_NPC_HP = 20
 DEFAULT_NPC_AC = 10
 DEFAULT_NPC_ATTACK_BONUS = 4
+DEFAULT_NPC_SAVE_DC = 13
+SKIP_TURN_CONDITIONS = frozenset(
+    {"paralyzed", "stunned", "unconscious", "incapacitated"}
+)
 
 
 @dataclass(frozen=True)
@@ -68,7 +72,9 @@ def can_control_combatant(
     return int(user_id) == int(combatant.user_id)
 
 
-def _ability_mod(combatant: CombatantState, ability: str | None, *, guild_id: int) -> int:
+def _ability_mod(
+    combatant: CombatantState, ability: str | None, *, guild_id: int
+) -> int:
     if not ability:
         return 0
     sheet = _sheet_for(combatant, guild_id=guild_id)
@@ -147,9 +153,44 @@ def _condition_keys(combatant: CombatantState, *, guild_id: int) -> set[str]:
     sheet = _sheet_for(combatant, guild_id=guild_id)
     if sheet is not None:
         keys |= sheet_condition_keys(sheet)
-    if combatant.user_id is not None and combatant.hp <= 0 and not _is_eliminated(combatant):
+    for raw in combatant.conditions:
+        keys.add(str(raw).lower())
+    if (
+        combatant.user_id is not None
+        and combatant.hp <= 0
+        and not _is_eliminated(combatant)
+    ):
         keys.add("unconscious")
     return keys
+
+
+def _spell_save_dc(actor: CombatantState, *, guild_id: int) -> int:
+    sheet = _sheet_for(actor, guild_id=guild_id)
+    if sheet is None:
+        return DEFAULT_NPC_SAVE_DC
+    ability = spellcasting_ability(sheet.char_class)
+    return 8 + sheet.get_prof_bonus() + _ability_mod(actor, ability, guild_id=guild_id)
+
+
+def _save_modifier(combatant: CombatantState, ability: str, *, guild_id: int) -> int:
+    sheet = _sheet_for(combatant, guild_id=guild_id)
+    if sheet is None:
+        return 0
+    return sheet.get_save_modifier(ability)
+
+
+def _apply_condition(state: CombatState, target: CombatantState, condition: str) -> str:
+    key = condition.lower().strip()
+    if key not in target.conditions:
+        target.conditions.append(key)
+    if target.user_id is not None:
+
+        def _add(sheet: CharacterSheet) -> None:
+            if key not in sheet.conditions:
+                sheet.conditions.append(key)
+
+        update_sheet(user_id=target.user_id, guild_id=state.guild_id, updater=_add)
+    return f" — {key}"
 
 
 def _combatant_ac(combatant: CombatantState, *, guild_id: int) -> int:
@@ -173,7 +214,9 @@ def _attack_bonus(actor: CombatantState, card: CardSnapshot, *, guild_id: int) -
     return ability_mod + prof
 
 
-def _attack_advantage(actor: CombatantState, target: CombatantState, *, guild_id: int) -> bool | None:
+def _attack_advantage(
+    actor: CombatantState, target: CombatantState, *, guild_id: int
+) -> bool | None:
     actor_keys = _condition_keys(actor, guild_id=guild_id)
     target_keys = _condition_keys(target, guild_id=guild_id)
     disadv = bool(actor_keys & ATTACKER_DISADVANTAGE)
@@ -278,7 +321,9 @@ def _sync_hp_to_sheet(combatant: CombatantState, *, guild_id: int) -> None:
 
 
 def _living_combatants(state: CombatState) -> list[CombatantState]:
-    return [combatant for combatant in state.combatants.values() if _in_fight(combatant)]
+    return [
+        combatant for combatant in state.combatants.values() if _in_fight(combatant)
+    ]
 
 
 def _check_victory(state: CombatState) -> PlayResult | None:
@@ -418,7 +463,9 @@ def _resolve_damage_card(
     attack_note = ""
     crit = False
     if card_makes_attack_roll(card):
-        hit, crit, attack_note = _resolve_attack_roll(state, actor=actor, target=target, card=card)
+        hit, crit, attack_note = _resolve_attack_roll(
+            state, actor=actor, target=target, card=card
+        )
         if not hit:
             line = (
                 f"**{actor.name}** uses **{card.label}** on **{target.name}** "
@@ -446,7 +493,11 @@ def _resolve_damage_card(
         extra_notes.append("Pack Tactics +2")
     mod_parts = []
     if ability_mod:
-        mod_parts.append(f"{card.ability.upper()} {ability_mod:+d}" if card.ability else str(ability_mod))
+        mod_parts.append(
+            f"{card.ability.upper()} {ability_mod:+d}"
+            if card.ability
+            else str(ability_mod)
+        )
     if prof:
         mod_parts.append(f"prof +{prof}")
     if card.flat_modifier:
@@ -465,6 +516,78 @@ def _resolve_damage_card(
         action_label=action_label,
         damage_type_label=card.damage_type_label,
     )
+
+
+def _resolve_save_card(
+    state: CombatState,
+    *,
+    actor: CombatantState,
+    target: CombatantState,
+    card: CardSnapshot,
+) -> str:
+    ability = card.save_ability or "dex"
+    dc = _spell_save_dc(actor, guild_id=state.guild_id)
+    modifier = _save_modifier(target, ability, guild_id=state.guild_id)
+    roll, roll_note = _roll_d20(None)
+    total = roll + modifier
+    if roll == 1:
+        success = False
+    elif roll == 20:
+        success = True
+    else:
+        success = total >= dc
+    bonus_note = f"{modifier:+d}" if modifier else "+0"
+    outcome = "success" if success else "fail"
+    save_note = f"{ability.upper()} {roll_note}{bonus_note} vs DC {dc} — {outcome}"
+
+    if card.dice_count > 0:
+        dice_total, dice_rolls = _roll_dice(card.dice_count, card.dice_sides)
+        ability_mod = _ability_mod(actor, card.ability, guild_id=state.guild_id)
+        amount = dice_total + ability_mod + card.flat_modifier
+        extra_notes = [save_note]
+        if _has_buff(actor, "bless"):
+            bless_total, _bless_rolls = _roll_dice(1, 4)
+            amount += bless_total
+            extra_notes.append(f"Bless {bless_total}")
+        if success and card.save_half:
+            amount = amount // 2
+            extra_notes.append("half")
+        elif success:
+            amount = 0
+            extra_notes.append("no damage")
+        extra = f" ({', '.join(extra_notes)})"
+        action_label = (
+            f"{card.label} [{_format_dice_note(rolls=dice_rolls, modifier=ability_mod + card.flat_modifier)}]"
+            f"{extra}"
+        )
+        line = _apply_damage(
+            state,
+            source=actor,
+            target=target,
+            amount=amount,
+            action_label=action_label,
+            damage_type_label=card.damage_type_label,
+        )
+        if not success and card.inflict_condition:
+            extra_cond = _apply_condition(state, target, card.inflict_condition)
+            line = f"{line}{extra_cond}"
+            _append_log(state, f"**{target.name}** is {card.inflict_condition}.")
+        return line
+
+    if success:
+        line = f"**{target.name}** resists **{card.label}** ({save_note})"
+        _append_log(state, line)
+        return line
+
+    extra = ""
+    if card.inflict_condition:
+        extra = _apply_condition(state, target, card.inflict_condition)
+    line = (
+        f"**{actor.name}** casts **{card.label}** on **{target.name}** "
+        f"— {save_note}{extra}"
+    )
+    _append_log(state, line)
+    return line
 
 
 def _resolve_heal_card(
@@ -493,7 +616,9 @@ def _resolve_heal_card(
     return line
 
 
-def _consume_spell_slot(actor: CombatantState, card: CardSnapshot, *, guild_id: int) -> None:
+def _consume_spell_slot(
+    actor: CombatantState, card: CardSnapshot, *, guild_id: int
+) -> None:
     if card.spell_level <= 0 or actor.user_id is None:
         return
     sheet = _sheet_for(actor, guild_id=guild_id)
@@ -515,7 +640,9 @@ def _hp_suffix(combatant: CombatantState) -> str:
     return f" — **{combatant.hp}/{combatant.max_hp}** HP"
 
 
-def _has_spell_slot(actor: CombatantState, card: CardSnapshot, *, guild_id: int) -> bool:
+def _has_spell_slot(
+    actor: CombatantState, card: CardSnapshot, *, guild_id: int
+) -> bool:
     if card.spell_level <= 0:
         return True
     sheet = _sheet_for(actor, guild_id=guild_id)
@@ -527,14 +654,22 @@ def _has_spell_slot(actor: CombatantState, card: CardSnapshot, *, guild_id: int)
 async def start_combat(*, guild_id: int, channel_id: int, scope_id: int) -> CombatState:
     initiative = get_initiative(guild_id=guild_id, scope_id=scope_id)
     if initiative is None or not initiative.order:
-        raise ValueError("No initiative tracked. Use `;init add` first, then `;combat start`.")
+        raise ValueError(
+            "No initiative tracked. Use `;init add` first, then `;combat start`."
+        )
 
     combatants: dict[str, CombatantState] = {}
     turn_order: list[str] = []
 
     for entry in initiative.order:
-        sheet = get_sheet(user_id=entry.user_id, guild_id=guild_id) if entry.user_id else None
-        monster = await lookup_monster_profile(entry.name) if entry.user_id is None else None
+        sheet = (
+            get_sheet(user_id=entry.user_id, guild_id=guild_id)
+            if entry.user_id
+            else None
+        )
+        monster = (
+            await lookup_monster_profile(entry.name) if entry.user_id is None else None
+        )
         if sheet:
             max_hp = sheet.hp_max if sheet.hp_max else DEFAULT_NPC_HP
             hp = sheet.hp_current if sheet.hp_current is not None else max_hp
@@ -554,11 +689,17 @@ async def start_combat(*, guild_id: int, channel_id: int, scope_id: int) -> Comb
             deck=deck,
             card_catalog=catalog,
             traits=list(monster.traits) if monster is not None else [],
-            ac=sheet.ac if sheet else (monster.ac if monster is not None else DEFAULT_NPC_AC),
+            ac=sheet.ac
+            if sheet
+            else (monster.ac if monster is not None else DEFAULT_NPC_AC),
             attack_bonus=(
                 0
                 if sheet
-                else (monster.attack_bonus if monster is not None else DEFAULT_NPC_ATTACK_BONUS)
+                else (
+                    monster.attack_bonus
+                    if monster is not None
+                    else DEFAULT_NPC_ATTACK_BONUS
+                )
             ),
             death_save_successes=sheet.death_save_successes if sheet else 0,
             death_save_failures=sheet.death_save_failures if sheet else 0,
@@ -574,7 +715,9 @@ async def start_combat(*, guild_id: int, channel_id: int, scope_id: int) -> Comb
         turn_order=turn_order,
         active_index=initiative.active_index % len(turn_order),
         combatants=combatants,
-        log=["Card combat started — decks built from character sheets and your 5etools export."],
+        log=[
+            "Card combat started — decks built from character sheets and your 5etools export."
+        ],
     )
     save_combat(state)
     return state
@@ -594,7 +737,11 @@ async def add_combatant(
     sheet = get_sheet(user_id=user_id, guild_id=state.guild_id) if user_id else None
     monster = await lookup_monster_profile(name) if user_id is None else None
     if sheet:
-        resolved_hp = sheet.hp_current if sheet.hp_current is not None else sheet.hp_max or hp or DEFAULT_NPC_HP
+        resolved_hp = (
+            sheet.hp_current
+            if sheet.hp_current is not None
+            else sheet.hp_max or hp or DEFAULT_NPC_HP
+        )
         max_hp = sheet.hp_max or resolved_hp
         name = sheet.name or name
         key = name.lower()
@@ -615,11 +762,17 @@ async def add_combatant(
         deck=deck,
         card_catalog=catalog,
         traits=list(monster.traits) if monster is not None else [],
-        ac=sheet.ac if sheet else (monster.ac if monster is not None else DEFAULT_NPC_AC),
+        ac=sheet.ac
+        if sheet
+        else (monster.ac if monster is not None else DEFAULT_NPC_AC),
         attack_bonus=(
             0
             if sheet
-            else (monster.attack_bonus if monster is not None else DEFAULT_NPC_ATTACK_BONUS)
+            else (
+                monster.attack_bonus
+                if monster is not None
+                else DEFAULT_NPC_ATTACK_BONUS
+            )
         ),
         death_save_successes=sheet.death_save_successes if sheet else 0,
         death_save_failures=sheet.death_save_failures if sheet else 0,
@@ -657,8 +810,12 @@ def play_card(
     if not in_hand and not is_spellbook_card(card):
         raise ValueError(f"**{actor.name}** does not have {card_label(card)} in hand.")
 
-    if card.card_type == "spell" and not _has_spell_slot(actor, card, guild_id=state.guild_id):
-        raise ValueError(f"No level {card.spell_level}+ spell slots remaining on your sheet.")
+    if card.card_type == "spell" and not _has_spell_slot(
+        actor, card, guild_id=state.guild_id
+    ):
+        raise ValueError(
+            f"No level {card.spell_level}+ spell slots remaining on your sheet."
+        )
 
     if in_hand:
         actor.hand.remove(card_id)
@@ -697,6 +854,11 @@ def play_card(
         assert target is not None
         _consume_spell_slot(actor, card, guild_id=state.guild_id)
         message = _resolve_heal_card(state, actor=actor, target=target, card=card)
+    elif card.save_ability:
+        assert target is not None
+        if card.card_type == "spell":
+            _consume_spell_slot(actor, card, guild_id=state.guild_id)
+        message = _resolve_save_card(state, actor=actor, target=target, card=card)
     elif card.dice_count > 0:
         assert target is not None
         if card.card_type == "spell":
@@ -757,7 +919,9 @@ def _roll_death_save(state: CombatState, combatant: CombatantState) -> None:
         combatant.death_save_successes = 0
         combatant.death_save_failures = 0
         _sync_hp_to_sheet(combatant, guild_id=state.guild_id)
-        _append_log(state, f"**{combatant.name}** death save **{roll}** — gets up with 1 HP!")
+        _append_log(
+            state, f"**{combatant.name}** death save **{roll}** — gets up with 1 HP!"
+        )
         return
     if roll == 1:
         combatant.death_save_failures += 2
@@ -817,8 +981,19 @@ def _end_turn(state: CombatState, actor: CombatantState) -> None:
         if key in seen:
             break
         _expire_turn_start_effects(active)
-        if active.hp > 0:
+        stuck = _condition_keys(active, guild_id=state.guild_id) & SKIP_TURN_CONDITIONS
+        if active.hp > 0 and not stuck:
             break
+        if active.hp > 0 and stuck:
+            label = next(iter(stuck))
+            _append_log(state, f"**{active.name}** is {label} and skips their turn.")
+            seen.add(key)
+            if not state.turn_order:
+                break
+            if active.name not in state.turn_order:
+                continue
+            state.active_index = (state.active_index + 1) % len(state.turn_order)
+            continue
         seen.add(key)
         _handle_incapacitated_turn(state, active)
         if active.hp > 0:
@@ -846,11 +1021,15 @@ def end_turn(state: CombatState, *, actor_name: str) -> PlayResult:
     return PlayResult(message=f"Turn passed to **{state.active_name}**.")
 
 
-def valid_targets(state: CombatState, *, actor: CombatantState, card_id: str) -> list[CombatantState]:
+def valid_targets(
+    state: CombatState, *, actor: CombatantState, card_id: str
+) -> list[CombatantState]:
     card = lookup_card(actor.card_catalog, card_id)
     if card is None:
         return []
-    living = [combatant for combatant in state.combatants.values() if _in_fight(combatant)]
+    living = [
+        combatant for combatant in state.combatants.values() if _in_fight(combatant)
+    ]
     if card.target_enemies_only:
         return [combatant for combatant in living if not _same_side(actor, combatant)]
     if card.target_allies_only:

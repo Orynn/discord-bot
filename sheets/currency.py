@@ -82,9 +82,7 @@ class Currency:
 def parse_currency(text: str) -> Currency:
     matches = COIN_PATTERN.findall(text)
     if not matches:
-        raise ValueError(
-            "Invalid amount. Examples: `50 gp`, `5 gp 3 sp`, `100 cp`"
-        )
+        raise ValueError("Invalid amount. Examples: `50 gp`, `5 gp 3 sp`, `100 cp`")
 
     coins = dict.fromkeys(COIN_TYPES, 0)
     for amount, coin in matches:

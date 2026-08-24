@@ -102,6 +102,7 @@ Re-export from 5e.tools when you add or update homebrew, then save to `5etools/h
 ```bash
 python -m unittest discover -s tests -v
 ruff check .
+ruff format --check .
 ```
 
 Uses the bundled `5etools/data/` plus any homebrew export present locally.

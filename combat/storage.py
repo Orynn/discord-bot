@@ -22,6 +22,7 @@ class CombatantState:
     attack_bonus: int = 4
     death_save_successes: int = 0
     death_save_failures: int = 0
+    conditions: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -32,13 +33,16 @@ class CombatantState:
             "hand": self.hand,
             "deck": self.deck,
             "discard": self.discard,
-            "card_catalog": {key: card.to_dict() for key, card in self.card_catalog.items()},
+            "card_catalog": {
+                key: card.to_dict() for key, card in self.card_catalog.items()
+            },
             "effects": self.effects,
             "traits": self.traits,
             "ac": self.ac,
             "attack_bonus": self.attack_bonus,
             "death_save_successes": self.death_save_successes,
             "death_save_failures": self.death_save_failures,
+            "conditions": self.conditions,
         }
 
     @classmethod
@@ -62,6 +66,7 @@ class CombatantState:
             attack_bonus=int(data.get("attack_bonus", 4)),
             death_save_successes=int(data.get("death_save_successes", 0)),
             death_save_failures=int(data.get("death_save_failures", 0)),
+            conditions=list(data.get("conditions", [])),
         )
 
 
@@ -82,7 +87,9 @@ class CombatState:
             "scope_id": self.scope_id,
             "turn_order": self.turn_order,
             "active_index": self.active_index,
-            "combatants": {key: combatant.to_dict() for key, combatant in self.combatants.items()},
+            "combatants": {
+                key: combatant.to_dict() for key, combatant in self.combatants.items()
+            },
             "log": self.log,
         }
 
@@ -158,7 +165,9 @@ def save_combat(state: CombatState) -> None:
 def clear_combat(*, guild_id: int, scope_id: int | None = None) -> None:
     with db_connection() as connection:
         if scope_id is None:
-            connection.execute("DELETE FROM combat WHERE guild_id = ?", (str(guild_id),))
+            connection.execute(
+                "DELETE FROM combat WHERE guild_id = ?", (str(guild_id),)
+            )
             return
         connection.execute(
             "DELETE FROM combat WHERE guild_id = ? AND scope_id = ?",

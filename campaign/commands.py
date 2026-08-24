@@ -79,7 +79,11 @@ def _index_embeds(entries: list[CampaignEntry]) -> list[discord.Embed]:
 
     embeds: list[discord.Embed] = []
     for index, chunk in enumerate(_chunk_text("\n".join(lines).strip())):
-        title = "📜 Campaign — index" if index == 0 else f"📜 Campaign — index ({index + 1})"
+        title = (
+            "📜 Campaign — index"
+            if index == 0
+            else f"📜 Campaign — index ({index + 1})"
+        )
         embeds.append(
             discord.Embed(
                 title=title,
@@ -264,7 +268,10 @@ async def _wiki_title_choices(current: str) -> list[app_commands.Choice[str]]:
         titles = await suggest_pages(current)
     except WikiError:
         return []
-    return [app_commands.Choice(name=title[:100], value=title[:100]) for title in titles[:25]]
+    return [
+        app_commands.Choice(name=title[:100], value=title[:100])
+        for title in titles[:25]
+    ]
 
 
 def setup_campaign(bot: Bot) -> None:
@@ -325,7 +332,9 @@ def setup_campaign(bot: Bot) -> None:
             await delete_command(ctx)
             return
         except discord.Forbidden:
-            await command_reply(ctx, "Missing permission to create posts in that forum.")
+            await command_reply(
+                ctx, "Missing permission to create posts in that forum."
+            )
             await delete_command(ctx)
             return
         except discord.HTTPException as exc:
@@ -365,9 +374,13 @@ def setup_campaign(bot: Bot) -> None:
             require_manage_channels(ctx.guild)
             category = await ensure_campaign_category(ctx.guild)
             channel_name = format_forum_channel_name(name)
-            existing = match_campaign_forum(list_campaign_forums(ctx.guild), channel_name)
+            existing = match_campaign_forum(
+                list_campaign_forums(ctx.guild), channel_name
+            )
             if existing is not None:
-                raise CampaignForumError(f"That forum already exists: {existing.mention}")
+                raise CampaignForumError(
+                    f"That forum already exists: {existing.mention}"
+                )
             forum = await ctx.guild.create_forum(
                 channel_name,
                 category=category,
@@ -402,7 +415,9 @@ def setup_campaign(bot: Bot) -> None:
         aliases=["parchemin"],
         help=f"Génère un parchemin. `{PREFIX}campaign document Texte` ou `Titre -- texte`",
     )
-    @app_commands.describe(text="Texte du parchemin. Utilise `Titre -- corps` pour un titre.")
+    @app_commands.describe(
+        text="Texte du parchemin. Utilise `Titre -- corps` pour un titre."
+    )
     @guild_only
     @admin_only
     async def campaign_document(ctx: Context, *, text: str | None = None) -> None:
@@ -492,7 +507,9 @@ def setup_campaign(bot: Bot) -> None:
             await delete_command(ctx)
             return
         except discord.Forbidden:
-            await command_reply(ctx, "Missing permission to audit or move campaign posts.")
+            await command_reply(
+                ctx, "Missing permission to audit or move campaign posts."
+            )
             await delete_command(ctx)
             return
         except discord.HTTPException as exc:
@@ -501,7 +518,9 @@ def setup_campaign(bot: Bot) -> None:
             return
 
         ok = sum(1 for item in items if item.status == "ok")
-        misplaced = [item for item in items if item.status == "misplaced" and not item.moved]
+        misplaced = [
+            item for item in items if item.status == "misplaced" and not item.moved
+        ]
         missing = [item for item in items if item.status == "missing_wiki"]
         moved_items = [item for item in items if item.moved]
         lines = [
@@ -650,7 +669,8 @@ def setup_campaign(bot: Bot) -> None:
         except (discord.NotFound, discord.HTTPException):
             pass
         invoked_in_source = (
-            isinstance(ctx.channel, discord.Thread) and ctx.channel.id == result.old_thread.id
+            isinstance(ctx.channel, discord.Thread)
+            and ctx.channel.id == result.old_thread.id
         )
         if not invoked_in_source:
             if status is not None:
@@ -811,7 +831,9 @@ def setup_campaign(bot: Bot) -> None:
             await delete_command(ctx)
             return
         except discord.Forbidden:
-            await command_reply(ctx, "Missing permission to create campaign posts or forums.")
+            await command_reply(
+                ctx, "Missing permission to create campaign posts or forums."
+            )
             await delete_command(ctx)
             return
         except discord.HTTPException as exc:
@@ -833,11 +855,15 @@ def setup_campaign(bot: Bot) -> None:
         if refilled:
             lines.append(f"**Placeholder rempli :** {len(refilled)}")
         if follow_links and any(
-            not post.created and not post.needs_fill and post.thread.id == root_post.thread.id
+            not post.created
+            and not post.needs_fill
+            and post.thread.id == root_post.thread.id
             for post in posts
         ):
             lines.append("**Liens du post existant mis à jour.**")
-        extra_created = [post for post in created if post.thread.id != root_post.thread.id]
+        extra_created = [
+            post for post in created if post.thread.id != root_post.thread.id
+        ]
         if extra_created:
             sample = extra_created[:8]
             linked = ", ".join(
@@ -943,7 +969,9 @@ def setup_campaign(bot: Bot) -> None:
             suffix = f" … +{leftover} de plus" if leftover > 0 else ""
             lines.append(f"**Mis à jour :** {linked}{suffix}")
         elif result.scanned == 0:
-            lines.append("_Aucun post incomplet (« Import des liens… » ou « … suite sur le wiki. »)._")
+            lines.append(
+                "_Aucun post incomplet (« Import des liens… » ou « … suite sur le wiki. »)._"
+            )
         embed = _created_embed(title="🔧 Repair CAMPAIGN", description="\n".join(lines))
         if status is not None:
             try:

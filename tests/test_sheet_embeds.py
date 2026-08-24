@@ -33,7 +33,9 @@ class TestSheetInfoEmbeds(unittest.TestCase):
 class TestSheetShowHands(unittest.TestCase):
     def test_shows_empty_hands(self) -> None:
         embed = build_sheet_embed(sheet=CharacterSheet(name="Hero"))
-        hands = next(field for field in embed.fields if field.name.startswith("🖐️ Hands"))
+        hands = next(
+            field for field in embed.fields if field.name.startswith("🖐️ Hands")
+        )
         self.assertEqual(hands.name, "🖐️ Hands (0/2)")
         self.assertEqual(hands.value, "—")
 
@@ -54,7 +56,9 @@ class TestSheetShowHands(unittest.TestCase):
             stored_in=STORED_HANDS,
         )
         embed = build_sheet_embed(sheet=sheet)
-        hands = next(field for field in embed.fields if field.name.startswith("🖐️ Hands"))
+        hands = next(
+            field for field in embed.fields if field.name.startswith("🖐️ Hands")
+        )
         self.assertEqual(hands.name, "🖐️ Hands (2/2)")
         self.assertIn("Torch", hands.value)
         self.assertIn("Dagger", hands.value)

@@ -25,8 +25,9 @@ from config import (
 logger = logging.getLogger(__name__)
 
 STYLE_PREFIX = (
-    "Fantasy illustration, Dungeons and Dragons painted concept art, "
-    "cinematic lighting, detailed environment, SFW, no nudity, no text, "
+    "Oil-painted Dungeons and Dragons book illustration, "
+    "warm torchlight, readable faces, one clear focal action, "
+    "detailed medieval clothing, SFW, no nudity, no text, "
     "no watermark, no logo."
 )
 NEGATIVE_PROMPT = (
@@ -77,7 +78,12 @@ class GeneratedImage:
 
 def unwrap_scene_text(text: str) -> str:
     stripped = text.strip()
-    if len(stripped) >= 2 and stripped.startswith("*") and stripped.endswith("*") and not stripped.startswith("**"):
+    if (
+        len(stripped) >= 2
+        and stripped.startswith("*")
+        and stripped.endswith("*")
+        and not stripped.startswith("**")
+    ):
         stripped = stripped[1:-1].strip()
     if stripped.startswith("||") and stripped.endswith("||") and len(stripped) > 4:
         stripped = stripped[2:-2].strip()
@@ -239,18 +245,17 @@ def summarize_scene(
     focus = user_prompt.strip()
     if focus:
         chunks.append(f"Focus: {clip_text(focus, _FOCUS_BUDGET)}")
+    if place:
+        chunks.append(f"Place: {clip_text(place, MAX_PLACE_CHARS)}.")
+    if speakers:
+        chunks.append(f"In frame: {', '.join(speakers)}.")
     now = " ".join(beats[-_NOW_BEATS:])
     if now:
         chunks.append(f"Now: {clip_text_end(now, _NOW_BUDGET)}")
-    setting_bits: list[str] = []
-    if place:
-        setting_bits.append(clip_text(place, MAX_PLACE_CHARS))
-    if speakers:
-        setting_bits.append("characters " + ", ".join(speakers))
-    if setting_bits:
-        chunks.append(f"Setting: {clip_text('. '.join(setting_bits), _SETTING_BUDGET)}.")
     if settings:
-        chunks.append(f"Environment: {clip_text(' '.join(settings), _ENVIRONMENT_BUDGET)}")
+        chunks.append(
+            f"Environment: {clip_text(' '.join(settings), _ENVIRONMENT_BUDGET)}"
+        )
     return " ".join(chunks).strip()
 
 
@@ -381,17 +386,28 @@ async def generate_image(
         if provider in {"auto", "hybrid"}:
             try:
                 return await _generate_local(session, prompt)
-            except (ImageGenerationError, aiohttp.ClientError, TimeoutError, OSError) as exc:
-                logger.warning("Local image server unavailable (%s); using Pollinations", exc)
+            except (
+                ImageGenerationError,
+                aiohttp.ClientError,
+                TimeoutError,
+                OSError,
+            ) as exc:
+                logger.warning(
+                    "Local image server unavailable (%s); using Pollinations", exc
+                )
                 return await _generate_pollinations(session, prompt, seed=chosen_seed)
         if provider not in {"pollinations", "cloud", ""}:
             raise ImageGenerationError(f"Unknown image provider `{IMAGE_PROVIDER}`.")
         return await _generate_pollinations(session, prompt, seed=chosen_seed)
     except TimeoutError as exc:
-        raise ImageGenerationError("Image generation timed out. Try again in a minute.") from exc
+        raise ImageGenerationError(
+            "Image generation timed out. Try again in a minute."
+        ) from exc
     except aiohttp.ClientError as exc:
         logger.warning("Image generation request failed: %s", exc)
-        raise ImageGenerationError("Image generation is unavailable right now.") from exc
+        raise ImageGenerationError(
+            "Image generation is unavailable right now."
+        ) from exc
     finally:
         if own_session:
             await session.close()
@@ -427,7 +443,9 @@ async def _generate_pollinations(
             async with session.get(url, headers=headers) as response:
                 body = await response.read()
                 content_type = str(response.headers.get("Content-Type") or "")
-                last_status = f"HTTP {response.status} ({content_type}, {len(body)} bytes)"
+                last_status = (
+                    f"HTTP {response.status} ({content_type}, {len(body)} bytes)"
+                )
                 if response.status < 400 and _is_image_bytes(body, content_type):
                     filename = filename_for_content_type(content_type)
                     return GeneratedImage(
@@ -435,10 +453,16 @@ async def _generate_pollinations(
                         filename=filename,
                         content_type=content_type or "image/jpeg",
                     )
-                logger.warning("Pollinations returned %s from %s", last_status, url.split("?", 1)[0])
+                logger.warning(
+                    "Pollinations returned %s from %s",
+                    last_status,
+                    url.split("?", 1)[0],
+                )
         except (TimeoutError, aiohttp.ClientError) as exc:
             last_status = str(exc)
-            logger.warning("Pollinations request failed (%s): %s", url.split("?", 1)[0], exc)
+            logger.warning(
+                "Pollinations request failed (%s): %s", url.split("?", 1)[0], exc
+            )
         if attempt < 2:
             await asyncio.sleep(1.5 * (attempt + 1))
     raise ImageGenerationError("Image generation is unavailable right now.")
@@ -449,10 +473,14 @@ def _decode_a1111_image(raw: str) -> bytes:
     try:
         return base64.b64decode(payload, validate=False)
     except (ValueError, TypeError) as exc:
-        raise ImageGenerationError("The local image server returned a broken image.") from exc
+        raise ImageGenerationError(
+            "The local image server returned a broken image."
+        ) from exc
 
 
-async def _generate_local(session: aiohttp.ClientSession, prompt: str) -> GeneratedImage:
+async def _generate_local(
+    session: aiohttp.ClientSession, prompt: str
+) -> GeneratedImage:
     base = (IMAGE_LOCAL_URL or "http://127.0.0.1:7860").rstrip("/")
     url = f"{base}/sdapi/v1/txt2img"
     payload: dict[str, Any] = {
@@ -473,11 +501,15 @@ async def _generate_local(session: aiohttp.ClientSession, prompt: str) -> Genera
         try:
             data = json.loads(body)
         except json.JSONDecodeError as exc:
-            raise ImageGenerationError("The local image server returned invalid JSON.") from exc
+            raise ImageGenerationError(
+                "The local image server returned invalid JSON."
+            ) from exc
         images = data.get("images") if isinstance(data, dict) else None
         if not isinstance(images, list) or not images:
             raise ImageGenerationError("The local image server returned no image.")
         raw = _decode_a1111_image(str(images[0]))
         if not _is_image_bytes(raw, "image/png"):
-            raise ImageGenerationError("The local image server returned a broken image.")
+            raise ImageGenerationError(
+                "The local image server returned a broken image."
+            )
         return GeneratedImage(data=raw, filename="scene.png", content_type="image/png")

@@ -11,7 +11,12 @@ from sheets.ddb_pdf import (
     parse_equipment_entry,
     _parse_class_and_level,
 )
-from sheets.equipment import ITEM_KIND_ARMOR, ITEM_KIND_CUSTOM, ITEM_KIND_ITEM, ITEM_KIND_WEAPON
+from sheets.equipment import (
+    ITEM_KIND_ARMOR,
+    ITEM_KIND_CUSTOM,
+    ITEM_KIND_ITEM,
+    ITEM_KIND_WEAPON,
+)
 from sheets.containers import STORED_HANDS, STORED_WORN
 
 
@@ -64,7 +69,10 @@ class TestDdbPdf(unittest.TestCase):
         self.assertEqual(parse_equipment_entry("Rations (10)"), ("Rations", 10))
         self.assertEqual(parse_equipment_entry("Arrows x20"), ("Arrows", 20))
         self.assertEqual(parse_equipment_entry("2 Daggers"), ("Daggers", 2))
-        self.assertEqual(parse_equipment_entry("Potion of Healing (Greater)"), ("Potion of Healing (Greater)", 1))
+        self.assertEqual(
+            parse_equipment_entry("Potion of Healing (Greater)"),
+            ("Potion of Healing (Greater)", 1),
+        )
         self.assertEqual(parse_equipment_entry("10-foot pole"), ("10-foot pole", 1))
         self.assertIsNone(parse_equipment_entry("160 gp"))
 
@@ -136,7 +144,9 @@ class TestFillSheetEquipment(unittest.IsolatedAsyncioTestCase):
                 raise Open5eNotFoundError(query)
             return entry
 
-        with patch("srd.fivetools.search_equipment", new=AsyncMock(side_effect=_search)):
+        with patch(
+            "srd.fivetools.search_equipment", new=AsyncMock(side_effect=_search)
+        ):
             with patch("srd.fivetools.register_glossary_item"):
                 matched, custom = await fill_sheet_equipment(
                     sheet,

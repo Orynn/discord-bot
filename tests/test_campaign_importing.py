@@ -42,14 +42,18 @@ class TestImportPlaceholder(unittest.TestCase):
         self.assertFalse(has_import_placeholder(None))
 
     def test_detects_wiki_continuation(self) -> None:
-        self.assertTrue(has_wiki_continuation("suite du lore\n\n_… suite sur le wiki._"))
+        self.assertTrue(
+            has_wiki_continuation("suite du lore\n\n_… suite sur le wiki._")
+        )
         self.assertFalse(has_wiki_continuation("**Padhiver** est une cité."))
         self.assertFalse(has_wiki_continuation(None))
 
 
 class TestFillThread(unittest.IsolatedAsyncioTestCase):
     async def test_edits_starter_instead_of_sending_a_new_message(self) -> None:
-        starter = SimpleNamespace(id=1, content="**Padhiver**\n_Import des liens…_", edit=AsyncMock())
+        starter = SimpleNamespace(
+            id=1, content="**Padhiver**\n_Import des liens…_", edit=AsyncMock()
+        )
         thread = SimpleNamespace(
             archived=False,
             send=AsyncMock(),
@@ -75,7 +79,9 @@ class TestFillThread(unittest.IsolatedAsyncioTestCase):
     async def test_skips_human_followups_and_does_not_append_after_them(self) -> None:
         bot = SimpleNamespace(id=1, bot=True)
         human = SimpleNamespace(id=42, bot=False)
-        starter = SimpleNamespace(id=1, content="_Import des liens…_", edit=AsyncMock(), author=bot)
+        starter = SimpleNamespace(
+            id=1, content="_Import des liens…_", edit=AsyncMock(), author=bot
+        )
         player = SimpleNamespace(
             id=2,
             content="commentaire joueur",
@@ -95,7 +101,9 @@ class TestFillThread(unittest.IsolatedAsyncioTestCase):
         thread.send.assert_not_called()
 
     async def test_resolves_missing_starter_message(self) -> None:
-        starter = SimpleNamespace(id=10, content="_Import des liens…_", edit=AsyncMock())
+        starter = SimpleNamespace(
+            id=10, content="_Import des liens…_", edit=AsyncMock()
+        )
         thread = SimpleNamespace(
             id=10,
             starter_message=None,
@@ -111,7 +119,9 @@ class TestFillThread(unittest.IsolatedAsyncioTestCase):
 
 class TestRepairPlaceholderPosts(unittest.IsolatedAsyncioTestCase):
     async def test_fills_threads_stuck_on_placeholder(self) -> None:
-        starter = SimpleNamespace(id=10, content="**Padhiver**\n_Import des liens…_", edit=AsyncMock())
+        starter = SimpleNamespace(
+            id=10, content="**Padhiver**\n_Import des liens…_", edit=AsyncMock()
+        )
         thread = SimpleNamespace(
             id=10,
             name="Padhiver",
@@ -133,7 +143,10 @@ class TestRepairPlaceholderPosts(unittest.IsolatedAsyncioTestCase):
         forum.archived_threads = archived_threads
 
         with (
-            patch("campaign.importing.ensure_default_campaign_forums", new_callable=AsyncMock),
+            patch(
+                "campaign.importing.ensure_default_campaign_forums",
+                new_callable=AsyncMock,
+            ),
             patch("campaign.importing.list_campaign_forums", return_value=[forum]),
             patch(
                 "campaign.importing.fetch_wiki_page",
@@ -188,12 +201,17 @@ class TestRepairPlaceholderPosts(unittest.IsolatedAsyncioTestCase):
             title="Padhiver",
             url="https://wiki.example/Padhiver",
             summary="**Padhiver** est une cité.",
-            body="\n\n".join(f"Paragraphe {index} de lore détaillé." for index in range(40)),
+            body="\n\n".join(
+                f"Paragraphe {index} de lore détaillé." for index in range(40)
+            ),
             section="lieux",
         )
 
         with (
-            patch("campaign.importing.ensure_default_campaign_forums", new_callable=AsyncMock),
+            patch(
+                "campaign.importing.ensure_default_campaign_forums",
+                new_callable=AsyncMock,
+            ),
             patch("campaign.importing.list_campaign_forums", return_value=[forum]),
             patch(
                 "campaign.importing.fetch_wiki_page",
@@ -237,7 +255,9 @@ class TestImportWikiCluster(unittest.IsolatedAsyncioTestCase):
             id=10,
             name="📍 lieux",
             threads=[],
-            create_thread=AsyncMock(return_value=SimpleNamespace(thread=thread, message=starter)),
+            create_thread=AsyncMock(
+                return_value=SimpleNamespace(thread=thread, message=starter)
+            ),
         )
         page = WikiPage(
             title="Padhiver",
@@ -248,11 +268,26 @@ class TestImportWikiCluster(unittest.IsolatedAsyncioTestCase):
         )
 
         with (
-            patch("campaign.importing.ensure_default_campaign_forums", new_callable=AsyncMock),
-            patch("campaign.importing.ensure_campaign_forum", new_callable=AsyncMock, return_value=forum),
+            patch(
+                "campaign.importing.ensure_default_campaign_forums",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "campaign.importing.ensure_campaign_forum",
+                new_callable=AsyncMock,
+                return_value=forum,
+            ),
             patch("campaign.importing.list_campaign_forums", return_value=[forum]),
-            patch("campaign.importing.locate_campaign_thread", new_callable=AsyncMock, return_value=None),
-            patch("campaign.importing.download_thumbnail", new_callable=AsyncMock, return_value=None),
+            patch(
+                "campaign.importing.locate_campaign_thread",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "campaign.importing.download_thumbnail",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
             patch("campaign.importing.asyncio.sleep", new_callable=AsyncMock),
         ):
             result = await import_wiki_cluster(guild=SimpleNamespace(id=7), root=page)  # type: ignore[arg-type]
@@ -304,7 +339,9 @@ class TestImportWikiCluster(unittest.IsolatedAsyncioTestCase):
         def _create_thread(**kwargs):
             title = kwargs["name"]
             thread_id = 10 + len(created)
-            starter = SimpleNamespace(id=thread_id, content=kwargs["content"], edit=AsyncMock())
+            starter = SimpleNamespace(
+                id=thread_id, content=kwargs["content"], edit=AsyncMock()
+            )
             thread = SimpleNamespace(
                 id=thread_id,
                 name=title,
@@ -333,11 +370,25 @@ class TestImportWikiCluster(unittest.IsolatedAsyncioTestCase):
             return lieux if section == "lieux" else pantheon
 
         with (
-            patch("campaign.importing.ensure_default_campaign_forums", new_callable=AsyncMock),
+            patch(
+                "campaign.importing.ensure_default_campaign_forums",
+                new_callable=AsyncMock,
+            ),
             patch("campaign.importing.ensure_campaign_forum", side_effect=ensure_forum),
-            patch("campaign.importing.list_campaign_forums", return_value=[lieux, pantheon]),
-            patch("campaign.importing.locate_campaign_thread", new_callable=AsyncMock, return_value=None),
-            patch("campaign.importing.download_thumbnail", new_callable=AsyncMock, return_value=None),
+            patch(
+                "campaign.importing.list_campaign_forums",
+                return_value=[lieux, pantheon],
+            ),
+            patch(
+                "campaign.importing.locate_campaign_thread",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
+                "campaign.importing.download_thumbnail",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
             patch("campaign.wiki.fetch_wiki_page", new=AsyncMock(return_value=tymora)),
             patch("campaign.importing.asyncio.sleep", new_callable=AsyncMock),
             patch("campaign.wiki.asyncio.sleep", new_callable=AsyncMock),
@@ -348,10 +399,14 @@ class TestImportWikiCluster(unittest.IsolatedAsyncioTestCase):
                 follow_links=True,
             )
 
-        self.assertEqual({post.page.title for post in result.posts}, {"Padhiver", "Tymora"})
+        self.assertEqual(
+            {post.page.title for post in result.posts}, {"Padhiver", "Tymora"}
+        )
         edited = created["Padhiver"].starter.edit.await_args.kwargs["content"]
         self.assertIn(created["Tymora"].jump_url, edited)
-        self.assertNotIn("le-monde-des-royaumes-oublies.fandom.com/fr/wiki/Tymora", edited)
+        self.assertNotIn(
+            "le-monde-des-royaumes-oublies.fandom.com/fr/wiki/Tymora", edited
+        )
 
     async def test_follow_links_rewrites_existing_root(self) -> None:
         padhiver = WikiPage(
@@ -373,7 +428,9 @@ class TestImportWikiCluster(unittest.IsolatedAsyncioTestCase):
             body="",
             section="pantheon",
         )
-        root_starter = SimpleNamespace(id=1, content="**Padhiver** déjà importé", edit=AsyncMock())
+        root_starter = SimpleNamespace(
+            id=1, content="**Padhiver** déjà importé", edit=AsyncMock()
+        )
         root_thread = SimpleNamespace(
             id=1,
             name="Padhiver",
@@ -403,7 +460,9 @@ class TestImportWikiCluster(unittest.IsolatedAsyncioTestCase):
             name="📜 pantheon",
             threads=[],
             create_thread=AsyncMock(
-                return_value=SimpleNamespace(thread=tymora_thread, message=tymora_starter)
+                return_value=SimpleNamespace(
+                    thread=tymora_thread, message=tymora_starter
+                )
             ),
         )
         lieux = SimpleNamespace(id=10, name="📍 lieux", threads=[root_thread])
@@ -412,11 +471,21 @@ class TestImportWikiCluster(unittest.IsolatedAsyncioTestCase):
             return lieux if section == "lieux" else pantheon
 
         with (
-            patch("campaign.importing.ensure_default_campaign_forums", new_callable=AsyncMock),
+            patch(
+                "campaign.importing.ensure_default_campaign_forums",
+                new_callable=AsyncMock,
+            ),
             patch("campaign.importing.ensure_campaign_forum", side_effect=ensure_forum),
-            patch("campaign.importing.list_campaign_forums", return_value=[lieux, pantheon]),
+            patch(
+                "campaign.importing.list_campaign_forums",
+                return_value=[lieux, pantheon],
+            ),
             patch("campaign.importing.locate_campaign_thread", side_effect=locate),
-            patch("campaign.importing.download_thumbnail", new_callable=AsyncMock, return_value=None),
+            patch(
+                "campaign.importing.download_thumbnail",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
             patch("campaign.wiki.fetch_wiki_page", new=AsyncMock(return_value=tymora)),
             patch("campaign.importing.asyncio.sleep", new_callable=AsyncMock),
             patch("campaign.wiki.asyncio.sleep", new_callable=AsyncMock),
@@ -428,9 +497,12 @@ class TestImportWikiCluster(unittest.IsolatedAsyncioTestCase):
             )
 
         self.assertFalse(result.posts[0].created)
-        self.assertTrue(any(post.created and post.page.title == "Tymora" for post in result.posts))
+        self.assertTrue(
+            any(post.created and post.page.title == "Tymora" for post in result.posts)
+        )
         root_starter.edit.assert_awaited()
         edited = root_starter.edit.await_args.kwargs["content"]
         self.assertIn("https://discord.com/channels/1/2", edited)
-        self.assertNotIn("le-monde-des-royaumes-oublies.fandom.com/fr/wiki/Tymora", edited)
-
+        self.assertNotIn(
+            "le-monde-des-royaumes-oublies.fandom.com/fr/wiki/Tymora", edited
+        )

@@ -114,7 +114,9 @@ def _parse_hit_bonus(text: str) -> int | None:
         return None
 
 
-def _parse_attack(monster: dict[str, Any]) -> tuple[str, int, int, int, str | None, int]:
+def _parse_attack(
+    monster: dict[str, Any],
+) -> tuple[str, int, int, int, str | None, int]:
     for block in _named_blocks(monster, "action"):
         text = _block_text(block)
         match = _DAMAGE_TAG.search(text)
@@ -124,7 +126,9 @@ def _parse_attack(monster: dict[str, Any]) -> tuple[str, int, int, int, str | No
         if count <= 0 or sides <= 0:
             continue
         type_match = _DAMAGE_TYPE.search(text)
-        type_label = format_damage_type_label(type_match.group(1)) if type_match else None
+        type_label = (
+            format_damage_type_label(type_match.group(1)) if type_match else None
+        )
         hit = _parse_hit_bonus(text)
         return (
             str(block["name"]),

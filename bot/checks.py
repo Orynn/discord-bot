@@ -13,7 +13,9 @@ async def _admin_only_predicate(ctx: Context) -> bool:
 admin_only = check(_admin_only_predicate)
 
 
-def _as_member(guild: discord.Guild | None, user: User | discord.Member | None) -> discord.Member | None:
+def _as_member(
+    guild: discord.Guild | None, user: User | discord.Member | None
+) -> discord.Member | None:
     if isinstance(user, discord.Member):
         return user
     if guild is None or user is None:
@@ -21,7 +23,9 @@ def _as_member(guild: discord.Guild | None, user: User | discord.Member | None) 
     return guild.get_member(user.id)
 
 
-def is_admin_member(guild: discord.Guild | None, user: User | discord.Member | None) -> bool:
+def is_admin_member(
+    guild: discord.Guild | None, user: User | discord.Member | None
+) -> bool:
     member = _as_member(guild, user)
     if guild is None or member is None:
         return False
@@ -39,7 +43,9 @@ def is_staff_user_id(user_id: int) -> bool:
     return user_id in STAFF_USER_IDS
 
 
-def is_staff_member(guild: discord.Guild | None, user: User | discord.Member | None) -> bool:
+def is_staff_member(
+    guild: discord.Guild | None, user: User | discord.Member | None
+) -> bool:
     if user is None:
         return False
     if is_staff_user_id(user.id):

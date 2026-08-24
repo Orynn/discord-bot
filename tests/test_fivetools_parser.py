@@ -48,8 +48,12 @@ class TestFiveToolsParser(unittest.TestCase):
     def test_spell_damage_type_label(self) -> None:
         from srd.fivetools_parser import spell_damage_type_label
 
-        self.assertEqual(spell_damage_type_label({"damageInflict": ["fire"]}), "🔥 Fire")
-        self.assertEqual(spell_damage_type_label({"damage_types": ["force"]}), "💫 Force")
+        self.assertEqual(
+            spell_damage_type_label({"damageInflict": ["fire"]}), "🔥 Fire"
+        )
+        self.assertEqual(
+            spell_damage_type_label({"damage_types": ["force"]}), "💫 Force"
+        )
 
     def test_hom_tag(self) -> None:
         text = clean_tags("{@hom}The javelin returns.")

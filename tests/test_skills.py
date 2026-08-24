@@ -10,7 +10,9 @@ class TestSkills(unittest.TestCase):
         self.assertEqual(skill_rule_slug("animal_handling"), "animal-handling")
 
     def test_skill_url(self) -> None:
-        self.assertTrue(skill_url("acrobatics").startswith("https://5e.tools/skills.html#"))
+        self.assertTrue(
+            skill_url("acrobatics").startswith("https://5e.tools/skills.html#")
+        )
 
     def test_format_skill_line(self) -> None:
         line = format_skill_line(skill="stealth", ability="dex", modifier="+5")

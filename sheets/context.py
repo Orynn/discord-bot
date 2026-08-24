@@ -31,7 +31,9 @@ def save_owner_sheet(ctx: Context, owner_id: int, sheet: CharacterSheet) -> None
     save_sheet(user_id=owner_id, guild_id=guild_id, sheet=sheet)
 
 
-def parse_mention_and_text(ctx: Context, text: str) -> tuple[discord.Member | None, str]:
+def parse_mention_and_text(
+    ctx: Context, text: str
+) -> tuple[discord.Member | None, str]:
     member = None
     mentions = getattr(getattr(ctx, "message", None), "mentions", None) or []
     if mentions:

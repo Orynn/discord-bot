@@ -98,7 +98,9 @@ class Equipment:
     def from_dict(cls, data: dict[str, Any] | None) -> "Equipment":
         if not data:
             return cls()
-        return cls(items=[InventoryItem.from_dict(entry) for entry in data.get("items", [])])
+        return cls(
+            items=[InventoryItem.from_dict(entry) for entry in data.get("items", [])]
+        )
 
     def find_item(self, query: str) -> InventoryItem | None:
         matches = self.find_items(query)
@@ -135,7 +137,10 @@ class Equipment:
         }
         return sorted(
             items,
-            key=lambda item: (0 if item.equipped else 1, rank.get(item.stored_in or "", 2)),
+            key=lambda item: (
+                0 if item.equipped else 1,
+                rank.get(item.stored_in or "", 2),
+            ),
         )[0]
 
     def add_item(
@@ -202,7 +207,9 @@ class Equipment:
             weight_lb=5,
         )
 
-    def remove_item(self, query: str, *, quantity: int | None = None) -> InventoryItem | None:
+    def remove_item(
+        self, query: str, *, quantity: int | None = None
+    ) -> InventoryItem | None:
         item = self.find_item(query)
         if item is None:
             return None
@@ -242,7 +249,9 @@ class Equipment:
                 nested.extend(self.contents_tree(item))
         return nested
 
-    def detach_for_stash(self, query: str, *, quantity: int | None = None) -> list[InventoryItem]:
+    def detach_for_stash(
+        self, query: str, *, quantity: int | None = None
+    ) -> list[InventoryItem]:
         item = self.find_item(query)
         if item is None:
             return []
@@ -264,7 +273,9 @@ class Equipment:
         removed.stored_in = None
         return [removed]
 
-    def restore_item(self, item: InventoryItem, *, auto_stow: bool = True) -> InventoryItem:
+    def restore_item(
+        self, item: InventoryItem, *, auto_stow: bool = True
+    ) -> InventoryItem:
         stored_in = None if auto_stow else item.stored_in
         if auto_stow and self.is_container(item):
             stored_in = STORED_WORN
@@ -321,7 +332,11 @@ class Equipment:
             for other in self.items:
                 if other is item:
                     continue
-                if other.kind == ITEM_KIND_ARMOR and not self.is_shield(other) and other.equipped:
+                if (
+                    other.kind == ITEM_KIND_ARMOR
+                    and not self.is_shield(other)
+                    and other.equipped
+                ):
                     other.equipped = False
                     self._stow_existing(other)
             item.stored_in = STORED_WORN
@@ -356,10 +371,15 @@ class Equipment:
 
     def format_belt_field(self) -> tuple[str, str]:
         belt_lines = [format_item_line(item) for item in self.belt_items()] or ["—"]
-        return (f"🪢 Belt ({self.belt_slots_used()}/{BELT_SLOTS})", "\n".join(belt_lines))
+        return (
+            f"🪢 Belt ({self.belt_slots_used()}/{BELT_SLOTS})",
+            "\n".join(belt_lines),
+        )
 
     def format_summary(self, *, limit: int = 12, exclude_equipped: bool = False) -> str:
-        items = [item for item in self.items if not exclude_equipped or not item.equipped]
+        items = [
+            item for item in self.items if not exclude_equipped or not item.equipped
+        ]
         if not items:
             return ""
 
@@ -460,7 +480,9 @@ class Equipment:
     def containers(self) -> list[InventoryItem]:
         return [item for item in self.items if self.is_container(item)]
 
-    def contents_weight_lb(self, container: InventoryItem, *, coin_lb: float = 0) -> float:
+    def contents_weight_lb(
+        self, container: InventoryItem, *, coin_lb: float = 0
+    ) -> float:
         used = 0.0
         for item in self.items:
             if item.stored_in != container.slug:
@@ -472,7 +494,9 @@ class Equipment:
             used += coin_lb
         return used
 
-    def remaining_capacity_lb(self, container: InventoryItem, *, coin_lb: float = 0) -> float:
+    def remaining_capacity_lb(
+        self, container: InventoryItem, *, coin_lb: float = 0
+    ) -> float:
         info = self.container_info(container)
         if info is None:
             return 0.0
@@ -485,7 +509,9 @@ class Equipment:
             if location in seen:
                 break
             seen.add(location)
-            container = next((entry for entry in self.items if entry.slug == location), None)
+            container = next(
+                (entry for entry in self.items if entry.slug == location), None
+            )
             if container is None:
                 break
             if self.is_weightless_container(container):
@@ -520,7 +546,9 @@ class Equipment:
         container = next((item for item in self.items if item.slug == location), None)
         if container is None:
             return True
-        return self.counts_toward_load(container) and not self.is_weightless_container(container)
+        return self.counts_toward_load(container) and not self.is_weightless_container(
+            container
+        )
 
     def carried_weight_lb(self, *, coin_lb: float = 0) -> float:
         self.stow_unassigned()
@@ -607,7 +635,9 @@ class Equipment:
         quantity: int,
         weight_lb: float | None,
     ) -> InventoryItem:
-        placeholder = InventoryItem(slug=slug, name=name, kind=kind, quantity=quantity, weight_lb=weight_lb)
+        placeholder = InventoryItem(
+            slug=slug, name=name, kind=kind, quantity=quantity, weight_lb=weight_lb
+        )
         if self.is_container(placeholder):
             return self._merge_or_append(
                 slug=slug,
@@ -647,9 +677,7 @@ class Equipment:
                 added = stacked
             remaining -= fit
 
-        if remaining > 0 and (
-            kind == ITEM_KIND_WEAPON or self.is_shield(placeholder)
-        ):
+        if remaining > 0 and (kind == ITEM_KIND_WEAPON or self.is_shield(placeholder)):
             free_hands = HAND_SLOTS - self.hands_used()
             if self.is_two_handed(placeholder):
                 hold = 1 if free_hands >= 2 else 0
@@ -753,7 +781,10 @@ class Equipment:
             elif free <= 0:
                 continue
             else:
-                fit = min(remaining.quantity, int(free // unit) if unit else remaining.quantity)
+                fit = min(
+                    remaining.quantity,
+                    int(free // unit) if unit else remaining.quantity,
+                )
                 if fit <= 0:
                     continue
             if fit < remaining.quantity:
@@ -786,7 +817,9 @@ class Equipment:
             if item.stored_in == container.slug:
                 self._stow_existing(item)
 
-    def _move_to_container(self, item: InventoryItem, container: InventoryItem) -> InventoryItem:
+    def _move_to_container(
+        self, item: InventoryItem, container: InventoryItem
+    ) -> InventoryItem:
         if item is container:
             raise ValueError("An item cannot be stored inside itself.")
         unit = self.unit_weight_lb(item)
@@ -826,7 +859,11 @@ class Equipment:
                     continue
                 candidates.append(item)
             return candidates
-        matches = [item for item in self.find_items(query) if destination is None or item is not destination]
+        matches = [
+            item
+            for item in self.find_items(query)
+            if destination is None or item is not destination
+        ]
         if skip_location:
             matches = [item for item in matches if item.stored_in != skip_location]
         if destination is not None:
@@ -855,7 +892,9 @@ class Equipment:
         if not all_gear and not self.find_items(cleaned):
             raise ValueError(f"Item not found: {cleaned}")
 
-        candidates = self._put_candidates(cleaned, all_gear=all_gear, destination=container)
+        candidates = self._put_candidates(
+            cleaned, all_gear=all_gear, destination=container
+        )
         if not candidates:
             already = [
                 item
@@ -882,7 +921,9 @@ class Equipment:
         return moved
 
     def _put_on_belt(self, query: str, *, all_gear: bool) -> InventoryItem:
-        candidates = self._put_candidates(query, all_gear=all_gear, skip_location=STORED_BELT)
+        candidates = self._put_candidates(
+            query, all_gear=all_gear, skip_location=STORED_BELT
+        )
         if not candidates:
             raise ValueError("Nothing to hang on the belt.")
         moved: InventoryItem | None = None
@@ -931,13 +972,17 @@ class Equipment:
         if item.quantity > 1 and self.is_two_handed(item):
             item = self._split_item(item, 1)
         hold_qty = 1 if item.quantity > 1 else item.quantity
-        self._free_hands(self.required_hands(InventoryItem(
-            slug=item.slug,
-            name=item.name,
-            kind=item.kind,
-            quantity=hold_qty,
-            weight_lb=item.weight_lb,
-        )))
+        self._free_hands(
+            self.required_hands(
+                InventoryItem(
+                    slug=item.slug,
+                    name=item.name,
+                    kind=item.kind,
+                    quantity=hold_qty,
+                    weight_lb=item.weight_lb,
+                )
+            )
+        )
         if item.quantity > 1 and not self.is_two_handed(item):
             item = self._split_item(item, 1)
         item.stored_in = STORED_HANDS
@@ -945,7 +990,9 @@ class Equipment:
             item.equipped = True
         return self._merge_into_location(item)
 
-    def mark_as_bag(self, query: str, capacity_lb: float | None = None) -> InventoryItem:
+    def mark_as_bag(
+        self, query: str, capacity_lb: float | None = None
+    ) -> InventoryItem:
         item = self.find_item(query)
         if item is None:
             raise ValueError(f"Item not found: {query}")
@@ -957,7 +1004,9 @@ class Equipment:
             self._release_contents(item)
             return item
 
-        item.capacity_lb = DEFAULT_BAG_CAPACITY_LB if capacity_lb is None else capacity_lb
+        item.capacity_lb = (
+            DEFAULT_BAG_CAPACITY_LB if capacity_lb is None else capacity_lb
+        )
         if item.stored_in in {STORED_HANDS, STORED_LOOSE, None}:
             item.stored_in = STORED_WORN
             item.equipped = False
@@ -978,7 +1027,9 @@ class Equipment:
         self.coalesce_stacks()
         return moved
 
-    def format_storage_fields(self, *, coin_lb: float = 0, coin_text: str = "") -> list[tuple[str, str]]:
+    def format_storage_fields(
+        self, *, coin_lb: float = 0, coin_text: str = ""
+    ) -> list[tuple[str, str]]:
         self.stow_unassigned()
         self.coalesce_stacks()
         fields: list[tuple[str, str]] = []
@@ -992,7 +1043,9 @@ class Equipment:
             if item.stored_in == STORED_WORN and not self.is_container(item)
         ]
         if worn:
-            fields.append(("👕 Worn", "\n".join(format_item_line(item) for item in worn)))
+            fields.append(
+                ("👕 Worn", "\n".join(format_item_line(item) for item in worn))
+            )
 
         coin_loc = self.coin_location(coin_lb)
         for container in self.containers():
@@ -1001,7 +1054,9 @@ class Equipment:
                 continue
             capacity, weightless = info
             used = self.contents_weight_lb(container, coin_lb=coin_lb)
-            label = f"🎒 {container.name} ({format_pounds(used)}/{format_pounds(capacity)})"
+            label = (
+                f"🎒 {container.name} ({format_pounds(used)}/{format_pounds(capacity)})"
+            )
             if weightless:
                 label += " · weightless"
             lines = [
@@ -1018,11 +1073,15 @@ class Equipment:
             lines = [format_item_line(item) for item in loose]
             if coin_lb > 0 and coin_loc == STORED_LOOSE and coin_text:
                 lines.append(f"💰 {coin_text}")
-            fields.append(("⚠️ Loose — not in a bag, hand, or belt", "\n".join(lines) or "—"))
+            fields.append(
+                ("⚠️ Loose — not in a bag, hand, or belt", "\n".join(lines) or "—")
+            )
         return fields
 
 
-def _mass_amount_to_lb(amount: float, unit: str | None, *, default_unit: str = "kg") -> float:
+def _mass_amount_to_lb(
+    amount: float, unit: str | None, *, default_unit: str = "kg"
+) -> float:
     resolved = (unit or default_unit).lower()
     if resolved.startswith("kg") or resolved.startswith("kilo"):
         return kg_to_lb(amount)
@@ -1077,7 +1136,9 @@ def parse_item_and_weight(text: str) -> tuple[str, float | None]:
     match = _MASS_SUFFIX.match(cleaned)
     if match:
         amount = float(match.group("weight").replace(",", "."))
-        return match.group("body").strip(), _mass_amount_to_lb(amount, match.group("unit"))
+        return match.group("body").strip(), _mass_amount_to_lb(
+            amount, match.group("unit")
+        )
 
     parts = cleaned.rsplit(maxsplit=1)
     if len(parts) == 2:
@@ -1198,11 +1259,7 @@ def format_load_line(
     if coin_lb > 0:
         extra = f"\n{format_pounds(gear_lb)} gear · {format_pounds(coin_lb)} coins"
     speed_bit = ""
-    if (
-        speed_ft is not None
-        and base_speed is not None
-        and speed_ft < base_speed
-    ):
+    if speed_ft is not None and base_speed is not None and speed_ft < base_speed:
         speed_bit = f" · 👟 {speed_ft} ft. (−{base_speed - speed_ft})"
     if carried > capacity_lb:
         return f"⚠️ Encumbered — {load}{speed_bit}{extra}"
@@ -1213,7 +1270,13 @@ def format_load_line(
 def format_item_line(item: InventoryItem, *, limit: int | None = None) -> str:
     prefix = ""
     if item.equipped:
-        prefix = "⚔️ " if item.kind == ITEM_KIND_WEAPON else "🛡️ " if item.kind == ITEM_KIND_ARMOR else "✓ "
+        prefix = (
+            "⚔️ "
+            if item.kind == ITEM_KIND_WEAPON
+            else "🛡️ "
+            if item.kind == ITEM_KIND_ARMOR
+            else "✓ "
+        )
     qty = f" ×{item.quantity}" if item.quantity > 1 else ""
     name = item.name if limit is None else item.name[:limit]
     url = equipment_url(item.slug, name=item.name)
