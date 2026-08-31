@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Arkann · Combat</title>
+  <style>
+    :root {
+      --bg: #101218;
+      --bg-2: #181c24;
+      --panel: #1c2028;
+      --panel-2: #161a20;
+      --ink: #e6e8ee;
+      --muted: #8b919c;
+      --line: #2e3440;
+      --accent: #e8c547;
+      --accent-dim: rgba(232, 197, 71, 0.16);
+      --pc: #4a8fd4;
+      --npc: #c4453c;
+      --down: #6d7178;
+      --ok: #6ec8a0;
+      --move: rgba(86, 196, 220, 0.32);
+      --threat: #e45c44;
+      --friend: #56a0e4;
+      --self: #48c460;
+      --log-move: #56c4dc;
+      --log-attack: #e45c44;
+      --log-heal: #48c460;
+      --log-spell: #c39bd3;
+      --log-miss: #9a9ea6;
+      --log-down: #c0392b;
+      --log-win: #e8c547;
+      --log-buff: #5dade2;
+      --log-focus: #af7ac5;
+      --log-save: #e67e22;
+      --log-turn: #d2d6de;
+      --log-start: #e8c547;
+      --radius: 12px;
+      --shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(1200px 500px at 10% -10%, rgba(232, 197, 71, 0.07), transparent 55%),
+        radial-gradient(900px 420px at 100% 0%, rgba(74, 143, 212, 0.08), transparent 50%),
+        var(--bg);
+      color: var(--ink);
+      font: 15px/1.45 "Segoe UI", system-ui, sans-serif;
+    }
+    body {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-height: 100vh;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 14px 22px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(16, 18, 24, 0.72);
+      backdrop-filter: blur(8px);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+    .mark {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      background: var(--accent-dim);
+      border: 1px solid rgba(232, 197, 71, 0.35);
+      font-size: 18px;
+    }
+    h1 { margin: 0; font-size: 18px; letter-spacing: 0.01em; }
+    header p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+    .pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .pills span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--panel-2);
+    }
+    .pills i {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .pills .move { color: var(--log-move); }
+    .pills .atk { color: var(--threat); }
+    .pills .ally { color: var(--friend); }
+    .pills .turn { color: var(--self); }
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 340px;
+      gap: 18px;
+      padding: 18px 22px 22px;
+    }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+      header { align-items: flex-start; flex-direction: column; }
+    }
+    section {
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px 16px 18px;
+      box-shadow: var(--shadow);
+    }
+    h2 {
+      margin: 0 0 10px;
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    h2.spaced { margin-top: 20px; }
+    .board-wrap { overflow: auto; }
+    .board {
+      display: grid;
+      width: max-content;
+      user-select: none;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+    }
+    .board:empty {
+      width: 100%;
+      min-height: 260px;
+      place-items: center;
+      color: var(--muted);
+      box-shadow: none;
+      background: rgba(0, 0, 0, 0.18);
+    }
+    .board:empty::after {
+      content: "Le plateau s’affichera quand un combat sera lancé.";
+    }
+    .axis, .tile {
+      width: var(--cell, 48px);
+      height: var(--cell, 48px);
+      display: grid;
+      place-items: center;
+      position: relative;
+    }
+    .axis { color: var(--muted); font-size: 11px; font-weight: 600; }
+    .tile {
+      border: 1px solid rgba(255,255,255,0.05);
+      padding: 0;
+      border-radius: 0;
+      background: inherit;
+      box-shadow: none;
+    }
+    .tile:hover { filter: brightness(1.08); }
+    .tile.move { box-shadow: inset 0 0 0 999px var(--move); cursor: pointer; }
+    .tile.threat, .tile.friend, .tile.self { cursor: pointer; }
+    .tile.threat::after, .tile.friend::after, .tile.self::after {
+      content: "";
+      position: absolute;
+      inset: 16%;
+      border: 2px solid var(--threat);
+      border-radius: 50%;
+      box-shadow: 0 0 10px color-mix(in srgb, var(--threat) 45%, transparent);
+    }
+    .tile.friend::after { border-color: var(--friend); }
+    .tile.self::after { border-color: var(--self); }
+    .tile.target { cursor: pointer; outline: 2px solid var(--accent); outline-offset: -2px; }
+    .token {
+      width: 72%;
+      height: 72%;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #f8f9fa;
+      border: 2px solid #0c0c0e;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.28), 0 2px 6px rgba(0,0,0,0.45);
+      z-index: 1;
+    }
+    .token.pc { background: radial-gradient(circle at 35% 30%, #7eb6ea, var(--pc)); }
+    .token.npc { background: radial-gradient(circle at 35% 30%, #e07a72, var(--npc)); }
+    .token.down { background: radial-gradient(circle at 35% 30%, #9a9ea6, var(--down)); opacity: 0.72; }
+    .token.active { outline: 3px solid var(--self); }
+    .nameplate {
+      position: absolute;
+      bottom: 2px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(10, 12, 16, 0.9);
+      color: var(--ink);
+      font-size: 10px;
+      line-height: 1.2;
+      padding: 1px 6px;
+      border-radius: 999px;
+      white-space: nowrap;
+      max-width: 96%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      z-index: 2;
+    }
+    .roster { display: grid; gap: 6px; }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(0,0,0,0.14);
+    }
+    .row.active {
+      border-color: rgba(232, 197, 71, 0.65);
+      background: var(--accent-dim);
+      color: var(--accent);
+    }
+    .row.down { color: var(--down); }
+    .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .vitals { display: grid; justify-items: end; gap: 4px; flex: 0 0 auto; }
+    .bar {
+      width: 72px;
+      height: 5px;
+      border-radius: 99px;
+      background: #2a3038;
+      overflow: hidden;
+    }
+    .bar i {
+      display: block;
+      height: 100%;
+      background: linear-gradient(90deg, #c0392b, #e8c547 55%, #48c460);
+    }
+    .hp { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+    .hand { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    button {
+      font: inherit;
+      color: var(--ink);
+      background: #14181f;
+      border: 1px solid var(--line);
+      padding: 7px 12px;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: border-color 0.12s, color 0.12s, background 0.12s;
+    }
+    button:hover { border-color: #6a7280; }
+    button.active { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+    button.primary {
+      border-color: var(--accent);
+      color: #1a1608;
+      background: var(--accent);
+      font-weight: 700;
+    }
+    button.primary:hover { filter: brightness(1.05); }
+    button:disabled { opacity: 0.45; cursor: default; filter: none; }
+    button.primary:disabled {
+      background: #14181f;
+      color: var(--muted);
+      border-color: var(--line);
+      opacity: 0.7;
+    }
+    .hint { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+    .flash {
+      color: var(--accent);
+      font-size: 13px;
+      min-height: 1.3em;
+      margin: 0 0 12px;
+      white-space: pre-wrap;
+      max-height: 9em;
+      overflow: auto;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: rgba(0,0,0,0.18);
+      border: 1px solid var(--line);
+    }
+    .flash:empty { display: none; }
+    .flash.move, .log .move { color: var(--log-move); }
+    .flash.attack, .log .attack { color: var(--log-attack); }
+    .flash.heal, .log .heal { color: var(--log-heal); }
+    .flash.spell, .log .spell { color: var(--log-spell); }
+    .flash.miss, .log .miss { color: var(--log-miss); }
+    .flash.down, .log .down { color: var(--log-down); }
+    .flash.win, .log .win { color: var(--log-win); }
+    .flash.buff, .log .buff { color: var(--log-buff); }
+    .flash.focus, .log .focus { color: var(--log-focus); }
+    .flash.save, .log .save { color: var(--log-save); }
+    .flash.turn, .log .turn { color: var(--log-turn); }
+    .flash.start, .log .start { color: var(--log-start); }
+    .cmd-form {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 6px;
+      margin: 0 0 12px;
+    }
+    .cmd-form input {
+      font: inherit;
+      color: var(--ink);
+      background: #10141a;
+      border: 1px solid var(--line);
+      padding: 8px 12px;
+      border-radius: 8px;
+    }
+    .cmd-form input:focus, button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+    .log {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      color: var(--muted);
+    }
+    .log li {
+      margin: 0 0 4px;
+      padding: 5px 8px 5px 10px;
+      border-left: 2px solid var(--line);
+      border-radius: 0 6px 6px 0;
+      background: rgba(0,0,0,0.12);
+    }
+    .empty { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="mark" aria-hidden="true">⚔️</span>
+      <div>
+        <h1 id="title">Combat</h1>
+        <p id="status">Chargement…</p>
+      </div>
+    </div>
+    <p class="pills">
+      <span class="move"><i></i> Déplacement</span>
+      <span class="atk"><i></i> Ennemi</span>
+      <span class="ally"><i></i> Allié</span>
+      <span class="turn"><i></i> Tour</span>
+    </p>
+  </header>
+  <main>
+    <section class="board-wrap">
+      <h2>Plateau</h2>
+      <p class="hint">Clique une case bleue pour bouger, un cercle pour attaquer. Flèches = un pas. Même syntaxe qu’à Discord dans la barre.</p>
+      <div id="board" class="board"></div>
+    </section>
+    <section>
+      <h2>Tour</h2>
+      <form class="cmd-form" id="cmd-form">
+        <input id="cmd" type="text" autocomplete="off" spellcheck="false" placeholder=";combat move C4">
+        <button type="submit">OK</button>
+      </form>
+      <p class="flash" id="flash"></p>
+      <div class="hand" id="hand"></div>
+      <button type="button" class="primary" id="btn-pass" disabled>Fin de tour</button>
+      <h2 class="spaced">Initiative</h2>
+      <div id="roster" class="roster"></div>
+      <h2 class="spaced">📜 Actions</h2>
+      <ul id="log" class="log"></ul>
+    </section>
+  </main>
+  <script>
+    const COLUMNS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const THEMES = {
+      arena: { floorA: [60, 66, 80], floorB: [32, 36, 44], wall: [78, 64, 52] },
+      tavern: { floorA: [92, 68, 50], floorB: [50, 36, 26], wall: [92, 66, 46] },
+      dungeon: { floorA: [56, 60, 68], floorB: [28, 32, 36], wall: [62, 60, 66] },
+      camp: { floorA: [62, 80, 52], floorB: [34, 46, 30], wall: [70, 60, 44] },
+    };
+    const els = {
+      title: document.getElementById("title"),
+      status: document.getElementById("status"),
+      board: document.getElementById("board"),
+      roster: document.getElementById("roster"),
+      log: document.getElementById("log"),
+      hand: document.getElementById("hand"),
+      flash: document.getElementById("flash"),
+      pass: document.getElementById("btn-pass"),
+      cmd: document.getElementById("cmd"),
+      form: document.getElementById("cmd-form"),
+    };
+    const root = location.pathname.replace(/\/$/, "");
+    const stateUrl = root + "/state";
+    const actionUrl = root + "/action";
+    let last = "";
+    let data = null;
+    let pendingCard = null;
+    let busy = false;
+    let history = [];
+    let historyAt = 0;
+
+    function rgb(c) { return "rgb(" + c.join(",") + ")"; }
+    function key(x, y) { return x + "," + y; }
+    function cellName(x, y) { return COLUMNS[x] + (y + 1); }
+
+    function renderEmpty(message) {
+      data = null;
+      pendingCard = null;
+      els.title.textContent = "Combat";
+      els.status.textContent = message;
+      els.board.replaceChildren();
+      els.hand.replaceChildren();
+      els.roster.innerHTML = '<p class="empty">Aucun combattant.</p>';
+      els.log.replaceChildren();
+      els.pass.disabled = true;
+      paintFlash("");
+    }
+
+    function asLogEntry(entry) {
+      if (typeof entry === "string") {
+        return { text: entry, kind: "note", emoji: "•" };
+      }
+      return {
+        text: entry.text || "",
+        kind: entry.kind || "note",
+        emoji: entry.emoji || "•",
+      };
+    }
+
+    function paintFlash(message, entry) {
+      const item = entry ? asLogEntry(entry) : null;
+      els.flash.className = "flash" + (item && item.kind ? " " + item.kind : "");
+      if (item && item.emoji && message) {
+        els.flash.textContent = item.emoji + " " + message;
+      } else {
+        els.flash.textContent = message || "";
+      }
+    }
+
+    function occupantAt(x, y) {
+      return (data.combatants || []).find((unit) => unit.x === x && unit.y === y);
+    }
+
+    function isMove(x, y) {
+      return (data.moves || []).some((cell) => cell[0] === x && cell[1] === y);
+    }
+
+    function isThreat(x, y) {
+      return (data.threats || []).some((cell) => cell[0] === x && cell[1] === y);
+    }
+
+    function isFriend(x, y) {
+      return (data.allies || []).some((cell) => cell[0] === x && cell[1] === y);
+    }
+
+    function isCardTarget(unit) {
+      if (!pendingCard || !unit) return false;
+      if (pendingCard.aoe) return true;
+      if (unit.active) return !pendingCard.target_enemies;
+      return true;
+    }
+
+    function render(next) {
+      data = next;
+      const map = data.map;
+      const theme = THEMES[map.theme] || THEMES.arena;
+      const blocked = new Set((map.blocked || []).map((cell) => key(cell[0], cell[1])));
+      const byCell = {};
+      (data.combatants || []).forEach((unit) => {
+        if (unit.x == null || unit.y == null) return;
+        const id = key(unit.x, unit.y);
+        byCell[id] = byCell[id] || [];
+        byCell[id].push(unit);
+      });
+      const longest = Math.max(map.width, map.height);
+      const cell = longest > 12 ? 36 : longest > 8 ? 44 : 52;
+      els.board.style.setProperty("--cell", cell + "px");
+      els.board.style.gridTemplateColumns = "repeat(" + (map.width + 1) + ", " + cell + "px)";
+      els.board.replaceChildren();
+      els.board.append(Object.assign(document.createElement("div"), { className: "axis" }));
+      for (let x = 0; x < map.width; x += 1) {
+        const head = document.createElement("div");
+        head.className = "axis";
+        head.textContent = COLUMNS[x];
+        els.board.append(head);
+      }
+      for (let y = 0; y < map.height; y += 1) {
+        const rowHead = document.createElement("div");
+        rowHead.className = "axis";
+        rowHead.textContent = String(y + 1);
+        els.board.append(rowHead);
+        for (let x = 0; x < map.width; x += 1) {
+          const tile = document.createElement("button");
+          tile.type = "button";
+          tile.className = "tile";
+          const id = key(x, y);
+          const wall = blocked.has(id);
+          tile.style.background = wall
+            ? rgb(theme.wall)
+            : rgb((x + y) % 2 ? theme.floorB : theme.floorA);
+          if (!wall && isMove(x, y)) tile.classList.add("move");
+          if (isThreat(x, y)) tile.classList.add("threat");
+          if (isFriend(x, y)) tile.classList.add("friend");
+          const units = byCell[id] || [];
+          if (units.some((unit) => unit.active)) tile.classList.add("self");
+          if (pendingCard && (pendingCard.aoe || units.some(isCardTarget))) {
+            tile.classList.add("target");
+          }
+          tile.title = cellName(x, y);
+          tile.dataset.x = String(x);
+          tile.dataset.y = String(y);
+          units.forEach((unit) => {
+            const token = document.createElement("div");
+            token.className = "token " + (unit.pc ? "pc" : "npc");
+            if (unit.down) token.classList.add("down");
+            if (unit.active) token.classList.add("active");
+            token.textContent = unit.initials;
+            tile.append(token);
+            const plate = document.createElement("div");
+            plate.className = "nameplate";
+            plate.textContent = unit.name;
+            tile.append(plate);
+          });
+          tile.addEventListener("click", () => onTile(x, y));
+          els.board.append(tile);
+        }
+      }
+      if (data.prefix) {
+        els.cmd.placeholder = data.prefix + "combat move C4";
+      }
+      els.title.textContent = data.active ? "Tour de " + data.active : "Combat";
+      const room = map.label || map.id;
+      const action = data.acted ? "action faite" : "action prête";
+      els.status.textContent = data.active
+        ? room + " · " + data.move_left + "/" + data.move_total + " cases · " + action
+        : room;
+      els.roster.replaceChildren();
+      (data.combatants || []).forEach((unit) => {
+        const row = document.createElement("div");
+        row.className = "row";
+        if (unit.active) row.classList.add("active");
+        if (unit.down) row.classList.add("down");
+        const left = document.createElement("div");
+        left.className = "who";
+        left.textContent = (unit.active ? "➤ " : "") + unit.name + " · " + unit.cell;
+        const right = document.createElement("div");
+        right.className = "vitals";
+        if (unit.pc && unit.max_hp) {
+          const bar = document.createElement("div");
+          bar.className = "bar";
+          const fill = document.createElement("i");
+          const ratio = Math.max(0, Math.min(1, unit.hp / unit.max_hp));
+          fill.style.width = Math.round(ratio * 100) + "%";
+          bar.append(fill);
+          right.append(bar);
+        }
+        const hp = document.createElement("div");
+        hp.className = "hp";
+        hp.textContent = unit.pc && unit.max_hp
+          ? unit.hp + "/" + unit.max_hp
+          : (unit.conditions || []).join(", ");
+        right.append(hp);
+        row.append(left, right);
+        els.roster.append(row);
+      });
+      els.log.replaceChildren();
+      (data.log || []).forEach((raw) => {
+        const entry = asLogEntry(raw);
+        const item = document.createElement("li");
+        item.className = entry.kind;
+        item.textContent = entry.emoji + " " + entry.text;
+        els.log.append(item);
+      });
+      if (!data.log || !data.log.length) {
+        els.log.innerHTML = '<li class="empty">Aucune action.</li>';
+      }
+      els.hand.replaceChildren();
+      (data.hand || []).forEach((card) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = card.label + (card.spell ? " · sort" : "");
+        if (pendingCard && pendingCard.id === card.id) button.classList.add("active");
+        button.disabled = busy || data.acted;
+        button.addEventListener("click", () => onCard(card));
+        els.hand.append(button);
+      });
+      if (!(data.hand || []).length) {
+        els.hand.innerHTML = '<p class="empty">Aucune carte.</p>';
+      }
+      els.pass.disabled = busy || !data.active;
+    }
+
+    async function act(payload) {
+      if (busy) return false;
+      busy = true;
+      els.pass.disabled = true;
+      try {
+        const response = await fetch(actionUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json();
+        if (!result.ok) {
+          paintFlash(result.error || "Action refusée.");
+          return false;
+        }
+        pendingCard = null;
+        const latest = result.snapshot && (result.snapshot.log || []).slice(-1)[0];
+        paintFlash(result.message || "", latest);
+        if (result.combat_over) {
+          last = "ended";
+          renderEmpty(result.message || "Combat terminé.");
+          return true;
+        }
+        if (result.snapshot) {
+          last = JSON.stringify(result.snapshot);
+          render(result.snapshot);
+        }
+        return true;
+      } catch (error) {
+        paintFlash("Action impossible. Vérifie qu’Arkann tourne.");
+        return false;
+      } finally {
+        busy = false;
+        if (data) els.pass.disabled = !data.active;
+      }
+    }
+
+    function onTile(x, y) {
+      if (!data || busy) return;
+      const unit = occupantAt(x, y);
+      if (pendingCard) {
+        const target = pendingCard.aoe ? cellName(x, y) : (unit && unit.name);
+        if (!target) {
+          paintFlash("Choisis une cible pour " + pendingCard.label + ".");
+          return;
+        }
+        act({ type: "play", card: pendingCard.id, target: target });
+        return;
+      }
+      if (unit && (isThreat(x, y) || isFriend(x, y)) && !data.acted) {
+        act({ type: "attack", target: unit.name });
+        return;
+      }
+      if (isMove(x, y)) {
+        act({ type: "move", dest: [x, y] });
+      }
+    }
+
+    function onCard(card) {
+      if (!data || busy || data.acted) return;
+      if (!card.needs_target) {
+        pendingCard = null;
+        act({ type: "play", card: card.id });
+        return;
+      }
+      pendingCard = pendingCard && pendingCard.id === card.id ? null : card;
+      paintFlash(pendingCard
+        ? "Clique une cible pour " + card.label + "."
+        : "");
+      render(data);
+    }
+
+    async function refresh() {
+      if (busy) return;
+      try {
+        const response = await fetch(stateUrl, { cache: "no-store" });
+        if (response.status === 404) {
+          if (last !== "empty") {
+            last = "empty";
+            renderEmpty("Aucun combat en cours dans ce salon.");
+          }
+          return;
+        }
+        if (!response.ok) throw new Error("http " + response.status);
+        const next = await response.json();
+        const dump = JSON.stringify(next);
+        if (dump === last) return;
+        last = dump;
+        render(next);
+      } catch (error) {
+        els.status.textContent = "Plateau hors-ligne. Relance Arkann.";
+      }
+    }
+
+    els.pass.addEventListener("click", () => act({ type: "pass" }));
+    els.form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const text = els.cmd.value.trim();
+      if (!text || busy) return;
+      history.push(text);
+      historyAt = history.length;
+      act({ type: "command", text: text }).then((ok) => {
+        if (ok) els.cmd.value = "";
+      });
+    });
+    els.cmd.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowUp") {
+        if (!history.length) return;
+        event.preventDefault();
+        historyAt = Math.max(0, historyAt - 1);
+        els.cmd.value = history[historyAt] || "";
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        historyAt = Math.min(history.length, historyAt + 1);
+        els.cmd.value = historyAt < history.length ? history[historyAt] : "";
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (!data || busy || event.target.matches("input, textarea, button")) return;
+      const active = (data.combatants || []).find((unit) => unit.active);
+      if (!active || active.x == null) return;
+      const delta = {
+        ArrowUp: [0, -1],
+        ArrowDown: [0, 1],
+        ArrowLeft: [-1, 0],
+        ArrowRight: [1, 0],
+      }[event.key];
+      if (!delta) return;
+      event.preventDefault();
+      const dest = [active.x + delta[0], active.y + delta[1]];
+      if (isMove(dest[0], dest[1])) act({ type: "move", dest: dest });
+    });
+
+    refresh();
+    window.setInterval(refresh, 1500);
+  </script>
+</body>
+</html>

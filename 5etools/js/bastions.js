@@ -1,0 +1,162 @@
+import {RenderBastions} from "./render-bastions.js";
+
+class BastionsSublistManager extends SublistManager {
+	static _getRowTemplate () {
+		return [
+			new SublistCellTemplate({
+				name: "Type",
+				css: "ve-col-2 ve-pl-0 ve-pr-1 ve-text-center",
+				colStyle: "text-center",
+			}),
+			new SublistCellTemplate({
+				name: "Name",
+				css: "ve-bold ve-col-3 ve-px-1",
+			}),
+			new SublistCellTemplate({
+				name: "Level",
+				css: "ve-col-2 ve-px-1 ve-text-center",
+				colStyle: "text-center",
+			}),
+			new SublistCellTemplate({
+				name: "Prerequisite",
+				css: "ve-col-5 ve-pl-1 ve-pr-0",
+			}),
+		];
+	}
+
+	pGetSublistItem (ent, hash) {
+		const facilityType = (ent.facilityType || "Unknown").toTitleCase();
+
+		const cellsText = [
+			facilityType,
+			ent.name,
+			ent.level || "\u2014",
+			ent._slPrereq,
+		];
+
+		const ele = veT`<div class="ve-lst__row ve-lst__row--sublist ve-flex-col">
+			<a href="#${hash}" class="ve-lst__row-border ve-lst__row-inner">
+				${this.constructor._getRowCellsHtml({values: cellsText})}
+			</a>
+		</div>`
+			.vee.onn("contextmenu", evt => this._handleSublistItemContextMenu(evt, listItem))
+			.vee.onn("click", evt => this._listSub.doSelect(listItem, evt));
+
+		const listItem = new ListItem(
+			hash,
+			ele,
+			ent.name,
+			{
+				...ListItem.getCommonValues(ent),
+				facilityType,
+				level: ent.level || 0,
+				prerequisite: ent._slPrereq,
+			},
+			{
+				hash,
+				entity: ent,
+				mdRow: [...cellsText],
+			},
+		);
+		return listItem;
+	}
+}
+
+class BastionsPage extends ListPage {
+	constructor () {
+		const pageFilter = new PageFilterBastions();
+		super({
+			dataSource: DataUtil.facility.loadJSON.bind(DataUtil.facility),
+
+			pFnGetFluff: Renderer.facility.pGetFluff.bind(Renderer.facility),
+
+			pageFilter,
+
+			dataProps: ["facility"],
+
+			bookViewOptions: {
+				nameSingular: "facility",
+				namePlural: "facilities",
+				pageTitle: "Facilities Book View",
+			},
+
+			tableViewOptions: {
+				title: "Facilities",
+				colTransforms: {
+					name: UtilsTableview.COL_TRANSFORM_NAME,
+					source: UtilsTableview.COL_TRANSFORM_SOURCE,
+					page: UtilsTableview.COL_TRANSFORM_PAGE,
+					_level: {name: "Level", transform: ent => ent.level || ""},
+					_prerequisite: {name: "Prerequisite", transform: ent => ent._slPrereq},
+					_space: {name: "Space",
+						transform: ent => {
+							const {entrySpace} = Renderer.facility.getFacilityRenderableEntriesMeta(ent);
+							return Renderer.get().render(entrySpace);
+						}},
+					_hirelings: {name: "Hirelings",
+						transform: ent => {
+							const {entryHirelings} = Renderer.facility.getFacilityRenderableEntriesMeta(ent);
+							return Renderer.get().render(entryHirelings);
+						}},
+					_orders: {name: "Orders",
+						transform: ent => {
+							const {entryOrders} = Renderer.facility.getFacilityRenderableEntriesMeta(ent);
+							return Renderer.get().render(entryOrders);
+						}},
+					entries: {name: "Text", transform: ent => Renderer.get().render({type: "entries", entries: ent}, 2), flex: 3},
+				},
+			},
+		});
+	}
+
+	getListItem (ent, ixEnt, isExcluded) {
+		this._pageFilter.mutateAndAddToFilters(ent, isExcluded);
+
+		const eleLi = document.createElement("div");
+		eleLi.className = `ve-lst__row ve-flex-col ${isExcluded ? "ve-lst__row--blocklisted" : ""}`;
+
+		const hash = UrlUtil.autoEncodeHash(ent);
+		const source = Parser.sourceJsonToAbv(ent.source);
+		const facilityType = (ent.facilityType || "Unknown").toTitleCase();
+
+		eleLi.innerHTML = `<a href="#${hash}" class="ve-lst__row-border ve-lst__row-inner">
+			<span class="ve-col-2 ve-text-center ve-pl-0 ve-pr-1">${facilityType}</span>
+			<span class="ve-bold ve-col-3 ve-px-1">${ent.name}</span>
+			<span class="ve-col-1 ve-text-center ve-px-1 ${ent.level == null ? "ve-italic" : ""}">${ent.level || "\u2014"}</span>
+			<span class="ve-col-4 ve-px-1 ${ent._slPrereq === VeCt.STR_NONE ? "ve-italic " : ""}">${ent._slPrereq}</span>
+			<span class="ve-col-2 ve-text-center ${Parser.sourceJsonToSourceClassname(ent.source)}  ve-pl-1 ve-pr-0" title="${Parser.sourceJsonToFull(ent.source)}">${source}</span>
+		</a>`;
+
+		const listItem = new ListItem(
+			ixEnt,
+			eleLi,
+			ent.name,
+			{
+				source,
+				...ListItem.getCommonValues(ent),
+				facilityType,
+				level: ent.level || 0,
+				prerequisite: ent._slPrereq,
+			},
+			{
+				hash,
+				isExcluded,
+			},
+		);
+
+		eleLi.addEventListener("click", (evt) => this._list.doSelect(listItem, evt));
+		eleLi.addEventListener("contextmenu", (evt) => this._openContextMenu(evt, this._list, listItem));
+
+		return listItem;
+	}
+
+	_renderStats_doBuildStatsTab ({ent}) {
+		this._pgContent.vee.empty().vee.appends(RenderBastions.getRenderedFacility(ent));
+	}
+}
+
+const bastionsPage = new BastionsPage();
+bastionsPage.sublistManager = new BastionsSublistManager();
+window.addEventListener("load", () => bastionsPage.pOnLoad());
+
+globalThis.dbg_page = bastionsPage;

@@ -1,0 +1,8 @@
+# Optional. Used only by the local image worker (deploy/arkann-image.service).
+# CPU wheels: pip install -r requirements-image.txt
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch
+diffusers>=0.30.0
+transformers
+accelerate
+safetensors

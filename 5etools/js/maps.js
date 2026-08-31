@@ -1,0 +1,368 @@
+import {MapsUtil} from "./maps-util.js";
+
+class MapsPage extends BaseComponent {
+	static _STORAGE_STATE = "state";
+	static _PROPS_NON_STORABLE_STATE = [
+		"search",
+	];
+	static _PROP_PREFIX_DISPLAY = "isDisplay";
+
+	static _RenderState = class {
+		constructor () {
+			this.isBubblingUp = false;
+			this.isBubblingDown = false;
+			this.eleStyle = null;
+		}
+	};
+
+	constructor () {
+		super();
+
+		this.saveSettingsDebounced = MiscUtil.debounce(() => StorageUtil.pSetForPage(this.constructor._STORAGE_STATE, this.getBaseSaveableState()), VeCt.DUR_DEBOUNCE_SAVE);
+	}
+
+	getBaseSaveableState () {
+		const cpy = MiscUtil.copyFast(this.__state);
+
+		this.constructor._PROPS_NON_STORABLE_STATE
+			.forEach(prop => delete cpy[prop]);
+
+		return {
+			state: cpy,
+		};
+	}
+
+	async _pGetStoredState ({mapData}) {
+		const savedState = await StorageUtil.pGetForPage(this.constructor._STORAGE_STATE);
+		if (!savedState) return savedState;
+
+		const cpy = MiscUtil.copyFast(savedState);
+
+		// region Remove keys for invalid sources/chapters
+		const validPropsDisplay = new Set(
+			Object.values(mapData)
+				.flatMap(sourceMeta => [
+					this._getPropsId(sourceMeta.id).propDisplaySource,
+					...sourceMeta.chapters
+						.map((_, ixChapter) => this._getPropsChapter(sourceMeta.id, ixChapter).propDisplayChapter),
+				]),
+		);
+
+		Object.keys(cpy)
+			.filter(k => k.startsWith(this.constructor._PROP_PREFIX_DISPLAY))
+			.filter(k => !validPropsDisplay.has(k))
+			.forEach(k => delete cpy[k]);
+		// endregion
+
+		return cpy;
+	}
+
+	async pOnLoad () {
+		await Promise.all([
+			PrereleaseUtil.pInit(),
+			BrewUtil2.pInit(),
+		]);
+		await ExcludeUtil.pInitialise();
+
+		const mapData = await this._pGetMapData();
+
+		const savedState = await this._pGetStoredState({mapData});
+		if (savedState) this.setBaseSaveableStateFrom(savedState);
+
+		this._addHookAllBase(() => this.saveSettingsDebounced());
+
+		Renderer.get().withLazyImages(() => this._renderContent({mapData}), {isAllowCanvas: true});
+
+		window.dispatchEvent(new Event("toolsLoaded"));
+	}
+
+	async _pGetMapData () {
+		const mapDataBase = await DataUtil.loadJSON(`${Renderer.get().baseUrl}data/generated/gendata-maps.json`);
+
+		const mapData = {};
+
+		// Apply the prerelease/brew data first, so the "official" data takes precedence, where required
+		Object.assign(mapData, MiscUtil.copyFast(await this._pGetPrereleaseBrewMaps({brewUtil: BrewUtil2})));
+		Object.assign(mapData, MiscUtil.copyFast(await this._pGetPrereleaseBrewMaps({brewUtil: PrereleaseUtil})));
+		Object.assign(mapData, MiscUtil.copyFast(mapDataBase));
+
+		return mapData;
+	}
+
+	async _pGetPrereleaseBrewMaps ({brewUtil}) {
+		const brew = await brewUtil.pGetBrewProcessed();
+
+		const tuples = [
+			{prop: "adventure", propData: "adventureData"},
+			{prop: "book", propData: "bookData"},
+		]
+			.map(({prop, propData}) => {
+				if (!brew[prop]?.length || !brew[propData]?.length) return null;
+
+				return brew[prop].map(head => {
+					const body = brew[propData].find(body => body.id === head.id);
+					if (!body) return null;
+					return {prop, head, body: body.data};
+				})
+					.filter(Boolean);
+			})
+			.filter(Boolean)
+			.flat();
+
+		return tuples
+			.mergeMap(({prop, head, body}) => MapsUtil.getImageData({prop, head, body}));
+	}
+
+	_getPropsId (id) {
+		return {
+			propDisplaySource: `${this.constructor._PROP_PREFIX_DISPLAY}Id_${id}`,
+		};
+	}
+
+	_getPropsChapter (id, ixCh) {
+		return {
+			propDisplayChapter: `${this.constructor._PROP_PREFIX_DISPLAY}Chapter_${id}_${ixCh}`,
+		};
+	}
+
+	_render_source ({source, sourceMeta, renderState, propsDisplaySource}) {
+		const {propDisplaySource} = this._getPropsId(sourceMeta.id);
+		if (this._state[propDisplaySource] === undefined) this.__state[propDisplaySource] = false;
+		propsDisplaySource.push(propDisplaySource);
+
+		const shortNameHtml = this._getShortNameHtml({source, sourceMeta});
+		const titleName = this._getTitleName({sourceMeta});
+		const searchName = this._getSearchName({sourceMeta});
+
+		const propsDisplayChapter = [];
+		const rendersChapter = sourceMeta.chapters
+			.map((chapter, ixChapter) => this._render_chapter({chapter, ixChapter, propsDisplayChapter, renderState, source, sourceMeta, propDisplaySource}));
+
+		// region Display
+		const wrpContent = veT`<div class="ve-flex-col ve-w-100 ve-px-4 ve-py-2 maps-gallery__wrp-book">
+			<h3 class="ve-mt-0 ve-mb-2">${Renderer.get().render(`{@${sourceMeta.prop} ${Parser.sourceJsonToFull(source)}|${sourceMeta.id}}`)}</h3>
+			${rendersChapter.map(({wrpContent}) => wrpContent)}
+			<hr class="ve-hr-4">
+		</div>`;
+		// endregion
+
+		// region Menu
+		const cbSource = ComponentUiUtil.getCbBool(this, propDisplaySource, {isDisplayNullAsIndeterminate: true, isTreatIndeterminateNullAsPositive: true});
+
+		const wrpMenu = veT`<div class="ve-flex-col ve-w-100">
+			<label class="ve-split-v-center maps-menu__label-cb ve-pl-2 ve-clickable">
+				<div class="ve-mr-3 ve-text-clip-ellipsis" title="${titleName.qq()}">${shortNameHtml}</div>
+				${cbSource.vee.addClass("ve-no-shrink")}
+			</label>
+			<div class="ve-flex-col">
+				${rendersChapter.map(({wrpMenu}) => wrpMenu)}
+			</div>
+		</div>`;
+		// endregion
+
+		const hkBubbleUp = () => {
+			if (renderState.isBubblingDown) return;
+			renderState.isBubblingUp = true;
+
+			const sourceValues = propsDisplaySource.map(prop => this._state[prop]);
+
+			if (sourceValues.every(it => it)) this._state.isAllChecked = true;
+			else if (sourceValues.every(it => it === false)) this._state.isAllChecked = false;
+			else this._state.isAllChecked = null;
+
+			renderState.isBubblingUp = false;
+		};
+		this._addHookBase(propDisplaySource, hkBubbleUp);
+
+		const hkBubbleDown = () => {
+			if (renderState.isBubblingUp) return;
+			renderState.isBubblingDown = true;
+
+			if (this._state[propDisplaySource] != null) {
+				const nxtVal = this._state[propDisplaySource];
+				propsDisplayChapter.forEach(prop => this._state[prop] = nxtVal);
+			}
+
+			renderState.isBubblingDown = false;
+		};
+		this._addHookBase(propDisplaySource, hkBubbleDown);
+
+		const hkDisplaySource = () => wrpContent.vee.toggle(this._state[propDisplaySource] !== false);
+		this._addHookBase(propDisplaySource, hkDisplaySource);
+		hkDisplaySource();
+
+		const hkSearch = () => wrpMenu.vee.toggle(this._isVisibleSourceSearch({searchName}));
+		this._addHookBase("search", hkSearch);
+		hkSearch();
+
+		return {wrpMenu, wrpContent, searchName, propDisplaySource};
+	}
+
+	_render_chapter ({chapter, ixChapter, propsDisplayChapter, renderState, source, sourceMeta, propDisplaySource}) {
+		const {propDisplayChapter} = this._getPropsChapter(sourceMeta.id, ixChapter);
+		if (this._state[propDisplayChapter] === undefined) this.__state[propDisplayChapter] = false;
+		propsDisplayChapter.push(propDisplayChapter);
+
+		const hkBubbleUp = () => {
+			if (renderState.isBubblingDown) return;
+			renderState.isBubblingUp = true;
+
+			const chapterValues = propsDisplayChapter.map(prop => this._state[prop]);
+			if (chapterValues.every(it => it)) this._state[propDisplaySource] = true;
+			else if (chapterValues.every(it => it === false)) this._state[propDisplaySource] = false;
+			else this._state[propDisplaySource] = null;
+
+			renderState.isBubblingUp = false;
+		};
+		this._addHookBase(propDisplayChapter, hkBubbleUp);
+
+		const btnScrollTo = veT`<button class="ve-btn ve-btn-default ve-btn-xxs maps-menu__btn-chapter-scroll ve-no-shrink" title="Scroll To"><span class="glyphicon glyphicon-triangle-right"></span></button>`
+			.vee.onn("click", () => {
+				if (!this._state[propDisplayChapter]) this._state[propDisplayChapter] = true;
+				wrpContent[0].scrollIntoView({block: "nearest", inline: "nearest"});
+			});
+
+		const cbChapter = ComponentUiUtil.getCbBool(this, propDisplayChapter, {isDisplayNullAsIndeterminate: true, isTreatIndeterminateNullAsPositive: true});
+
+		const wrpMenu = veT`<div class="ve-flex-v-center maps-menu__label-cb">
+			${btnScrollTo}
+			<label class="ve-split-v-center ve-clickable ve-w-100 ve-min-w-0">
+				<div class="ve-mr-3 ve-text-clip-ellipsis" title="${chapter.name.qq()}">${chapter.name}</div>
+				${cbChapter.vee.addClass("ve-no-shrink")}
+			</label>
+		</div>`;
+
+		const wrpContent = veT`<div class="ve-flex-col ve-w-100 maps-gallery__wrp-chapter ve-px-2 ve-py-3 ve-my-2 shadow-big">
+			<h4 class="ve-mt-0 ve-mb-2">${Renderer.get().render(`{@${sourceMeta.prop} ${chapter.name}|${sourceMeta.id}|${chapter.ix}}`)}</h4>
+			<div class="ve-flex ve-flex-wrap">${chapter.images.map(it => Renderer.get().render(it))}</div>
+		</div>`;
+
+		const hkDisplayChapter = () => wrpContent.vee.toggle(this._state[propDisplayChapter]);
+		this._addHookBase(propDisplayChapter, hkDisplayChapter);
+		hkDisplayChapter();
+
+		return {wrpMenu, wrpContent};
+	}
+
+	_getShortNameHtml ({source, sourceMeta}) {
+		const titleName = this._getTitleName({sourceMeta});
+
+		if (!sourceMeta.parentSource) return titleName.qq();
+
+		const fullParentSource = Parser.sourceJsonToFull(sourceMeta.parentSource);
+		const ptPrefixParent = `<span title="${Parser.sourceJsonToFull(sourceMeta.parentSource).qq()}">${Parser.sourceJsonToAbv(sourceMeta.parentSource).qq()}</span>: `;
+
+		let isIncludesParent = false;
+		let out = titleName
+			.replace(new RegExp(`^${fullParentSource.escapeRegexp()}: `, "i"), () => {
+				isIncludesParent = true;
+				return ptPrefixParent;
+			});
+		if (isIncludesParent) return out;
+
+		return `${ptPrefixParent}${out}`;
+	}
+
+	_getTitleName ({sourceMeta}) {
+		if (sourceMeta.name) return sourceMeta.name;
+		return Parser.sourceJsonToFull(sourceMeta.source).trim();
+	}
+
+	_getSearchName ({sourceMeta}) {
+		return [
+			this._getTitleName({sourceMeta}),
+			Parser.sourceJsonToAbv(sourceMeta.source),
+		]
+			.join(" - ")
+			.toLowerCase()
+			.trim();
+	}
+
+	_isVisibleSourceSearch ({searchName}) { return searchName.includes(this._state.search.trim().toLowerCase()); }
+
+	_renderContent ({mapData}) {
+		const root = veEs(`#content`);
+
+		const renderState = new this.constructor._RenderState();
+
+		const propsDisplaySource = [];
+		const rendersSource = Object.entries(mapData)
+			.filter(([, {source, prop}]) => !ExcludeUtil.isExcluded(UrlUtil.encodeForHash(source.toLowerCase()), prop, source, {isNoCount: true}))
+			.map(([, sourceMeta]) => this._render_source({source: sourceMeta.source, sourceMeta, renderState, propsDisplaySource}));
+
+		const hkBubbleDown = () => {
+			if (renderState.isBubblingUp) return;
+			renderState.isBubblingDown = true;
+
+			let isAnyHidden = false;
+			if (this._state.isAllChecked != null) {
+				const nxtVal = this._state.isAllChecked;
+				rendersSource.forEach(({propDisplaySource, searchName}) => {
+					if (!this._isVisibleSourceSearch({searchName})) return isAnyHidden = true;
+					this._state[propDisplaySource] = nxtVal;
+				});
+			}
+
+			renderState.isBubblingDown = false;
+
+			if (isAnyHidden) this._state.isAllChecked = null;
+		};
+		this._addHookBase("isAllChecked", hkBubbleDown);
+
+		const {wrp: wrpIptSearch} = ComponentUiUtil.getIptStr(this, "search", {placeholder: "Search sources...", decorationLeft: "search", decorationRight: "clear", asMeta: true});
+
+		const cbIsAllChecked = ComponentUiUtil.getCbBool(this, "isAllChecked", {isDisplayNullAsIndeterminate: true, isTreatIndeterminateNullAsPositive: true});
+
+		const sldImageScale = ComponentUiUtil.getSliderNumber(this, "imageScale", {min: 0.1, max: 2.0, step: 0.1});
+
+		const hkImageScale = () => {
+			if (!renderState.eleStyle) renderState.eleStyle = veE({tag: "style"}).vee.appendTo(document.head);
+			renderState.eleStyle.vee.html(`
+				.maps .ve-rd__image { max-height: ${60 * this._state.imageScale}vh; }
+			`);
+		};
+		this._addHookBase("imageScale", hkImageScale);
+		hkImageScale();
+
+		const dispNoneVisible = veT`<div class="ve-flex-vh-center ve-h-100 ve-w-100">
+			<div class="ve-flex ve-muted initial-message initial-message--med ve-italic maps__disp-message-initial ve-px-3">Select some sources to view from the sidebar</div>
+		</div>`;
+		const hkAnyVisible = () => dispNoneVisible.vee.toggle(this._state.isAllChecked === false);
+		this._addHookBase("isAllChecked", hkAnyVisible);
+		hkAnyVisible();
+
+		veT(root.vee.empty())`
+			<div class="ve-flex-col ve-h-100 ve-no-shrink maps-menu ve-pr-4 ve-py-3 shadow-big ve-overflow-y-auto ve-smooth-scroll ve-scrollbar-stable ve-mobile-sm__w-100 ve-mobile-sm__my-4">
+				<label class="ve-split-v-center ve-pl-2 ve-py-1">
+					<div class="ve-mr-3 ve-no-shrink">Image Scale</div>
+					${sldImageScale}
+				</label>
+
+				<div class="ve-split-v-center ve-pl-2 ve-py-1">
+					${wrpIptSearch.vee.addClass("ve-mr-3")}
+					${cbIsAllChecked.vee.tooltip("Select All")}
+				</div>
+
+				<hr class="ve-hr-3">
+
+				${rendersSource.map(({wrpMenu}) => wrpMenu)}
+			</div>
+
+			<div class="ve-w-100 ve-h-100 ve-mobile-sm__h-initial ve-overflow-y-auto ve-smooth-scroll ve-flex-col">
+				${dispNoneVisible}
+				${rendersSource.map(({wrpContent}) => wrpContent)}
+			</div>
+		`;
+	}
+
+	_getDefaultState () {
+		return {
+			isAllChecked: false,
+			imageScale: 0.6,
+			search: "",
+		};
+	}
+}
+
+const mapsPage = new MapsPage();
+window.addEventListener("load", () => mapsPage.pOnLoad());

@@ -1,0 +1,7 @@
+[Unit]
+Description=Backup Arkann SQLite database
+
+[Service]
+Type=oneshot
+WorkingDirectory=@ROOT@
+ExecStart=@ROOT@/.venv/bin/python @ROOT@/scripts/backup_db.py

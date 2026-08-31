@@ -1,0 +1,19 @@
+[Unit]
+Description=Arkann local image worker (CPU)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=@ROOT@
+Environment=HF_HOME=@ROOT@/data/hf-cache
+Environment=ARKANN_IMAGE_HOST=127.0.0.1
+Environment=ARKANN_IMAGE_PORT=7860
+ExecStart=@ROOT@/.venv/bin/python -u @ROOT@/image/server.py
+Restart=always
+RestartSec=10
+TimeoutStartSec=0
+MemoryMax=7G
+Nice=10
+
+[Install]
+WantedBy=default.target

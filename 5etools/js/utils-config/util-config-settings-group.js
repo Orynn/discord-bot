@@ -1,0 +1,44 @@
+export class ConfigSettingsGroup {
+	constructor (
+		{
+			groupId,
+			name,
+			configSettings,
+		},
+	) {
+		this._groupId = groupId;
+		this._name = name;
+		this._configSettings = configSettings;
+
+		this._configSettings
+			.forEach(configSetting => configSetting.setGroupId(this._groupId));
+	}
+
+	get groupId () { return this._groupId; }
+
+	render (rdState, {isLast = false} = {}) {
+		const wrpRows = veT`<div></div>`;
+
+		veT`<div class="ve-w-100">
+			<h4>${this._name}</h4>
+			${wrpRows}
+			${isLast ? null : `<hr class="ve-hr-3 ve-mb-1">`}
+		</div>`
+			.vee.appendTo(rdState.wrp);
+
+		this._configSettings
+			.forEach(configSetting => configSetting.render(rdState, wrpRows));
+	}
+
+	mutDefaults (config) {
+		const group = config[this._groupId] ||= {};
+		this._configSettings
+			.forEach(configSetting => configSetting.mutDefaults(group));
+	}
+
+	mutVerify (config) {
+		const group = config[this._groupId] ||= {};
+		this._configSettings
+			.forEach(configSetting => configSetting.mutVerify(group));
+	}
+}

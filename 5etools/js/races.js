@@ -1,0 +1,156 @@
+import {RenderRaces} from "./render-races.js";
+
+class RacesSublistManager extends SublistManager {
+	static _getRowTemplate () {
+		return [
+			new SublistCellTemplate({
+				name: "Name",
+				css: "ve-bold ve-col-5 ve-pl-0 ve-pr-1",
+				colStyle: "",
+			}),
+			new SublistCellTemplate({
+				name: "Ability",
+				css: "ve-col-5 ve-px-1",
+				colStyle: "",
+			}),
+			new SublistCellTemplate({
+				name: "Size",
+				css: "ve-col-2 ve-text-center ve-pl-1 ve-pr-0",
+				colStyle: "text-center",
+			}),
+		];
+	}
+
+	pGetSublistItem (race, hash) {
+		const {sizeText, sizeShortText} = PageFilterRaces.getSizeDisplayInfo(race.size);
+
+		const cellsText = [
+			race.name,
+			new SublistCell({text: race._slAbility, css: race._slAbility === VeCt.STR_NONE || race._slAbility === "Lineage" ? "ve-italic" : ""}),
+			new SublistCell({text: sizeShortText, title: sizeText}),
+		];
+
+		const ele = veT`<div class="ve-lst__row ve-lst__row--sublist ve-flex-col">
+				<a href="#${UrlUtil.autoEncodeHash(race)}" class="ve-lst__row-border ve-lst__row-inner">
+					${this.constructor._getRowCellsHtml({values: cellsText})}
+				</a>
+			</div>
+		`
+			.vee.onn("contextmenu", evt => this._handleSublistItemContextMenu(evt, listItem))
+			.vee.onn("click", evt => this._listSub.doSelect(listItem, evt));
+
+		const listItem = new ListItem(
+			hash,
+			ele,
+			race.name,
+			{
+				...ListItem.getCommonValues(race),
+				ability: race._slAbility,
+				size: sizeText,
+			},
+			{
+				hash,
+				entity: race,
+				mdRow: [...cellsText],
+			},
+		);
+		return listItem;
+	}
+}
+
+class RacesPage extends ListPage {
+	constructor () {
+		const pageFilter = new PageFilterRaces();
+		super({
+			dataSource: DataUtil.race.loadJSON.bind(DataUtil.race, {isAddBaseRaces: true}),
+			prereleaseDataSource: DataUtil.race.loadPrerelease.bind(DataUtil.race),
+			brewDataSource: DataUtil.race.loadBrew.bind(DataUtil.race),
+
+			pFnGetFluff: Renderer.race.pGetFluff.bind(Renderer.race),
+
+			pageFilter,
+
+			dataProps: ["race"],
+
+			bookViewOptions: {
+				nameSingular: "species",
+				namePlural: "species",
+				pageTitle: "Species Book View",
+			},
+
+			isPreviewable: true,
+
+			hasAudio: true,
+		});
+	}
+
+	_addData (data) {
+		if (data.race && data.race.length) super._addData(data);
+		if (!data.subrace || !data.subrace.length) return;
+
+		// Attach each subrace to a parent race, and recurse
+		const nxtData = Renderer.race.adoptSubraces(this._dataList, data.subrace);
+
+		if (nxtData.length) this._addData({race: Renderer.race.mergeSubraces(nxtData)});
+	}
+
+	getListItem (race, rcI, isExcluded) {
+		const hash = UrlUtil.autoEncodeHash(race);
+		if (this._seenHashes.has(hash)) return null;
+		this._seenHashes.add(hash);
+
+		this._pageFilter.mutateAndAddToFilters(race, isExcluded);
+
+		const eleLi = document.createElement("div");
+		eleLi.className = `ve-lst__row ve-flex-col ${isExcluded ? "ve-lst__row--blocklisted" : ""}`;
+
+		const {sizeText, sizeShortText} = PageFilterRaces.getSizeDisplayInfo(race.size);
+
+		const source = Parser.sourceJsonToAbv(race.source);
+
+		eleLi.innerHTML = `<a href="#${hash}" class="ve-lst__row-border ve-lst__row-inner">
+			<span class="ve-col-0-4 ve-px-0 ve-flex-vh-center ve-lst__btn-toggle-expand ve-self-flex-stretch ve-no-select">[+]</span>
+			<span class="ve-bold ve-col-4-4 ve-pl-0 ve-pr-1">${race.name}</span>
+			<span class="ve-col-3-6 ve-px-1 ${race._slAbility === VeCt.STR_NONE || race._slAbility === "Lineage" ? "ve-italic" : ""}">${race._slAbility}</span>
+			<span class="ve-col-1-6 ve-px-1 ve-text-center" title="${sizeText}">${sizeShortText}</span>
+			<span class="ve-col-2 ve-text-center ${Parser.sourceJsonToSourceClassname(race.source)} ve-pl-1 ve-pr-0" title="${Parser.sourceJsonToFull(race.source)}">${source}</span>
+		</a>
+		<div class="ve-flex ve-hidden ve-relative ve-accordion__wrp-preview">
+			<div class="ve-vr-0 ve-absolute ve-accordion__vr-preview"></div>
+			<div class="ve-flex-col ve-py-3 ve-ml-4 ve-accordion__wrp-preview-inner"></div>
+		</div>`;
+
+		const listItem = new ListItem(
+			rcI,
+			eleLi,
+			race.name,
+			{
+				source,
+				...ListItem.getCommonValues(race),
+				ability: race._slAbility,
+				size: sizeText,
+				cleanName: PageFilterRaces.getInvertedName(race.name) || "",
+				alias: PageFilterRaces.getListAliases(race),
+			},
+			{
+				hash,
+				isExcluded,
+			},
+		);
+
+		eleLi.addEventListener("click", (evt) => this._list.doSelect(listItem, evt));
+		eleLi.addEventListener("contextmenu", (evt) => this._openContextMenu(evt, this._list, listItem));
+
+		return listItem;
+	}
+
+	_renderStats_doBuildStatsTab ({ent}) {
+		this._pgContent.vee.empty().vee.appends(RenderRaces.getRenderedRace(ent));
+	}
+}
+
+const racesPage = new RacesPage();
+racesPage.sublistManager = new RacesSublistManager();
+window.addEventListener("load", () => racesPage.pOnLoad());
+
+globalThis.dbg_page = racesPage;

@@ -1,0 +1,149 @@
+"use strict";
+
+class UtilsTableview {
+	static _RenderState = class {
+		constructor () {
+			this.comp = null;
+			this.rows = [];
+			this.metasCbs = [];
+		}
+	};
+
+	static show ({title, entities, colTransforms, additionalData, sorter}) {
+		const {eleModal} = UiUtil.getShowModal({
+			isWidth100: true,
+			isHeight100: true,
+			isUncappedWidth: true,
+			isUncappedHeight: true,
+			isEmpty: true,
+		});
+
+		const rdState = new UtilsTableview._RenderState();
+
+		rdState.comp = BaseComponent.fromObject(
+			Object.keys(colTransforms).mergeMap(k => ({[k]: true})),
+		);
+
+		const cbAll = veT`<input type="checkbox" title="Select All" checked>`
+			.vee.onn("click", () => {
+				const val = cbAll.vee.prop("indeterminate") ? false : cbAll.vee.prop("checked");
+
+				rdState.comp._proxyAssignSimple(
+					"state",
+					Object.keys(colTransforms).mergeMap(k => ({[k]: val})),
+				);
+			});
+
+		rdState.metasCbs = Object.entries(colTransforms)
+			.map(([prop, meta]) => {
+				const cb = ComponentUiUtil.getCbBool(rdState.comp, prop);
+
+				const wrp = veT`<label class="ve-px-2 ve-py-1 ve-no-wrap ve-flex-inline-v-center">
+					${cb}
+					<span>${meta.name}</span>
+				</label>`;
+
+				return {wrp, name: meta.name};
+			});
+
+		Object.keys(colTransforms)
+			.forEach((prop, i) => {
+				rdState.comp._addHookBase(prop, () => {
+					const propsSelected = Object.keys(colTransforms).map(prop => rdState.comp._state[prop]);
+					if (propsSelected.every(Boolean)) cbAll.vee.prop("checked", true);
+					else if (propsSelected.every(it => !it)) cbAll.vee.prop("checked", false);
+					else cbAll.vee.prop("indeterminate", true).vee.prop("checked", true);
+
+					const eles = eleModal.vee.findAll(`[data-col="${i}"]`);
+					eles.forEach(ele => ele.vee.toggle(rdState.comp._state[prop]));
+				});
+			});
+
+		const btnCsv = veT`<button class="ve-btn ve-btn-primary">Download CSV</button>`.vee.onn("click", () => {
+			DataUtil.userDownloadText(`${title}.csv`, this._getAsCsv({colTransforms, rdState}));
+		});
+
+		const btnCopy = veT`<button class="ve-btn ve-btn-primary">Copy CSV to Clipboard</button>`.vee.onn("click", async () => {
+			await MiscUtil.pCopyTextToClipboard(this._getAsCsv({colTransforms, rdState}));
+			JqueryUtil.showCopiedEffect(btnCopy);
+		});
+
+		const wrpRows = veT`<div class="ve-overflow-y-auto ve-w-100 ve-h-100 ve-flex-col ve-overflow-x-auto"></div>`;
+
+		veT(eleModal)`<div class="ve-flex-v-center ve-my-3">
+			<label class="ve-flex-vh-center ve-pl-2 ve-pr-3 ve-h-100">${cbAll}</label>
+			<div class="ve-vr-2 ve-ml-0 ve-h-100"></div>
+			<div class="ve-flex-v-center ve-flex-wrap ve-w-100 ve-min-w-0">${rdState.metasCbs.map(({wrp}) => wrp)}</div>
+			<div class="ve-vr-2 ve-h-100"></div>
+			<div class="ve-btn-group ve-no-shrink ve-flex-v-center ve-ml-3">
+				${btnCsv}
+				${btnCopy}
+			</div>
+		</div>
+		<hr class="ve-hr-1">
+		${wrpRows}
+		`;
+
+		const tableHtml = this._getTableHtml({rdState, entities, colTransforms, additionalData, sorter});
+		wrpRows.vee.html(tableHtml);
+	}
+
+	static _getAsCsv ({colTransforms, rdState}) {
+		const headersActive = Object.entries(colTransforms)
+			.map(([prop, meta], ix) => ({name: meta.name, ix, isSelected: rdState.comp._state[prop]}))
+			.filter(({isSelected}) => isSelected);
+
+		const parser = new DOMParser();
+		const rows = rdState.rows
+			.map(row => {
+				return headersActive
+					.map(({ix}) => {
+						const docParsed = parser.parseFromString(`<div>${row[ix]}</div>`, "text/html").documentElement;
+						[...docParsed.querySelectorAll("p")].forEach(ele => ele.innerHTML += "\n\n");
+						return (docParsed.textContent || "")
+							.trim()
+							.split("\n")
+							.map(it => it.trim())
+							.join("\n")
+							.replace(/\n\n+/g, "\n\n")
+						;
+					});
+			});
+		return DataUtil.getCsv(headersActive.map(({name}) => name), rows);
+	}
+
+	static _getTableHtml ({rdState, entities, colTransforms, additionalData, sorter, styleHint = null}) {
+		styleHint ||= VetoolsConfig.get("styleSwitcher", "style");
+
+		let stack = `<table class="ve-w-100 table-striped ve-stats ve-stats--book ve-stats--book-large ve-min-w-100 ve-w-initial">
+			<thead>
+				<tr>${Object.values(colTransforms).map((c, i) => `<th data-col="${i}" class="ve-text-left ve-px-2" colspan="${c.flex || 1}">${c.name}</th>`).join("")}</tr>
+			</thead>
+			<tbody>`;
+
+		const listCopy = [...entities];
+		if (sorter) listCopy.sort(sorter);
+		listCopy.forEach(it => {
+			stack += `<tr class="tview__row">`;
+			const row = [];
+			stack += Object.keys(colTransforms).map((k, i) => {
+				const c = colTransforms[k];
+				const val = c.transform == null ? it[k] : c.transform(k[0] === "_" ? it : it[k], additionalData, {styleHint});
+				row.push(val);
+				return `<td data-col="${i}" class="ve-px-2" colspan="${c.flex || 1}">${val || ""}</td>`;
+			}).join("");
+			rdState.rows.push(row);
+			stack += `</tr>`;
+		});
+
+		stack += `</tbody></table>`;
+
+		return stack;
+	}
+
+	// region Default/generic transforms
+	static COL_TRANSFORM_NAME = {name: "Name"};
+	static COL_TRANSFORM_SOURCE = {name: "Source", transform: (it) => `<span class="${Parser.sourceJsonToSourceClassname(it)}" title="${Parser.sourceJsonToFull(it)}">${Parser.sourceJsonToAbv(it)}</span>`};
+	static COL_TRANSFORM_PAGE = {name: "Page"};
+	// endregion
+}

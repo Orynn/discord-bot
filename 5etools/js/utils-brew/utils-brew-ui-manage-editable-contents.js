@@ -1,0 +1,554 @@
+import {SOURCE_UNKNOWN_ABBREVIATION, SOURCE_UNKNOWN_FULL} from "./utils-brew-constants.js";
+import {EVNT_VALCHANGE} from "../filter/filter-constants.js";
+
+export class ManageEditableBrewContentsUi extends BaseComponent {
+	static _RenderState = class {
+		constructor () {
+			this.tabMetaEntities = null;
+			this.tabMetaSources = null;
+
+			this.listEntities = null;
+			this.listEntitiesSelectClickHandler = null;
+			this.listSources = null;
+			this.listSourcesSelectClickHandler = null;
+
+			this.contentEntities = null;
+			this.pageFilterEntities = new ManageEditableBrewContentsUi._PageFilter();
+		}
+	};
+
+	static _PageFilter = class extends PageFilterBase {
+		constructor () {
+			super();
+			this._categoryFilter = new Filter({header: "Category"});
+		}
+
+		_getNamespaceSnapshots () { return "PageFilterManageEditableBrewContents"; }
+
+		static mutateForFilters (meta) {
+			const {ent, prop} = meta;
+			meta._fSource = SourceUtil.getEntitySource(ent);
+			meta._fCategory = ManageEditableBrewContentsUi._getDisplayProp({ent, prop});
+		}
+
+		addToFilters (meta) {
+			this._sourceFilter.addItem(meta._fSource);
+			this._categoryFilter.addItem(meta._fCategory);
+		}
+
+		async _pPopulateBoxOptions (opts) {
+			opts.filters = [
+				this._sourceFilter,
+				this._categoryFilter,
+			];
+		}
+
+		toDisplay (values, meta) {
+			return this._filterBox.toDisplay(
+				values,
+				meta._fSource,
+				meta._fCategory,
+			);
+		}
+	};
+
+	static async pDoOpen ({brewUtil, brew, isModal: isParentModal = false, isReadOnly = false}) {
+		return new Promise((resolve, reject) => {
+			const ui = new this({brewUtil, brew, isModal: true, isReadOnly});
+			const rdState = new this._RenderState();
+			const {eleModalInner} = UiUtil.getShowModal({
+				isHeight100: true,
+				title: isReadOnly ? `View Document Contents` : `Manage Document Contents`,
+				isUncappedHeight: true,
+				isWidth100: true,
+				eleTitleSplit: isReadOnly
+					? null
+					: veT`<div class="ve-flex-v-center ve-btn-group">
+						${ui._getBtnDeleteSelected({rdState})}
+					</div>`,
+				overlayColor: isParentModal ? "transparent" : undefined,
+				cbClose: () => {
+					resolve(ui._getFormData());
+					rdState.pageFilterEntities.filterBox.teardown();
+				},
+			});
+			ui.pRender(eleModalInner, {rdState})
+				.catch(e => reject(e));
+		});
+	}
+
+	constructor ({brewUtil, brew, isModal, isReadOnly}) {
+		super();
+
+		TabUiUtil.decorate(this, {isInitMeta: true});
+
+		this._brewUtil = brewUtil;
+		this._brew = MiscUtil.copyFast(brew);
+		this._isModal = isModal;
+		this._isReadOnly = isReadOnly;
+
+		this._isDirty = false;
+	}
+
+	_getFormData () {
+		return {
+			isDirty: this._isDirty,
+			brew: this._brew,
+		};
+	}
+
+	/* -------------------------------------------- */
+
+	_getBtnDeleteSelected ({rdState}) {
+		return veT`<button class="ve-btn ve-btn-danger ve-btn-xs">Delete Selected</button>`
+			.vee.onn("click", () => this._handleClick_pButtonDeleteSelected({rdState}));
+	}
+
+	async _handleClick_pButtonDeleteSelected ({rdState}) {
+		if (this._isReadOnly) throw new Error(`Cannot delete in read-only mode! This is a bug!`);
+
+		if (this._getActiveTab() === rdState.tabMetaEntities) return this._handleClick_pButtonDeleteSelected_entities({rdState});
+		if (this._getActiveTab() === rdState.tabMetaSources) return this._handleClick_pButtonDeleteSelected_sources({rdState});
+		// (The metadata tab does not have any selectable elements, so, no-op)
+	}
+
+	async _handleClick_pButtonDeleteSelected_entities ({rdState}) {
+		const listItemsSel = rdState.listEntities.items
+			.filter(it => it.data.cbSel.checked);
+
+		if (!listItemsSel.length) return;
+
+		if (!await InputUiUtil.pGetUserBoolean({title: "Delete Entities", htmlDescription: `Are you sure you want to delete the ${listItemsSel.length === 1 ? "selected entity" : `${listItemsSel.length} selected entities`}?`, textYes: "Yes", textNo: "Cancel"})) return;
+
+		this._isDirty = true;
+
+		// Remove the array items from our copy of the brew, and remove the corresponding list items
+		listItemsSel
+			.forEach(li => this._doEntityListDelete({rdState, li}));
+		rdState.listEntities.update();
+	}
+
+	_doEntityListDelete ({rdState, li}) {
+		const ix = this._brew.body[li.data.prop].indexOf(li.data.ent);
+		if (!~ix) return;
+		this._brew.body[li.data.prop].splice(ix, 1);
+		if (!this._brew.body[li.data.prop].length) delete this._brew.body[li.data.prop];
+		rdState.listEntities.removeItem(li);
+	}
+
+	async _handleClick_pButtonDeleteSelected_sources ({rdState}) {
+		const listItemsSel = rdState.listSources.items
+			.filter(it => it.data.cbSel.checked);
+
+		if (!listItemsSel.length) return;
+
+		if (
+			!await InputUiUtil.pGetUserBoolean({
+				title: "Delete Sources",
+				htmlDescription: `<div>Are you sure you want to delete the ${listItemsSel.length === 1 ? "selected source" : `${listItemsSel.length} selected sources`}?<br><b>This will delete all entities with ${listItemsSel.length === 1 ? "that source" : `these sources`}</b>.</div>`,
+				textYes: "Yes",
+				textNo: "Cancel",
+			})
+		) return;
+
+		this._isDirty = true;
+
+		// Remove the sources from our copy of the brew, and remove the corresponding list items
+		listItemsSel
+			.forEach(li => {
+				const ix = this._brew.body._meta.sources.indexOf(li.data.source);
+				if (!~ix) return;
+				this._brew.body._meta.sources.splice(ix, 1);
+				rdState.listSources.removeItem(li);
+			});
+		rdState.listSources.update();
+
+		// Remove all entities with matching sources, and remove the corresponding list items
+		const sourceSetRemoved = new Set(listItemsSel.map(li => li.data.source.json));
+		rdState.listEntities.visibleItems
+			.forEach(li => {
+				const source = SourceUtil.getEntitySource(li.data.ent);
+				if (!sourceSetRemoved.has(source)) return;
+
+				this._doEntityListDelete({rdState, li});
+			});
+		rdState.listEntities.update();
+	}
+
+	/* -------------------------------------------- */
+
+	async pRender (wrp, {rdState = null} = {}) {
+		rdState = rdState || new this.constructor._RenderState();
+
+		const iptTabMetas = [
+			new TabUiUtil.TabMeta({name: "Entities", hasBorder: true}),
+			new TabUiUtil.TabMeta({name: "Metadata", hasBorder: true}),
+			new TabUiUtil.TabMeta({name: "Sources", hasBorder: true}),
+		];
+
+		const tabMetas = this._renderTabs(iptTabMetas, {eleParent: wrp});
+		const [tabMetaEntities, tabMetaMetadata, tabMetaSources] = tabMetas;
+
+		rdState.tabMetaEntities = tabMetaEntities;
+		rdState.tabMetaSources = tabMetaSources;
+
+		this._pRender_tabEntities({tabMeta: tabMetaEntities, rdState});
+		this._pRender_tabMetadata({tabMeta: tabMetaMetadata, rdState});
+		this._pRender_tabSources({tabMeta: tabMetaSources, rdState});
+	}
+
+	_pRender_tabEntities ({tabMeta, rdState}) {
+		const btnFilter = veT`<button class="ve-btn ve-btn-default">Filter</button>`;
+
+		const btnToggleSummaryHidden = veT`<button class="ve-btn ve-btn-default" title="Toggle Filter Summary Display"><span class="glyphicon glyphicon-resize-small"></span></button>`;
+
+		const btnReset = veT`<button class="ve-btn ve-btn-default">Reset</button>`;
+
+		const wrpMiniPills = veT`<div class="ve-fltr__mini-view ve-btn-group"></div>`;
+
+		const cbAll = this._isReadOnly ? null : veT`<input type="checkbox">`;
+		const wrpRows = veT`<div class="list ve-flex-col ve-w-100 ve-max-h-unset"></div>`;
+		const iptSearch = veT`<input type="search" class="search manbrew__search ve-form-control ve-w-100 ve-lst__search ve-lst__search--no-border-h" placeholder="Search entries...">`;
+		const disp = veT`<div class="ve-lst__wrp-search-visible ve-no-events ve-flex-vh-center"></div>`;
+		const wrpBtnsSort = veT`<div class="filtertools manbrew__filtertools ve-input-group ve-input-group--bottom ve-flex ve-no-shrink">
+			${this._isReadOnly ? "" : veT`<label class="ve-btn ve-btn-default ve-btn-xs ve-col-1 ve-pr-0 ve-flex-vh-center">${cbAll}</label>`}
+			<button class="${this._isReadOnly ? `ve-col-6` : `ve-col-5`} sort ve-btn ve-btn-default ve-btn-xs" data-sort="name">Name</button>
+			<button class="ve-col-1 sort ve-btn ve-btn-default ve-btn-xs" data-sort="source">Source</button>
+			<button class="ve-col-5 sort ve-btn ve-btn-default ve-btn-xs" data-sort="category">Category</button>
+		</div>`;
+
+		veT(tabMeta.wrpTab)`
+		<div class="ve-flex-v-stretch ve-input-group ve-input-group--top ve-no-shrink ve-mt-1">
+			${btnFilter}
+			${btnToggleSummaryHidden}
+			<div class="ve-w-100 ve-relative">
+				${iptSearch}
+				<div id="lst__search-glass" class="ve-lst__wrp-search-glass ve-no-events ve-flex-vh-center"><span class="glyphicon glyphicon-search"></span></div>
+				${disp}
+			</div>
+			${btnReset}
+		</div>
+
+		${wrpMiniPills}
+
+		${wrpBtnsSort}
+		${wrpRows}`;
+
+		rdState.listEntities = new List({
+			iptSearch,
+			wrpList: wrpRows,
+			fnSort: SortUtil.listSort,
+		});
+
+		rdState.listEntities.on("updated", () => disp.vee.html(`${rdState.listEntities.visibleItems.length}/${rdState.listEntities.items.length}`));
+
+		if (!this._isReadOnly) {
+			rdState.listEntitiesSelectClickHandler = new ListSelectClickHandler({list: rdState.listEntities});
+			rdState.listEntitiesSelectClickHandler.bindSelectAllCheckbox(cbAll);
+		}
+		SortUtil.initBtnSortHandlers(wrpBtnsSort, rdState.listEntities);
+
+		let ixParent = 0;
+		rdState.contentEntities = Object.entries(this._brew.body)
+			.filter(([, v]) => v instanceof Array && v.length)
+			.map(([prop, arr]) => arr.map(ent => ({ent, prop, ixParent: ixParent++})))
+			.flat();
+
+		rdState.contentEntities.forEach(({ent, prop, ixParent}) => {
+			const {listItem} = this._pRender_getEntityRowMeta({rdState, prop, ent, ixParent});
+			rdState.listEntities.addItem(listItem);
+		});
+
+		rdState.pageFilterEntities.pInitFilterBox({
+			iptSearch: iptSearch,
+			btnReset: btnReset,
+			btnOpen: btnFilter,
+			btnToggleSummaryHidden: btnToggleSummaryHidden,
+			wrpMiniPills: wrpMiniPills,
+			namespace: `${this.constructor.name}__tabEntities`,
+		}).then(async () => {
+			rdState.contentEntities.forEach(meta => rdState.pageFilterEntities.mutateAndAddToFilters(meta));
+
+			rdState.listEntities.init();
+
+			rdState.pageFilterEntities.trimState();
+			rdState.pageFilterEntities.filterBox.render();
+
+			rdState.pageFilterEntities.filterBox.on(
+				EVNT_VALCHANGE,
+				this._handleFilterChange_entities.bind(this, {rdState}),
+			);
+
+			this._handleFilterChange_entities({rdState});
+
+			iptSearch.vee.focus();
+		});
+	}
+
+	_handleFilterChange_entities ({rdState}) {
+		const f = rdState.pageFilterEntities.filterBox.getValues();
+		rdState.listEntities.filter(li => rdState.pageFilterEntities.toDisplay(f, rdState.contentEntities[li.ix]));
+	}
+
+	_pRender_getEntityRowMeta ({rdState, prop, ent, ixParent}) {
+		const eleLi = document.createElement("div");
+		eleLi.className = "ve-lst__row ve-flex-col ve-px-0";
+
+		const dispName = this.constructor._getDisplayName({brew: this._brew, ent, prop});
+		const sourceMeta = this.constructor._getSourceMeta({brew: this._brew, ent});
+		const dispProp = this.constructor._getDisplayProp({ent, prop});
+
+		eleLi.innerHTML = `<label class="ve-lst__row-border ve-lst__row-inner ve-no-select ve-mb-0 ve-flex-v-center">
+			${this._isReadOnly ? "" : `<div class="ve-pl-0 ve-col-1 ve-flex-vh-center"><input type="checkbox" class="ve-no-events"></div>`}
+			<div class="${this._isReadOnly ? `ve-col-6` : `ve-col-5`} ve-bold">${dispName}</div>
+			<div class="ve-col-1 ve-text-center ${Parser.sourceJsonToSourceClassname(sourceMeta.json)}" title="${(sourceMeta.full || "").qq()}">${sourceMeta.abbreviation}</div>
+			<div class="ve-col-5 ve-flex-vh-center ve-pr-0">${dispProp}</div>
+		</label>`;
+
+		const listItem = new ListItem(
+			ixParent, // We identify the item in the list according to its position across all props
+			eleLi,
+			dispName,
+			{
+				source: sourceMeta.abbreviation,
+				category: dispProp,
+			},
+			{
+				cbSel: this._isReadOnly ? null : eleLi.firstElementChild.firstElementChild.firstElementChild,
+				prop,
+				ent,
+			},
+		);
+
+		if (!this._isReadOnly) eleLi.addEventListener("click", evt => rdState.listEntitiesSelectClickHandler.handleSelectClick(listItem, evt));
+
+		return {
+			listItem,
+		};
+	}
+
+	_pRender_tabMetadata ({tabMeta, rdState}) {
+		const infoTuples = Object.entries(this.constructor._PROP_INFOS_META).filter(([k]) => Object.keys(this._brew.body?._meta?.[k] || {}).length);
+
+		if (!infoTuples.length) {
+			veT(tabMeta.wrpTab)`
+				<h4>Metadata</h4>
+				<p><i>No metadata found.</i></p>
+			`;
+			return;
+		}
+
+		const metasSections = infoTuples
+			.map(([prop, info]) => this._pRender_getMetaRowMeta({prop, info}));
+
+		veT(tabMeta.wrpTab)`
+			<div class="ve-pt-2"><i>Warning: deleting metadata may invalidate or otherwise corrupt homebrew which depends on it. Use with caution.</i></div>
+			<hr class="ve-hr-3">
+			${metasSections.map(({wrp}) => wrp)}
+		`;
+	}
+
+	_pRender_getMetaRowMeta ({prop, info}) {
+		const displayName = info.displayName || prop.toTitleCase();
+		const displayFn = info.displayFn || ((...args) => args.last().toTitleCase());
+
+		const rows = Object.keys(this._brew.body._meta[prop])
+			.map(k => {
+				const btnDelete = this._isReadOnly
+					? null
+					: veT`<button class="ve-btn ve-btn-danger ve-btn-xs" title="Delete"><span class="glyphicon glyphicon-trash"></span></button>`
+						.vee.onn("click", () => {
+							this._isDirty = true;
+							MiscUtil.deleteObjectPath(this._brew.body._meta, prop, k);
+							row.remove();
+
+							// If we deleted the last key and the whole prop has therefore been cleaned up, delete the section
+							if (this._brew.body._meta[prop]) return;
+
+							wrp.remove();
+						});
+
+				const row = veT`<div class="ve-lst__row ve-flex-col ve-px-0">
+					<div class="ve-split-v-center ve-lst__row-border ve-lst__row-inner ve-no-select ve-mb-0 ve-flex-v-center">
+						<div class="${this._isReadOnly ? `ve-col-12` : `ve-col-10`}">${displayFn(this._brew, prop, k)}</div>
+						${this._isReadOnly ? "" : veT`<div class="ve-col-2 ve-btn-group ve-flex-v-center ve-flex-h-right">${btnDelete}</div>`}
+					</div>
+				</div>`;
+
+				return row;
+			});
+
+		const wrp = veT`<div class="ve-flex-col ve-mb-4">
+			<div class="ve-bold ve-mb-2">${displayName}:</div>
+			<div class="ve-flex-col list-display-only">${rows}</div>
+		</div>`;
+
+		return {
+			wrp,
+		};
+	}
+
+	_pRender_tabSources ({tabMeta, rdState}) {
+		const cbAll = this._isReadOnly ? null : veT`<input type="checkbox">`;
+		const wrpRows = veT`<div class="list ve-flex-col ve-w-100 ve-max-h-unset"></div>`;
+		const iptSearch = veT`<input type="search" class="search manbrew__search ve-form-control ve-w-100 ve-mt-1" placeholder="Search source...">`;
+		const wrpBtnsSort = veT`<div class="filtertools manbrew__filtertools ve-input-group ve-input-group--bottom ve-flex ve-no-shrink">
+			${this._isReadOnly ? "" : veT`<label class="ve-btn ve-btn-default ve-btn-xs ve-col-1 ve-pr-0 ve-flex-vh-center">${cbAll}</label>`}
+			<button class="${this._isReadOnly ? `ve-col-6` : `ve-col-5`} sort ve-btn ve-btn-default ve-btn-xs" data-sort="name">Name</button>
+			<button class="ve-col-2 sort ve-btn ve-btn-default ve-btn-xs" data-sort="abbreviation">Abbreviation</button>
+			<button class="ve-col-4 sort ve-btn ve-btn-default ve-btn-xs" data-sort="json">JSON</button>
+		</div>`;
+
+		veT(tabMeta.wrpTab)`
+		${iptSearch}
+		${wrpBtnsSort}
+		${wrpRows}`;
+
+		rdState.listSources = new List({
+			iptSearch,
+			wrpList: wrpRows,
+			fnSort: SortUtil.listSort,
+		});
+
+		if (!this._isReadOnly) {
+			rdState.listSourcesSelectClickHandler = new ListSelectClickHandler({list: rdState.listSources});
+			rdState.listSourcesSelectClickHandler.bindSelectAllCheckbox(cbAll);
+		}
+		SortUtil.initBtnSortHandlers(wrpBtnsSort, rdState.listSources);
+
+		(this._brew.body?._meta?.sources || [])
+			.forEach((source, ix) => {
+				const {listItem} = this._pRender_getSourceRowMeta({rdState, source, ix});
+				rdState.listSources.addItem(listItem);
+			});
+
+		rdState.listSources.init();
+		iptSearch.vee.focus();
+	}
+
+	_pRender_getSourceRowMeta ({rdState, source, ix}) {
+		const eleLi = document.createElement("div");
+		eleLi.className = "ve-lst__row ve-flex-col ve-px-0";
+
+		const name = source.full || SOURCE_UNKNOWN_FULL;
+		const abv = source.abbreviation || SOURCE_UNKNOWN_ABBREVIATION;
+
+		eleLi.innerHTML = `<label class="ve-lst__row-border ve-lst__row-inner ve-no-select ve-mb-0 ve-flex-v-center">
+			${this._isReadOnly ? `` : `<div class="ve-pl-0 ve-col-1 ve-flex-vh-center"><input type="checkbox" class="ve-no-events"></div>`}
+			<div class="${this._isReadOnly ? `ve-col-6` : `ve-col-5`} ve-bold">${name}</div>
+			<div class="ve-col-2 ve-text-center">${abv}</div>
+			<div class="ve-col-4 ve-flex-vh-center ve-pr-0">${source.json}</div>
+		</label>`;
+
+		const listItem = new ListItem(
+			ix,
+			eleLi,
+			name,
+			{
+				abbreviation: abv,
+				json: source.json,
+			},
+			{
+				cbSel: this._isReadOnly ? null : eleLi.firstElementChild.firstElementChild.firstElementChild,
+				source,
+			},
+		);
+
+		if (!this._isReadOnly) eleLi.addEventListener("click", evt => rdState.listSourcesSelectClickHandler.handleSelectClick(listItem, evt));
+
+		return {
+			listItem,
+		};
+	}
+
+	static _NAME_UNKNOWN = "(Unknown)";
+
+	static _getDisplayName ({brew, ent, prop}) {
+		switch (prop) {
+			case "itemProperty": {
+				if (ent.name) return ent.name || this._NAME_UNKNOWN;
+				if (ent.entries) {
+					const name = Renderer.findName(ent.entries);
+					if (name) return name;
+				}
+				if (ent.entriesTemplate) {
+					const name = Renderer.findName(ent.entriesTemplate);
+					if (name) return name;
+				}
+				return ent.abbreviation || this._NAME_UNKNOWN;
+			}
+
+			case "adventureData":
+			case "bookData": {
+				const propContents = prop === "adventureData" ? "adventure" : "book";
+
+				if (!brew[propContents]) return ent.id || this._NAME_UNKNOWN;
+
+				return brew[propContents].find(it => it.id === ent.id)?.name || ent.id || this._NAME_UNKNOWN;
+			}
+
+			default: return ent.name || this._NAME_UNKNOWN;
+		}
+	}
+
+	static _getSourceMeta ({brew, ent}) {
+		const entSource = SourceUtil.getEntitySource(ent);
+		if (!entSource) return {abbreviation: SOURCE_UNKNOWN_ABBREVIATION, full: SOURCE_UNKNOWN_FULL};
+		const source = (brew.body?._meta?.sources || []).find(src => src.json === entSource);
+		if (!source) return {abbreviation: SOURCE_UNKNOWN_ABBREVIATION, full: SOURCE_UNKNOWN_FULL};
+		return source;
+	}
+
+	static _getDisplayProp ({ent, prop}) {
+		const out = [Parser.getPropDisplayName(prop)];
+
+		switch (prop) {
+			case "subclass": out.push(` (${ent.className})`); break;
+			case "subrace": out.push(` (${ent.raceName})`); break;
+			case "psionic": out.push(` (${Parser.psiTypeToMeta(ent.type).short})`); break;
+		}
+
+		return out.filter(Boolean).join(" ");
+	}
+
+	/** These are props found in "_meta" sections of files */
+	static _PROP_INFOS_META = {
+		"spellDistanceUnits": {
+			displayName: "Spell Distance Units",
+		},
+		"spellSchools": {
+			displayName: "Spell Schools",
+			displayFn: (brew, propMeta, k) => brew.body._meta[propMeta][k].full || k,
+		},
+		"currencyConversions": {
+			displayName: "Currency Conversion Tables",
+			displayFn: (brew, propMeta, k) => `${k}: ${brew.body._meta[propMeta][k].map(it => `${it.coin}=${it.mult}`).join(", ")}`,
+		},
+		"skills": {
+			displayName: "Skills",
+		},
+		"senses": {
+			displayName: "Senses",
+		},
+		"featCategories": {
+			displayName: "Feat Categories",
+			displayFn: (brew, propMeta, k) => brew.body._meta[propMeta][k] || k,
+		},
+		"optionalFeatureTypes": {
+			displayName: "Optional Feature Types",
+			displayFn: (brew, propMeta, k) => brew.body._meta[propMeta][k] || k,
+		},
+		"vehicleUpgradeTypes": {
+			displayName: "Vehicle Upgrade Types",
+			displayFn: (brew, propMeta, k) => brew.body._meta[propMeta][k] || k,
+		},
+		"charOption": {
+			displayName: "Character Creation Option Types",
+			displayFn: (brew, propMeta, k) => brew.body._meta[propMeta][k] || k,
+		},
+		"psionicTypes": {
+			displayName: "Psionic Types",
+			displayFn: (brew, propMeta, k) => brew.body._meta[propMeta][k].full || k,
+		},
+	};
+}

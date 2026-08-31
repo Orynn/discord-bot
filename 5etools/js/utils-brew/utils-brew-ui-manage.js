@@ -1,0 +1,1084 @@
+import {SOURCE_UNKNOWN_ABBREVIATION, SOURCE_UNKNOWN_FULL} from "./utils-brew-constants.js";
+import {BrewDoc} from "./utils-brew-models.js";
+import {GetBrewUi} from "./utils-brew-ui-get.js";
+import {ManageEditableBrewContentsUi} from "./utils-brew-ui-manage-editable-contents.js";
+import {ManageExternalUtils} from "../manageexternal/manageexternal-utils.js";
+
+export class ManageBrewUi {
+	static _RenderState = class {
+		constructor () {
+			this.stgBrewList = null;
+			this.list = null;
+			this.listSelectClickHandler = null;
+			this.brews = [];
+			this.menuListMass = null;
+			this.rowMetas = [];
+		}
+	};
+
+	constructor ({brewUtil, isModal = false} = {}) {
+		this._brewUtil = brewUtil;
+		this._isModal = isModal;
+	}
+
+	/* -------------------------------------------- */
+
+	static _CONTEXT_MENU_BTNGROUP_MANAGER = null;
+
+	static bindBtngroupManager (btngroup) {
+		btngroup
+			.vee.first(`[name="manage-content"]`)
+			.vee.onn("click", evt => this._pOnClickBtnManageContent({evt}));
+
+		btngroup
+			.vee.first(`[name="manage-prerelease"]`)
+			.vee.onn("click", evt => this._onClickBtnManagePrereleaseBrew({brewUtil: PrereleaseUtil, isGoToPage: evt.shiftKey}));
+
+		btngroup
+			.vee.first(`[name="manage-brew"]`)
+			.vee.onn("click", evt => this._onClickBtnManagePrereleaseBrew({brewUtil: BrewUtil2, isGoToPage: evt.shiftKey}));
+	}
+
+	static bindBtnOpen (btn, {brewUtil = null} = {}) {
+		brewUtil = brewUtil || BrewUtil2;
+
+		btn.vee.onn("click", evt => this._onClickBtnManagePrereleaseBrew({brewUtil, isGoToPage: evt.shiftKey}));
+	}
+
+	static _pOnClickBtnManageContent ({evt}) {
+		this._CONTEXT_MENU_BTNGROUP_MANAGER ||= ContextUtil.getMenu([
+			new ContextUtil.Action(
+				"Manage Prerelease Content",
+				async evt => {
+					this._onClickBtnManagePrereleaseBrew({brewUtil: PrereleaseUtil, isGoToPage: evt.shiftKey});
+				},
+			),
+			new ContextUtil.Action(
+				"Manage Homebrew",
+				async evt => {
+					this._onClickBtnManagePrereleaseBrew({brewUtil: BrewUtil2, isGoToPage: evt.shiftKey});
+				},
+			),
+			null,
+			new ContextUtil.Action(
+				"Load All Partnered Content",
+				async evt => {
+					await this.pOnClickBtnLoadAllPartnered();
+				},
+			),
+			null,
+			new ContextUtil.Action(
+				"Delete All Loaded Content",
+				async evt => {
+					await this._pOnClickBtnDeleteAllLoadedContent();
+				},
+			),
+		]);
+
+		return ContextUtil.pOpenMenu(evt, this._CONTEXT_MENU_BTNGROUP_MANAGER);
+	}
+
+	static _onClickBtnManagePrereleaseBrew ({brewUtil, isGoToPage}) {
+		if (isGoToPage) return window.location = brewUtil.PAGE_MANAGE;
+		return this.pDoManageBrew({brewUtil});
+	}
+
+	static async pOnClickBtnLoadAllPartnered () {
+		const cntAvailable = (await Promise.all([
+			PrereleaseUtil.pGetCntBrewsPartnered({isSilent: true}),
+			BrewUtil2.pGetCntBrewsPartnered({isSilent: true}),
+		])).sum();
+		if (!cntAvailable) {
+			JqueryUtil.doToast({type: "warning", content: `No partnered content available!`});
+			return;
+		}
+
+		if (
+			!await InputUiUtil.pGetUserBoolean({
+				title: "Load Partnered Content",
+				htmlDescription: `<p>Are you sure you want to load all partnered content?<br>${cntAvailable} partnered content source${cntAvailable === 1 ? "" : "s"} will be loaded.</p>`,
+				textYes: "Yes",
+				textNo: "Cancel",
+			})
+		) return;
+
+		const brewDocs = [];
+		try {
+			const [brewDocsPrerelease, brewDocsHomebrew] = await Promise.all([
+				PrereleaseUtil.pAddBrewsPartnered({isSilent: true}),
+				BrewUtil2.pAddBrewsPartnered({isSilent: true}),
+			]);
+			brewDocs.push(
+				...brewDocsPrerelease,
+				...brewDocsHomebrew,
+			);
+		} catch (e) {
+			JqueryUtil.doToast({type: "danger", content: `Failed to load partnered content! ${VeCt.STR_SEE_CONSOLE}`});
+			throw e;
+		}
+
+		if (brewDocs.length) JqueryUtil.doToast(`Loaded partnered content!`);
+
+		if (PrereleaseUtil.isReloadRequired()) PrereleaseUtil.doLocationReload();
+		if (BrewUtil2.isReloadRequired()) BrewUtil2.doLocationReload();
+	}
+
+	static async _pOnClickBtnDeleteAllLoadedContent () {
+		if (
+			!await InputUiUtil.pGetUserBoolean({
+				title: `Delete All Loaded ${PrereleaseUtil.DISPLAY_NAME.toTitleCase()} and ${BrewUtil2.DISPLAY_NAME.toTitleCase()}`,
+				htmlDescription: `<div>
+					<div>Are you sure?</div>
+					<div class="ve-muted"><i>Note that this will <b>not</b> delete your Editable ${PrereleaseUtil.DISPLAY_NAME.toTitleCase()} and Editable ${BrewUtil2.DISPLAY_NAME.toTitleCase()}.</i></div>
+				</div>`,
+				textYes: "Yes",
+				textNo: "Cancel",
+			})
+		) return;
+
+		try {
+			await Promise.all([
+				PrereleaseUtil.pDeleteUneditableBrews(),
+				BrewUtil2.pDeleteUneditableBrews(),
+			]);
+		} catch (e) {
+			JqueryUtil.doToast({type: "danger", content: `Failed to load partnered content! ${VeCt.STR_SEE_CONSOLE}`});
+			throw e;
+		}
+
+		if (PrereleaseUtil.isReloadRequired()) PrereleaseUtil.doLocationReload();
+		if (BrewUtil2.isReloadRequired()) BrewUtil2.doLocationReload();
+	}
+
+	/* -------------------------------------------- */
+
+	static async pOnClickBtnExportListAsUrl ({ele}) {
+		const url = await ManageExternalUtils.pGetUrl();
+		await MiscUtil.pCopyTextToClipboard(url);
+		JqueryUtil.showCopiedEffect(ele);
+
+		if (
+			!await PrereleaseUtil.pHasEditableSourceJson()
+			&& !await BrewUtil2.pHasEditableSourceJson()
+		) return;
+
+		JqueryUtil.doToast({type: "warning", content: `Note: you have Editable ${PrereleaseUtil.DISPLAY_NAME} or ${BrewUtil2.DISPLAY_NAME}. This cannot be exported as part of a URL, and so was not included.`});
+	}
+
+	/* -------------------------------------------- */
+
+	static async pDoManageBrew ({brewUtil = null} = {}) {
+		brewUtil = brewUtil || BrewUtil2;
+
+		const ui = new this({isModal: true, brewUtil});
+		const rdState = new this._RenderState();
+		const {eleModalInner} = UiUtil.getShowModal({
+			isHeight100: true,
+			isWidth100: true,
+			title: `Manage ${brewUtil.DISPLAY_NAME.toTitleCase()}`,
+			isUncappedHeight: true,
+			eleTitleSplit: veT`<div class="ve-flex-v-center ve-btn-group">
+				${ui._getBtnPullAll(rdState)}
+				${ui._getBtnDeleteAll(rdState)}
+			</div>`,
+			isHeaderBorder: true,
+			cbClose: () => {
+				if (!brewUtil.isReloadRequired()) return;
+				brewUtil.doLocationReload();
+			},
+		});
+		await ui.pRender(eleModalInner, {rdState});
+	}
+
+	_getBtnDeleteAll (rdState) {
+		const brewUtilOther = this._brewUtil === PrereleaseUtil ? BrewUtil2 : PrereleaseUtil;
+
+		return veT`<button class="ve-btn ve-btn-danger" title="SHIFT to also delete all ${brewUtilOther.DISPLAY_NAME.toTitleCase()}">Delete All</button>`
+			.vee.addClass(this._isModal ? "ve-btn-xs" : "ve-btn-sm")
+			.vee.onn("click", async evt => {
+				if (!evt.shiftKey) {
+					if (!await InputUiUtil.pGetUserBoolean({title: `Delete All ${this._brewUtil.DISPLAY_NAME.toTitleCase()}`, htmlDescription: "Are you sure?", textYes: "Yes", textNo: "Cancel"})) return;
+
+					await this._pDoDeleteAll(rdState);
+
+					return;
+				}
+
+				if (
+					!await InputUiUtil.pGetUserBoolean({
+						title: `Delete All ${this._brewUtil.DISPLAY_NAME.toTitleCase()} and ${brewUtilOther.DISPLAY_NAME.toTitleCase()}`,
+						htmlDescription: "Are you sure?",
+						textYes: "Yes",
+						textNo: "Cancel",
+					})
+				) return;
+
+				await brewUtilOther.pSetBrew([]);
+				await this._pDoDeleteAll(rdState);
+			});
+	}
+
+	_getBtnPullAll (rdState) {
+		const btn = veT`<button class="ve-btn ve-btn-default ve-w-80p">Update All</button>`
+			.vee.addClass(this._isModal ? "ve-btn-xs" : "ve-btn-sm")
+			.vee.onn("click", async () => {
+				const cachedHtml = btn.vee.html();
+
+				try {
+					btn.vee.txt(`Updating...`).vee.prop("disabled", true);
+					await this._pDoPullAll({rdState, isReload: true});
+				} catch (e) {
+					btn.vee.txt(`Failed!`);
+					setTimeout(() => btn.vee.html(cachedHtml).vee.prop("disabled", false), VeCt.DUR_INLINE_NOTIFY);
+					throw e;
+				}
+
+				btn.vee.txt(`Done!`);
+				setTimeout(() => btn.vee.html(cachedHtml).vee.prop("disabled", false), VeCt.DUR_INLINE_NOTIFY);
+			});
+		return btn;
+	}
+
+	async _pDoDeleteAll (rdState) {
+		await this._brewUtil.pSetBrew([]);
+
+		rdState.list.removeAllItems();
+		rdState.list.update();
+
+		if (this._brewUtil.isReloadRequired()) this._brewUtil.doLocationReload();
+	}
+
+	async _pDoPullAll ({rdState, brews = null, isReload = false}) {
+		if (brews && !brews.length) return;
+
+		let brewDocsUpdated;
+		try {
+			brewDocsUpdated = await this._brewUtil.pPullAllBrews({brews});
+		} catch (e) {
+			JqueryUtil.doToast({content: `Update failed! ${VeCt.STR_SEE_CONSOLE}`, type: "danger"});
+			throw e;
+		}
+		if (!brewDocsUpdated?.length) return JqueryUtil.doToast(`Update complete! No ${this._brewUtil.DISPLAY_NAME} was updated.`);
+
+		await this._pRender_pBrewList(rdState);
+
+		const brewDocsUpdatedMetas = brewDocsUpdated
+			.map(brewDoc => {
+				return {
+					brewName: this.constructor._getBrewName(brewDoc),
+					sources: MiscUtil.copyFast(brewDoc.body._meta?.sources || []),
+				};
+			});
+
+		const htmlListRows = brewDocsUpdatedMetas
+			.sort((a, b) => SortUtil.ascSortLower(a.brewName, b.brewName))
+			.map(({sources}) => {
+				if (!sources.length) return "";
+
+				const htmlListItems = sources
+					.sort((a, b) => SortUtil.ascSortLower(a.full || SOURCE_UNKNOWN_FULL, b.full || SOURCE_UNKNOWN_FULL))
+					.map(brewSource => `<li>${brewSource.full || SOURCE_UNKNOWN_FULL}</li>`);
+
+				if (htmlListItems.length === 1) return htmlListItems[0];
+
+				return `<ul>${htmlListItems.join("")}</ul>`;
+			})
+			.filter(Boolean)
+			.join("");
+
+		const messageInfo = {
+			isAutoHide: false,
+			contentHtml: `<div>
+				<div>Update complete! ${brewDocsUpdated.length} ${brewDocsUpdated.length === 1 ? `${this._brewUtil.DISPLAY_NAME} was` : `${this._brewUtil.DISPLAY_NAME_PLURAL} were`} updated.</div>
+				${htmlListRows ? `<ul class="ve-mt-2 ve-mb-0">${htmlListRows}</ul>` : ""}
+			</div>`,
+		};
+
+		if (isReload) {
+			await this._brewUtil.pSetReloadMessage(messageInfo);
+			if (this._brewUtil.isReloadRequired()) this._brewUtil.doLocationReload();
+			return;
+		}
+
+		JqueryUtil.doToast({
+			...messageInfo,
+			content: veE({outer: messageInfo.contentHtml}),
+		});
+	}
+
+	async pRender (wrp, {rdState = null} = {}) {
+		rdState = rdState || new this.constructor._RenderState();
+
+		rdState.stgBrewList = veT`<div class="manbrew__current_brew ve-flex-col ve-h-100 ve-mt-1 ve-min-h-0"></div>`;
+
+		await this._pRender_pBrewList(rdState);
+
+		const btnGet = veT`<button class="ve-btn ${this._brewUtil.STYLE_BTN} ve-btn-sm">Get ${this._brewUtil.DISPLAY_NAME.toTitleCase()}</button>`
+			.vee.onn("click", () => this._pHandleClick_btnGetBrew(rdState));
+
+		const btnCustomUrl = veT`<button class="ve-btn ${this._brewUtil.STYLE_BTN} ve-btn-sm ve-px-2" title="Set Custom Repository URL"><span class="glyphicon glyphicon-cog"></span></button>`
+			.vee.onn("click", () => this._pHandleClick_btnSetCustomRepo());
+
+		const btnLoadPartnered = veT`<button class="ve-btn ve-btn-default ve-btn-sm">Load All Partnered</button>`
+			.vee.onn("click", () => this._pHandleClick_btnLoadPartnered(rdState));
+
+		const btnLoadFromFile = veT`<button class="ve-btn ve-btn-default ve-btn-sm">Load from File</button>`
+			.vee.onn("click", () => this._pHandleClick_btnLoadFromFile(rdState));
+
+		const btnLoadFromUrl = veT`<button class="ve-btn ve-btn-default ve-btn-sm">Load from URL</button>`
+			.vee.onn("click", () => this._pHandleClick_btnLoadFromUrl(rdState));
+
+		const btnPullAll = this._isModal ? null : this._getBtnPullAll(rdState);
+		const btnDeleteAll = this._isModal ? null : this._getBtnDeleteAll(rdState);
+
+		const btnSaveToUrl = veT`<button class="ve-btn ve-btn-default ve-btn-sm" title="Note that this does not include &quot;Editable&quot; or &quot;Local&quot; content.">Export List as URL</button>`
+			.vee.onn("click", async evt => {
+				await this.constructor.pOnClickBtnExportListAsUrl({ele: evt.currentTarget});
+			});
+
+		const wrpBtnLoadAll = this._brewUtil.IS_ADD_BTN_ALL_PARTNERED
+			? veT`<div class="ve-flex-v-center ve-btn-group ve-mr-2">
+				${btnLoadPartnered}
+			</div>`
+			: null;
+
+		const wrpBtns = veT`<div class="ve-flex-v-center ve-no-shrink ve-mobile-sm__flex-col">
+			<div class="ve-flex-v-center ve-mobile-sm__mb-2">
+				<div class="ve-flex-v-center ve-btn-group ve-mr-2">
+					${btnGet}
+					${btnCustomUrl}
+				</div>
+				${wrpBtnLoadAll}
+				<div class="ve-flex-v-center ve-btn-group ve-mr-2">
+					${btnLoadFromFile}
+					${btnLoadFromUrl}
+				</div>
+			</div>
+			<div class="ve-flex-v-center">
+				<a href="${this._brewUtil.URL_REPO_DEFAULT}" class="ve-flex-v-center" target="_blank" rel="noopener noreferrer"><button class="ve-btn ve-btn-default ve-btn-sm ve-mr-2">Browse Source Repository</button></a>
+
+				<div class="ve-flex-v-center ve-btn-group ve-mr-2">
+					${btnSaveToUrl}
+				</div>
+
+				<div class="ve-flex-v-center ve-btn-group">
+					${btnPullAll}
+					${btnDeleteAll}
+				</div>
+			</div>
+		</div>`;
+
+		if (this._isModal) {
+			veT(wrp)`
+			${rdState.stgBrewList}
+			${wrpBtns.vee.addClass("ve-mb-2")}`;
+		} else {
+			veT(wrp)`
+			${wrpBtns.vee.addClass("ve-mb-3")}
+			${rdState.stgBrewList}`;
+		}
+	}
+
+	async _pHandleClick_btnLoadPartnered (rdState) {
+		await this._brewUtil.pAddBrewsPartnered();
+		if (this._brewUtil.isReloadRequired()) this._brewUtil.doLocationReload();
+		await this._pRender_pBrewList(rdState);
+	}
+
+	async _pHandleClick_btnLoadFromFile (rdState) {
+		const {files, errors} = await InputUiUtil.pGetUserUploadJson({isMultiple: true, expectedFileTypes: []});
+
+		DataUtil.doHandleFileLoadErrorsGeneric(errors);
+
+		await this._brewUtil.pAddBrewsFromFiles(files);
+		if (this._brewUtil.isReloadRequired()) this._brewUtil.doLocationReload();
+		await this._pRender_pBrewList(rdState);
+	}
+
+	async _pHandleClick_btnLoadFromUrl (rdState) {
+		const enteredUrl = await InputUiUtil.pGetUserString({
+			title: `${this._brewUtil.DISPLAY_NAME.toTitleCase()} URL`,
+			htmlDescription: `<p>
+				Provide a link to a ${this._brewUtil.DISPLAY_NAME} JSON.
+				<br><span class="ve-muted">Note that for GitHub links, this should be the &quot;Raw&quot; link.</span>
+			</p>`,
+		});
+		if (!enteredUrl || !enteredUrl.trim()) return;
+
+		const parsedUrl = this.constructor._getParsedCustomUrl(enteredUrl);
+		if (!parsedUrl) {
+			return JqueryUtil.doToast({
+				content: `The URL was not valid!`,
+				type: "danger",
+			});
+		}
+
+		// If mistakenly passed an "export as URL" link, navigate
+		if (ManageExternalUtils.isLoadExternalUrl(parsedUrl.href)) {
+			parsedUrl.hostname = window.location.hostname;
+			parsedUrl.protocol = window.location.protocol;
+			parsedUrl.port = window.location.port;
+			window.location = parsedUrl;
+		}
+
+		await this._brewUtil.pAddBrewFromUrl(parsedUrl.href);
+		if (this._brewUtil.isReloadRequired()) this._brewUtil.doLocationReload();
+		await this._pRender_pBrewList(rdState);
+	}
+
+	static _getParsedCustomUrl (enteredUrl) {
+		try {
+			return new URL(enteredUrl);
+		} catch (e) {
+			return null;
+		}
+	}
+
+	async _pHandleClick_btnGetBrew (rdState) {
+		await GetBrewUi.pDoGetBrew({brewUtil: this._brewUtil, isModal: this._isModal});
+		if (this._brewUtil.isReloadRequired()) this._brewUtil.doLocationReload();
+		await this._pRender_pBrewList(rdState);
+	}
+
+	async _pHandleClick_btnSetCustomRepo () {
+		const customBrewUtl = await this._brewUtil.pGetCustomUrl();
+
+		const nxtUrl = await InputUiUtil.pGetUserString({
+			title: `${this._brewUtil.DISPLAY_NAME.toTitleCase()} Repository URL`,
+			elePre: veT`<div>
+				<p>Leave blank to use the <a href="${this._brewUtil.URL_REPO_DEFAULT}" rel="noopener noreferrer" target="_blank">default ${this._brewUtil.DISPLAY_NAME} repo</a>.</p>
+				<div>Note that for GitHub URLs, the <code>raw.</code> URL must be used. For example, <code>${this._brewUtil.URL_REPO_ROOT_DEFAULT.replace(/TheGiddyLimit/g, "YourUsernameHere")}</code></div>
+				<hr class="ve-hr-3">
+			</div>`,
+			default: customBrewUtl,
+		});
+		if (nxtUrl == null) return;
+
+		await this._brewUtil.pSetCustomUrl(nxtUrl);
+	}
+
+	async _pRender_pBrewList (rdState) {
+		rdState.stgBrewList.vee.empty();
+		rdState.rowMetas.splice(0, rdState.rowMetas.length)
+			.forEach(({menu}) => ContextUtil.deleteMenu(menu));
+
+		const btnMass = veT`<button class="ve-btn ve-btn-default ve-bbl-0 ve-self-flex-stretch">Mass...</button>`
+			.vee.onn("click", evt => this._pHandleClick_btnListMass({evt, rdState}));
+		const iptSearch = veT`<input type="search" class="search manbrew__search ve-form-control ve-bbr-0" placeholder="Search ${this._brewUtil.DISPLAY_NAME}...">`;
+		const cbAll = veT`<input type="checkbox">`;
+		const wrpList = veT`<div class="list-display-only ve-max-h-unset ve-smooth-scroll ve-overflow-y-auto ve-h-100 ve-min-h-0 brew-list brew-list--target manbrew__list ve-relative ve-flex-col ve-w-100 ve-mb-3"></div>`;
+
+		rdState.list = new List({
+			iptSearch,
+			wrpList,
+			isFuzzy: true,
+			sortByInitial: rdState.list ? rdState.list.sortBy : undefined,
+			sortDirInitial: rdState.list ? rdState.list.sortDir : undefined,
+		});
+
+		const wrpBtnsSort = veT`<div class="filtertools manbrew__filtertools ve-btn-group ve-input-group ve-input-group--bottom ve-flex ve-no-shrink">
+			<label class="ve-col-0-5 ve-pr-0 ve-btn ve-btn-default ve-btn-xs ve-flex-vh-center">${cbAll}</label>
+			<button class="ve-col-1 ve-btn ve-btn-default ve-btn-xs" disabled>Type</button>
+			<button class="ve-col-3 ve-btn ve-btn-default ve-btn-xs" data-sort="source">Source</button>
+			<button class="ve-col-3 ve-btn ve-btn-default ve-btn-xs" data-sort="authors">Authors</button>
+			<button class="ve-col-3 ve-btn ve-btn-default ve-btn-xs" disabled>Origin</button>
+			<button class="ve-col-1-5 ve-btn ve-btn-default ve-btn-xs ve-grow" disabled>&nbsp;</button>
+		</div>`;
+
+		veT(rdState.stgBrewList)`
+		<div class="ve-flex-col ve-h-100">
+			<div class="ve-input-group ve-flex-vh-center">
+				${btnMass}
+				${iptSearch}
+			</div>
+			${wrpBtnsSort}
+			<div class="ve-flex ve-w-100 ve-h-100 ve-min-h-0 ve-relative">${wrpList}</div>
+		</div>`;
+
+		rdState.listSelectClickHandler = new ListSelectClickHandler({list: rdState.list});
+		rdState.listSelectClickHandler.bindSelectAllCheckbox(cbAll);
+		SortUtil.initBtnSortHandlers(wrpBtnsSort, rdState.list);
+
+		rdState.brews = (await this._brewUtil.pGetBrew()).map(brew => this._pRender_getProcBrew(brew));
+
+		rdState.brews.forEach((brew, ix) => {
+			const meta = this._pRender_getLoadedRowMeta(rdState, brew, ix);
+			rdState.rowMetas.push(meta);
+			rdState.list.addItem(meta.listItem);
+		});
+
+		rdState.list.init();
+		iptSearch.vee.focus();
+	}
+
+	get _LBL_LIST_UPDATE () { return "Update"; }
+	get _LBL_LIST_MANAGE_CONTENTS () { return "Manage Contents"; }
+	get _LBL_LIST_EXPORT () { return "Export"; }
+	get _LBL_LIST_VIEW_CONTENTS () { return "View Contents"; }
+	get _LBL_LIST_VIEW_JSON () { return "View JSON"; }
+	get _LBL_LIST_DELETE () { return "Delete"; }
+	get _LBL_LIST_MOVE_TO_EDITABLE () { return `Move to Editable ${this._brewUtil.DISPLAY_NAME.toTitleCase()} Document`; }
+
+	_initListMassMenu ({rdState}) {
+		if (rdState.menuListMass) return;
+
+		const getSelBrews = ({fnFilter = null} = {}) => {
+			const brews = rdState.list.items
+				.filter(li => li.data.cbSel.checked)
+				.map(li => rdState.brews[li.ix])
+				.filter(brew => fnFilter ? fnFilter(brew) : true);
+
+			if (!brews.length) JqueryUtil.doToast({content: `Please select some suitable ${this._brewUtil.DISPLAY_NAME_PLURAL} first!`, type: "warning"});
+
+			return brews;
+		};
+
+		rdState.menuListMass = ContextUtil.getMenu([
+			new ContextUtil.Action(
+				this._LBL_LIST_UPDATE,
+				async () => this._pDoPullAll({
+					rdState,
+					brews: getSelBrews(),
+					isReload: true,
+				}),
+			),
+			new ContextUtil.Action(
+				this._LBL_LIST_EXPORT,
+				async () => {
+					for (const brew of getSelBrews()) await this._pRender_pDoDownloadBrew({brew});
+				},
+			),
+			this._brewUtil.IS_EDITABLE
+				? new ContextUtil.Action(
+					this._LBL_LIST_MOVE_TO_EDITABLE,
+					async () => this._pRender_pDoMoveToEditable({
+						rdState,
+						brews: getSelBrews({
+							fnFilter: brew => this._isBrewOperationPermitted_moveToEditable(brew),
+						}),
+					}),
+				)
+				: null,
+			new ContextUtil.Action(
+				this._LBL_LIST_DELETE,
+				async () => this._pRender_pDoDelete({
+					rdState,
+					brews: getSelBrews({
+						fnFilter: brew => this._isBrewOperationPermitted_delete(brew),
+					}),
+				}),
+			),
+		].filter(Boolean));
+	}
+
+	_isBrewOperationPermitted_update (brew) { return this._brewUtil.isPullable(brew); }
+	_isBrewOperationPermitted_moveToEditable (brew) { return BrewDoc.isOperationPermitted_moveToEditable({brew}); }
+	_isBrewOperationPermitted_delete (brew) { return !brew.head.isLocal; }
+
+	async _pHandleClick_btnListMass ({evt, rdState}) {
+		this._initListMassMenu({rdState});
+		await ContextUtil.pOpenMenu(evt, rdState.menuListMass);
+	}
+
+	static _getBrewName (brew) {
+		const sources = brew.body._meta?.sources || [];
+
+		return sources
+			.map(brewSource => brewSource.full || SOURCE_UNKNOWN_FULL)
+			.sort(SortUtil.ascSortLower)
+			.join(", ");
+	}
+
+	_pRender_getLoadedRowMeta (rdState, brew, ix) {
+		const sources = brew.body._meta?.sources || [];
+
+		const rowsSubMetas = sources
+			.map(brewSource => {
+				const hasConverters = !!brewSource.convertedBy?.length;
+				const btnConvertedBy = veE({
+					tag: "button",
+					clazz: `ve-btn ve-btn-xxs ve-btn-default ${!hasConverters ? "ve-disabled" : ""}`,
+					title: hasConverters ? `Converted by: ${brewSource.convertedBy.join(", ").qq()}` : "(No conversion credit given)",
+					children: [
+						veE({tag: "span", clazz: "ve-mobile-sm__hidden", txt: "View Converters"}),
+						veE({tag: "span", clazz: "ve-mobile-sm__visible", txt: "Convs.", title: "View Converters"}),
+					],
+					click: () => {
+						if (!hasConverters) return;
+						const {eleModalInner} = UiUtil.getShowModal({
+							title: `Converted By:${brewSource.convertedBy.length === 1 ? ` ${brewSource.convertedBy.join("")}` : ""}`,
+							isMinHeight0: true,
+						});
+
+						if (brewSource.convertedBy.length === 1) return;
+						eleModalInner.vee.appends(`<ul>${brewSource.convertedBy.map(it => `<li>${it.qq()}</li>`).join("")}</ul>`);
+					},
+				});
+
+				const authorsFull = [(brewSource.authors || [])].flat(2).join(", ");
+
+				const lnkUrl = brewSource.url
+					? veE({
+						tag: "a",
+						clazz: "ve-col-2 ve-text-center",
+						href: brewSource.url,
+						attrs: {
+							target: "_blank",
+							rel: "noopener noreferrer",
+						},
+						txt: "View Source",
+					})
+					: veE({
+						tag: "span",
+						clazz: "ve-col-2 ve-text-center",
+					});
+
+				const eleRow = veE({
+					tag: "div",
+					clazz: `ve-w-100 ve-flex-v-center`,
+					children: [
+						veE({
+							tag: "span",
+							clazz: `ve-col-4 manbrew__source ve-px-1`,
+							txt: brewSource.full,
+						}),
+						veE({
+							tag: "span",
+							clazz: `ve-col-4 ve-px-1`,
+							txt: authorsFull,
+						}),
+						lnkUrl,
+						veE({
+							tag: "div",
+							clazz: `ve-flex-vh-center ve-grow`,
+							children: [
+								btnConvertedBy,
+							],
+						}),
+					],
+				});
+
+				return {
+					eleRow,
+					authorsFull,
+					name: brewSource.full || SOURCE_UNKNOWN_FULL,
+					abbreviation: brewSource.abbreviation || SOURCE_UNKNOWN_ABBREVIATION,
+				};
+			})
+			.sort((a, b) => SortUtil.ascSortLower(a.name, b.name));
+
+		const brewName = this.constructor._getBrewName(brew);
+
+		// region These are mutually exclusive
+		const btnPull = this._pRender_getBtnPull({rdState, brew});
+		const btnEdit = this._pRender_getBtnEdit({rdState, brew, brewName});
+		const btnPullEditPlaceholder = (btnPull || btnEdit) ? null : this.constructor._pRender_getBtnPlaceholder();
+		// endregion
+
+		const btnViewContents = veE({
+			tag: "button",
+			clazz: `ve-btn ve-btn-default ve-btn-xs ve-mobile-lg__hidden ve-w-24p`,
+			title: `${this._LBL_LIST_VIEW_CONTENTS}: ${this.constructor._getBrewJsonTitle({brew, brewName})}`,
+			children: [
+				veE({
+					tag: "span",
+					clazz: "glyphicon glyphicon-list-alt manbrew-row__icn-btn",
+				}),
+			],
+			click: evt => this._pRender_pDoViewBrewContents({evt, brew}),
+		});
+
+		const btnDownload = veE({
+			tag: "button",
+			clazz: `ve-btn ve-btn-default ve-btn-xs ve-mobile-sm__hidden ve-w-24p`,
+			title: this._LBL_LIST_EXPORT,
+			children: [
+				veE({
+					tag: "span",
+					clazz: "glyphicon glyphicon-download manbrew-row__icn-btn",
+				}),
+			],
+			click: () => this._pRender_pDoDownloadBrew({brew, brewName}),
+		});
+
+		const btnViewJson = veE({
+			tag: "button",
+			clazz: `ve-btn ve-btn-default ve-btn-xs ve-mobile-lg__hidden ve-w-24p`,
+			title: `${this._LBL_LIST_VIEW_JSON}: ${this.constructor._getBrewJsonTitle({brew, brewName})}`,
+			children: [
+				veE({
+					tag: "span",
+					clazz: "ve-bolder ve-code ve-relative manbrew-row__icn-btn--text",
+					txt: "{}",
+				}),
+			],
+			click: evt => this._pRender_doViewBrew({evt, brew, brewName}),
+		});
+
+		const btnOpenMenu = veE({
+			tag: "button",
+			clazz: `ve-btn ve-btn-default ve-btn-xs ve-w-24p`,
+			title: "Menu",
+			children: [
+				veE({
+					tag: "span",
+					clazz: "glyphicon glyphicon-option-vertical manbrew-row__icn-btn",
+				}),
+			],
+			click: evt => this._pRender_pDoOpenBrewMenu({evt, rdState, brew, brewName, rowMeta}),
+		});
+
+		const btnDelete = this._isBrewOperationPermitted_delete(brew) ? veE({
+			tag: "button",
+			clazz: `ve-btn ve-btn-danger ve-btn-xs ve-mobile-sm__hidden ve-w-24p`,
+			title: this._LBL_LIST_DELETE,
+			children: [
+				veE({
+					tag: "span",
+					clazz: "glyphicon glyphicon-trash manbrew-row__icn-btn",
+				}),
+			],
+			click: () => this._pRender_pDoDelete({rdState, brews: [brew]}),
+		}) : this.constructor._pRender_getBtnPlaceholder();
+
+		// Weave in HRs
+		const elesSub = rowsSubMetas.map(it => it.eleRow);
+		for (let i = rowsSubMetas.length - 1; i > 0; --i) elesSub.splice(i, 0, veE({tag: "hr", clazz: `ve-hr-1 ve-hr--dotted`}));
+
+		const cbSel = veE({
+			tag: "input",
+			clazz: "ve-no-events",
+			type: "checkbox",
+		});
+
+		const ptCategory = brew.head.isLocal
+			? {short: `Local`, title: `Local Document`}
+			: brew.head.isEditable
+				? {short: `Editable`, title: `Editable Document`}
+				: {short: `Standard`, title: `Standard Document`};
+
+		const eleLi = veE({
+			tag: "div",
+			clazz: `manbrew__row ve-flex-v-center ve-lst__row ve-lst__row-border ve-lst__row-inner ve-no-shrink ve-py-1 ve-no-select`,
+			children: [
+				veE({
+					tag: "label",
+					clazz: `ve-col-0-5 ve-flex-vh-center ve-self-flex-stretch`,
+					children: [cbSel],
+				}),
+				veE({
+					tag: "div",
+					clazz: `ve-col-1 ve-text-center ve-italic ve-mobile-sm__text-clip-ellipsis`,
+					title: ptCategory.title,
+					txt: ptCategory.short,
+				}),
+				veE({
+					tag: "div",
+					clazz: `ve-col-9 ve-flex-col`,
+					children: elesSub,
+				}),
+				veE({
+					tag: "div",
+					clazz: `ve-col-1-5 ve-btn-group ve-flex-vh-center`,
+					children: [
+						btnPull,
+						btnEdit,
+						btnPullEditPlaceholder,
+						btnDownload,
+						brew.head.isEditable ? btnViewJson : btnViewContents,
+						btnOpenMenu,
+						btnDelete,
+					]
+						.filter(Boolean),
+				}),
+			],
+		});
+
+		const listItem = new ListItem(
+			ix,
+			eleLi,
+			brewName,
+			{
+				authors: rowsSubMetas.map(it => it.authorsFull).join(", "),
+				abbreviation: rowsSubMetas.map(it => it.abbreviation).join(", "),
+			},
+			{
+				cbSel,
+			},
+		);
+
+		eleLi.addEventListener("click", evt => rdState.listSelectClickHandler.handleSelectClick(listItem, evt, {isPassThroughEvents: true}));
+
+		const rowMeta = {
+			listItem,
+			menu: null,
+		};
+		return rowMeta;
+	}
+
+	static _pRender_getBtnPlaceholder () {
+		return veE({
+			tag: "button",
+			clazz: `ve-btn ve-btn-default ve-btn-xs ve-mobile-sm__hidden ve-w-24p`,
+			html: "&nbsp;",
+		})
+			.vee.attr("disabled", true);
+	}
+
+	_pRender_getBtnPull ({rdState, brew}) {
+		if (!this._isBrewOperationPermitted_update(brew)) return null;
+
+		const btnPull = veE({
+			tag: "button",
+			clazz: `ve-btn ve-btn-default ve-btn-xs ve-mobile-sm__hidden ve-w-24p`,
+			title: this._LBL_LIST_UPDATE,
+			children: [
+				veE({
+					tag: "span",
+					clazz: "glyphicon glyphicon-refresh manbrew-row__icn-btn",
+				}),
+			],
+			click: () => this._pRender_pDoPullBrew({rdState, brew}),
+		});
+		if (!this._brewUtil.isPullable(brew)) btnPull.vee.attr("disabled", true).vee.attr("title", `(Update disabled\u2014no URL available)`);
+		return btnPull;
+	}
+
+	_pRender_getBtnEdit ({rdState, brew, brewName}) {
+		if (!brew.head.isEditable) return null;
+
+		return veE({
+			tag: "button",
+			clazz: `ve-btn ve-btn-default ve-btn-xs ve-mobile-sm__hidden ve-w-24p`,
+			title: `${this._LBL_LIST_MANAGE_CONTENTS}: ${this.constructor._getBrewJsonTitle({brew, brewName})}`,
+			children: [
+				veE({
+					tag: "span",
+					clazz: "glyphicon glyphicon-pencil manbrew-row__icn-btn",
+				}),
+			],
+			click: () => this._pRender_pDoEditBrew({rdState, brew}),
+		});
+	}
+
+	async _pRender_pDoPullBrew ({rdState, brew}) {
+		const isPull = await this._brewUtil.pPullBrew(brew);
+
+		JqueryUtil.doToast(
+			isPull
+				? `${this._brewUtil.DISPLAY_NAME.uppercaseFirst()} updated!`
+				: `${this._brewUtil.DISPLAY_NAME.uppercaseFirst()} is already up-to-date.`,
+		);
+
+		if (!isPull) return;
+
+		await this._pRender_pBrewList(rdState);
+	}
+
+	async _pRender_pDoEditBrew ({rdState, brew}) {
+		const {isDirty, brew: nxtBrew} = await ManageEditableBrewContentsUi.pDoOpen({brewUtil: this._brewUtil, brew, isModal: this._isModal});
+		if (!isDirty) return;
+
+		await this._brewUtil.pUpdateBrew(nxtBrew);
+		await this._pRender_pBrewList(rdState);
+	}
+
+	async _pRender_pDoDownloadBrew ({brew, brewName = null}) {
+		const filename = (brew.head.filename || "").split(".").slice(0, -1).join(".");
+
+		// For the editable brew, if there are multiple sources, present the user with a selection screen. We then filter
+		//   the editable brew down to whichever sources they selected.
+		const isChooseSources = brew.head.isEditable && (brew.body._meta?.sources || []).length > 1;
+
+		if (!isChooseSources) {
+			const outFilename = filename || brewName || this.constructor._getBrewName(brew);
+			const json = brew.head.isEditable ? MiscUtil.copyFast(brew.body) : brew.body;
+			this.constructor._mutExportableEditableData({json: json});
+			return DataUtil.userDownload(outFilename, json, {isSkipAdditionalMetadata: true});
+		}
+
+		// region Get chosen sources
+		const getSourceAsText = source => `[${(source.abbreviation || "").qq()}] ${(source.full || "").qq()}`;
+
+		const choices = await InputUiUtil.pGetUserMultipleChoice({
+			title: `Choose Sources`,
+			values: brew.body._meta.sources,
+			fnDisplay: getSourceAsText,
+			isResolveItems: true,
+			max: Number.MAX_SAFE_INTEGER,
+			isSearchable: true,
+			fnGetSearchText: getSourceAsText,
+		});
+		if (choices == null || choices.length === 0) return;
+		// endregion
+
+		// region Filter output by selected sources
+		const cpyBrew = MiscUtil.copyFast(brew.body);
+		const sourceAllowlist = new Set(choices.map(it => it.json));
+
+		cpyBrew._meta.sources = cpyBrew._meta.sources.filter(it => sourceAllowlist.has(it.json));
+
+		Object.entries(cpyBrew)
+			.forEach(([k, v]) => {
+				if (!v || !(v instanceof Array)) return;
+				if (k.startsWith("_")) return;
+				cpyBrew[k] = v.filter(it => {
+					const source = SourceUtil.getEntitySource(it);
+					if (!source) return true;
+					return sourceAllowlist.has(source);
+				});
+			});
+		// endregion
+
+		const reducedFilename = filename || this.constructor._getBrewName({body: cpyBrew});
+
+		this.constructor._mutExportableEditableData({json: cpyBrew});
+
+		return DataUtil.userDownload(reducedFilename, cpyBrew, {isSkipAdditionalMetadata: true});
+	}
+
+	/**
+	 * The editable brew may contain `uniqueId` references from the builder, which should be stripped before export.
+	 */
+	static _mutExportableEditableData ({json}) {
+		Object.values(json)
+			.forEach(arr => {
+				if (arr == null || !(arr instanceof Array)) return;
+				arr.forEach(ent => delete ent.uniqueId);
+			});
+		return json;
+	}
+
+	static _getBrewJsonTitle ({brew, brewName}) {
+		brewName = brewName || this._getBrewName(brew);
+		return brew.head.filename || brewName;
+	}
+
+	async _pRender_pDoViewBrewContents ({evt, brew}) {
+		evt.stopPropagation();
+		await ManageEditableBrewContentsUi.pDoOpen({brewUtil: this._brewUtil, brew, isModal: true, isReadOnly: true});
+	}
+
+	_pRender_doViewBrew ({evt, brew, brewName}) {
+		const title = this.constructor._getBrewJsonTitle({brew, brewName});
+		Renderer.hover.getShowWindow(
+			Renderer.hover.getHoverContent_statsCode(brew.body, {isSkipClean: true, title}),
+			Renderer.hover.getWindowPositionFromEvent(evt),
+			{
+				title,
+				isPermanent: true,
+				isBookContent: true,
+			},
+		);
+	}
+
+	async _pRender_pDoOpenBrewMenu ({evt, rdState, brew, brewName, rowMeta}) {
+		rowMeta.menu = rowMeta.menu || this._pRender_getBrewMenu({rdState, brew, brewName});
+
+		await ContextUtil.pOpenMenu(evt, rowMeta.menu);
+	}
+
+	_pRender_getBrewMenu ({rdState, brew, brewName}) {
+		const menuItems = [];
+
+		if (this._isBrewOperationPermitted_update(brew)) {
+			menuItems.push(
+				new ContextUtil.Action(
+					this._LBL_LIST_UPDATE,
+					async () => this._pRender_pDoPullBrew({rdState, brew}),
+				),
+			);
+		} else if (brew.head.isEditable) {
+			menuItems.push(
+				new ContextUtil.Action(
+					this._LBL_LIST_MANAGE_CONTENTS,
+					async () => this._pRender_pDoEditBrew({rdState, brew}),
+				),
+			);
+		}
+
+		menuItems.push(
+			new ContextUtil.Action(
+				this._LBL_LIST_EXPORT,
+				async () => this._pRender_pDoDownloadBrew({brew, brewName}),
+			),
+			new ContextUtil.Action(
+				this._LBL_LIST_VIEW_JSON,
+				async evt => this._pRender_doViewBrew({evt, brew, brewName}),
+			),
+		);
+
+		if (this._brewUtil.IS_EDITABLE && this._isBrewOperationPermitted_moveToEditable(brew)) {
+			menuItems.push(
+				new ContextUtil.Action(
+					this._LBL_LIST_MOVE_TO_EDITABLE,
+					async () => this._pRender_pDoMoveToEditable({rdState, brews: [brew]}),
+				),
+			);
+		}
+
+		if (this._isBrewOperationPermitted_delete(brew)) {
+			menuItems.push(
+				new ContextUtil.Action(
+					this._LBL_LIST_DELETE,
+					async () => this._pRender_pDoDelete({rdState, brews: [brew]}),
+				),
+			);
+		}
+
+		return ContextUtil.getMenu(menuItems);
+	}
+
+	_pGetUserBoolean_isMoveBrewsToEditable ({brews}) {
+		return InputUiUtil.pGetUserBoolean({
+			title: `Move to Editable ${this._brewUtil.DISPLAY_NAME.toTitleCase()} Document`,
+			htmlDescription: `Moving ${brews.length === 1 ? `this ${this._brewUtil.DISPLAY_NAME}` : `these
+			${this._brewUtil.DISPLAY_NAME_PLURAL}`} to the editable document will prevent ${brews.length === 1 ? "it" : "them"} from being automatically updated in future.<br>Are you sure you want to move ${brews.length === 1 ? "it" : "them"}?`,
+			textYes: "Yes",
+			textNo: "Cancel",
+		});
+	}
+
+	async _pRender_pDoMoveToEditable ({rdState, brews}) {
+		if (!brews?.length) return;
+
+		if (!await this._pGetUserBoolean_isMoveBrewsToEditable({brews})) return;
+
+		await this._brewUtil.pMoveToEditable({brews});
+
+		await this._pRender_pBrewList(rdState);
+
+		JqueryUtil.doToast(`${`${brews.length === 1 ? this._brewUtil.DISPLAY_NAME : this._brewUtil.DISPLAY_NAME_PLURAL}`.uppercaseFirst()} moved to editable document!`);
+	}
+
+	_pGetUserBoolean_isDeleteBrews ({brews}) {
+		if (!brews.some(brew => brew.head.isEditable)) return true;
+
+		const htmlDescription = brews.length === 1
+			? `This document contains all your locally-created or edited ${this._brewUtil.DISPLAY_NAME_PLURAL}.<br>Are you sure you want to delete it?`
+			: `One of the documents you are about to delete contains all your locally-created or edited ${this._brewUtil.DISPLAY_NAME_PLURAL}.<br>Are you sure you want to delete these documents?`;
+
+		return InputUiUtil.pGetUserBoolean({
+			title: `Delete ${this._brewUtil.DISPLAY_NAME}`,
+			htmlDescription,
+			textYes: "Yes",
+			textNo: "Cancel",
+		});
+	}
+
+	async _pRender_pDoDelete ({rdState, brews}) {
+		if (!brews?.length) return;
+
+		if (!await this._pGetUserBoolean_isDeleteBrews({brews})) return;
+
+		await this._brewUtil.pDeleteBrews(brews);
+
+		await this._pRender_pBrewList(rdState);
+	}
+
+	_pRender_getProcBrew (brew) {
+		brew = MiscUtil.copyFast(brew);
+		brew.body._meta.sources.sort((a, b) => SortUtil.ascSortLower(a.full || "", b.full || ""));
+		return brew;
+	}
+}
