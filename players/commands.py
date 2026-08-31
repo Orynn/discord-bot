@@ -4,6 +4,7 @@ from discord.ext.commands.context import Context
 
 from bot.checks import admin_only, guild_only
 from bot.command_helpers import command_reply, delete_command
+from bot.help_text import command_help
 from config import PREFIX
 from players.discover import sync_guild_player_sections
 from players.setup import PlayerSetupError, create_player_section, remove_player_section
@@ -16,7 +17,10 @@ def setup_player(bot: Bot) -> None:
         name="player",
         invoke_without_command=True,
         fallback="menu",
-        help="Set up private player channels.",
+        help=command_help(
+            "Salons privés des joueurs.",
+            f"`{PREFIX}player setup @membre [nom]`",
+        ),
     )
     @guild_only
     @admin_only
@@ -37,7 +41,10 @@ def setup_player(bot: Bot) -> None:
     @player_group.command(
         name="setup",
         aliases=["add", "create"],
-        help=f"Create a player section. Usage: `{PREFIX}player setup @member [name]`",
+        help=command_help(
+            "Crée la section d’un joueur (catégorie, fiche, bienvenue).",
+            f"`{PREFIX}player setup @membre [nom]`",
+        ),
     )
     @guild_only
     @admin_only
@@ -119,7 +126,10 @@ def setup_player(bot: Bot) -> None:
 
     @player_group.command(
         name="list",
-        help=f"List registered player sections. Usage: `{PREFIX}player list`",
+        help=command_help(
+            "Liste les sections joueurs enregistrées.",
+            f"`{PREFIX}player list`",
+        ),
     )
     @guild_only
     @admin_only
@@ -151,7 +161,10 @@ def setup_player(bot: Bot) -> None:
 
     @player_group.command(
         name="sync",
-        help=f"Remap player sections from Discord. Usage: `{PREFIX}player sync`",
+        help=command_help(
+            "Recalcule les sections joueurs depuis Discord.",
+            f"`{PREFIX}player sync`",
+        ),
     )
     @guild_only
     @admin_only
@@ -169,7 +182,10 @@ def setup_player(bot: Bot) -> None:
     @player_group.command(
         name="remove",
         aliases=["delete"],
-        help=f"Remove a player's section. Usage: `{PREFIX}player remove @member`",
+        help=command_help(
+            "Supprime la section d’un joueur.",
+            f"`{PREFIX}player remove @membre`",
+        ),
     )
     @guild_only
     @admin_only

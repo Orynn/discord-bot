@@ -23,6 +23,7 @@ LOADER_LIST_KEYS = (
     "baseitem",
     "item",
     "monster",
+    "monsterFluff",
 )
 
 GLOB_SOURCES = (
@@ -39,6 +40,7 @@ FILE_SOURCES = (
     ("items-base.json", ("baseitem", "itemProperty")),
     ("items.json", ("item",)),
     ("bestiary/bestiary-xmm.json", ("monster",)),
+    ("bestiary/fluff-bestiary-xmm.json", ("monsterFluff",)),
 )
 
 

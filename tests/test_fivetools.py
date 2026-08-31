@@ -189,6 +189,12 @@ class TestMonstersAndCache(unittest.IsolatedAsyncioTestCase):
         self.assertIn("🍃", goblin_embed.title)
         self.assertIn("🟢 CR", goblin_embed.description or "")
         self.assertIn("⚔️ Actions", [field.name for field in goblin_embed.fields])
+        self.assertTrue(goblin["image_url"].endswith("Goblins.webp"))
+        self.assertIn("Goblin%20Warrior.webp", goblin["token_url"])
+        self.assertEqual(goblin_embed.image.url, goblin["image_url"])
+        self.assertEqual(goblin_embed.thumbnail.url, goblin["token_url"])
+        self.assertTrue(aboleth["image_url"].endswith("Aboleth.webp"))
+        self.assertEqual(aboleth_embed.image.url, aboleth["image_url"])
 
     async def test_monster_embed_fields_fit_discord_after_linkify(self) -> None:
         from bot.messaging import prepare_outgoing

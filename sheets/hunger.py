@@ -271,6 +271,17 @@ def _seed_meal_from_clock(sheet: CharacterSheet, clock: CampaignTime) -> None:
     stamp_meal(sheet, clock.advance(-back * MINUTES_PER_DAY), kind)
 
 
+def hunger_fingerprint(sheet: CharacterSheet) -> tuple:
+    return (
+        float(sheet.hunger_days),
+        sheet.fed_today,
+        sheet.hunger_meal_year,
+        sheet.hunger_meal_day,
+        sheet.hunger_meal_kind,
+        tuple(sheet.conditions),
+    )
+
+
 def sync_hunger_to_clock(sheet: CharacterSheet, clock: CampaignTime) -> list[str]:
     _seed_meal_from_clock(sheet, clock)
     before = float(sheet.hunger_days)
@@ -278,6 +289,15 @@ def sync_hunger_to_clock(sheet: CharacterSheet, clock: CampaignTime) -> list[str
     sheet.fed_today = _fed_today_from_clock(sheet, clock)
     sheet.hunger_days = after
     return _apply_starvation_crossings(sheet, before, after)
+
+
+def apply_clock_hunger(
+    sheet: CharacterSheet, clock: CampaignTime
+) -> tuple[list[str], bool]:
+    before = hunger_fingerprint(sheet)
+    notices = sync_hunger_to_clock(sheet, clock)
+    dirty = bool(notices) or hunger_fingerprint(sheet) != before
+    return notices, dirty
 
 
 def tick_hunger_for_clock(

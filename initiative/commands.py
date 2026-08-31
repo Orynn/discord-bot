@@ -6,6 +6,7 @@ from discord.ext.commands.context import Context
 
 from bot.checks import admin_only, guild_only, is_staff
 from bot.command_helpers import command_reply, delete_command
+from bot.help_text import command_help
 from bot.messaging import send_message
 from bot.privacy import reject_other_player
 from combat.scope import PLAYER_INIT_ONLY, scope_id_for_channel
@@ -18,8 +19,16 @@ from initiative.storage import (
     get_initiative,
     save_initiative,
 )
+from players.discover import is_sandbox_owner_id
 from sheets.context import infer_player_id, parse_mention_and_text
 from sheets.data import ability_modifier
+from sheets.dice import (
+    CRIT_FAIL_LABEL,
+    CRIT_SUCCESS_LABEL,
+    ROLL_NAT1_COLOR,
+    ROLL_NAT20_COLOR,
+)
+from sheets.sandbox import ensure_sandbox_sheet
 from sheets.storage import get_sheet
 
 
@@ -38,7 +47,10 @@ def setup_initiative(bot: Bot) -> None:
         name="init",
         invoke_without_command=True,
         fallback="menu",
-        help="Initiative tracker: add, next, show, clear.",
+        help=command_help(
+            "Ordre de tour : add, next, show, clear.",
+            f"`{PREFIX}init`",
+        ),
     )
     @guild_only
     async def init_group(ctx: Context) -> None:
@@ -63,7 +75,11 @@ def setup_initiative(bot: Bot) -> None:
 
     @init_group.command(
         name="add",
-        help=f"Add to initiative. `{PREFIX}init add @player` or `{PREFIX}init add Name 2`",
+        help=command_help(
+            "Ajoute quelqu’un à l’initiative.",
+            f"`{PREFIX}init add @joueur`",
+            f"`{PREFIX}init add Nom 2` — PNJ avec un bonus fixe",
+        ),
     )
     @guild_only
     async def init_add(
@@ -81,16 +97,26 @@ def setup_initiative(bot: Bot) -> None:
             _, args = parse_mention_and_text(ctx, args)
         if is_staff(ctx) and member is not None and member.id == ctx.author.id:
             member = None
-        if member is None and not args.strip() and is_staff(ctx):
+        sandbox_owner: int | None = None
+        if member is None and not args.strip():
             inferred = infer_player_id(ctx)
-            if inferred is not None and ctx.guild is not None:
+            if inferred is not None and is_sandbox_owner_id(inferred):
+                sandbox_owner = inferred
+            elif inferred is not None and is_staff(ctx) and ctx.guild is not None:
                 found = ctx.guild.get_member(inferred)
                 if isinstance(found, discord.Member):
                     member = found
         if not await reject_other_player(ctx, member, delete=True):
             return
         modifier = 0
-        if member is not None:
+        if sandbox_owner is not None:
+            sheet = ensure_sandbox_sheet(
+                guild_id=ctx.guild.id, user_id=sandbox_owner
+            )
+            entry_name = sheet.name
+            modifier = ability_modifier(sheet.abilities["dex"])
+            user_id = sandbox_owner
+        elif member is not None:
             sheet = get_sheet(user_id=member.id, guild_id=ctx.guild.id)
             entry_name = sheet.name if sheet else member.display_name
             if sheet:
@@ -114,17 +140,32 @@ def setup_initiative(bot: Bot) -> None:
         add_initiative_entry(state, name=entry_name, total=total, user_id=user_id)
         save_initiative(guild_id=ctx.guild.id, scope_id=scope_id, state=state)
         mod_label = f"+{modifier}" if modifier >= 0 else str(modifier)
+        if roll == 20:
+            notice = (
+                f"{CRIT_SUCCESS_LABEL} — **{entry_name}** rolled **{total}** "
+                f"(d20: **20** {mod_label})."
+            )
+            color = ROLL_NAT20_COLOR
+        elif roll == 1:
+            notice = (
+                f"{CRIT_FAIL_LABEL} — **{entry_name}** rolled **{total}** "
+                f"(d20: **1** {mod_label})."
+            )
+            color = ROLL_NAT1_COLOR
+        else:
+            notice = f"**{entry_name}** rolled **{total}** (d20: {roll} {mod_label})."
+            color = None
         await send_message(
             ctx,
-            embed=build_initiative_embed(
-                state,
-                notice=f"**{entry_name}** rolled **{total}** (d20: {roll} {mod_label}).",
-            ),
+            embed=build_initiative_embed(state, notice=notice, color=color),
             definition_menu=False,
         )
         await delete_command(ctx)
 
-    @init_group.command(name="next", help=f"Next turn. `{PREFIX}init next`")
+    @init_group.command(
+        name="next",
+        help=command_help("Passe au tour suivant.", f"`{PREFIX}init next`"),
+    )
     @guild_only
     async def init_next(ctx: Context) -> None:
         scope_id = await _require_player_scope(ctx)
@@ -142,7 +183,10 @@ def setup_initiative(bot: Bot) -> None:
         )
         await delete_command(ctx)
 
-    @init_group.command(name="show", help=f"Show initiative. `{PREFIX}init show`")
+    @init_group.command(
+        name="show",
+        help=command_help("Affiche l’ordre d’initiative.", f"`{PREFIX}init show`"),
+    )
     @guild_only
     async def init_show(ctx: Context) -> None:
         scope_id = await _require_player_scope(ctx)
@@ -157,7 +201,10 @@ def setup_initiative(bot: Bot) -> None:
         )
         await delete_command(ctx)
 
-    @init_group.command(name="clear", help=f"Clear initiative. `{PREFIX}init clear`")
+    @init_group.command(
+        name="clear",
+        help=command_help("Efface l’initiative de cette section.", f"`{PREFIX}init clear`"),
+    )
     @guild_only
     @admin_only
     async def init_clear(ctx: Context) -> None:
@@ -169,7 +216,11 @@ def setup_initiative(bot: Bot) -> None:
         await delete_command(ctx)
 
     @init_group.command(
-        name="remove", help=f"Remove combatant. `{PREFIX}init remove <name>`"
+        name="remove",
+        help=command_help(
+            "Retire un combattant de l’initiative.",
+            f"`{PREFIX}init remove <nom>`",
+        ),
     )
     @guild_only
     @admin_only

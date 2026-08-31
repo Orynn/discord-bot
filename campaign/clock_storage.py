@@ -12,7 +12,7 @@ def _legacy_key(guild_id: int) -> str:
 
 def get_clock(guild_id: int, user_id: int) -> CampaignTime:
     data = get_json(_player_key(guild_id, user_id))
-    if data is None:
+    if data is None and user_id >= 0:
         data = get_json(_legacy_key(guild_id))
     return CampaignTime.from_dict(data)
 

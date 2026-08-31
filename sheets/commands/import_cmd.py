@@ -3,6 +3,7 @@ from discord.ext.commands import Group
 from discord.ext.commands.context import Context
 
 from bot.command_helpers import command_reply, delete_command
+from bot.help_text import command_help
 from config import PREFIX
 from sheets.context import (
     resolve_guild_id,
@@ -18,9 +19,10 @@ from srd import fivetools
 def register_import_commands(sheet_group: Group) -> None:
     @sheet_group.command(
         name="import",
-        help=(
-            f"Import a D&D Beyond character PDF. "
-            f"Usage: attach a `.pdf` file to `{PREFIX}sheet import [@player]`"
+        help=command_help(
+            "Importe une fiche D&D Beyond (PDF).",
+            f"`{PREFIX}sheet import [@joueur]`",
+            "Joins un fichier `.pdf` au message.",
         ),
     )
     async def sheet_import(
@@ -34,7 +36,7 @@ def register_import_commands(sheet_group: Group) -> None:
 
         guild_id = resolve_guild_id(ctx)
         if guild_id is None:
-            await command_reply(ctx, "This command can only be used in a server.")
+            await command_reply(ctx, "Cette commande marche seulement sur le serveur.")
             return
 
         if get_sheet(user_id=owner_id, guild_id=guild_id) is not None:

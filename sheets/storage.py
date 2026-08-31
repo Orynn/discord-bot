@@ -4,6 +4,7 @@ from collections.abc import Callable
 from data.db import db_connection
 from sheets.currency import Currency
 from sheets.data import CharacterSheet
+from sheets.portrait import clear_portrait_file
 from srd.spell_slugs import migrate_spell_slugs
 
 
@@ -99,7 +100,10 @@ def delete_sheet(*, user_id: int, guild_id: int) -> bool:
             "DELETE FROM sheets WHERE user_id = ? AND guild_id = ?",
             (str(user_id), str(guild_id)),
         )
-        return cursor.rowcount > 0
+        removed = cursor.rowcount > 0
+    if removed:
+        clear_portrait_file(guild_id=guild_id, user_id=user_id)
+    return removed
 
 
 def get_character_name(*, user_id: int, guild_id: int) -> str | None:

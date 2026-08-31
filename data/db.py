@@ -90,6 +90,18 @@ def init_db() -> None:
                 state_json TEXT NOT NULL,
                 PRIMARY KEY (guild_id, scope_id)
             );
+            CREATE TABLE IF NOT EXISTS combat_maps (
+                guild_id TEXT NOT NULL,
+                map_id TEXT NOT NULL,
+                label TEXT NOT NULL,
+                theme TEXT NOT NULL,
+                blocked_json TEXT NOT NULL,
+                pc_column INTEGER NOT NULL DEFAULT 1,
+                npc_column INTEGER NOT NULL DEFAULT 6,
+                width INTEGER NOT NULL DEFAULT 8,
+                height INTEGER NOT NULL DEFAULT 8,
+                PRIMARY KEY (guild_id, map_id)
+            );
             CREATE TABLE IF NOT EXISTS stashed_gear (
                 guild_id TEXT NOT NULL,
                 place_key TEXT NOT NULL,
@@ -100,12 +112,28 @@ def init_db() -> None:
             """
         )
     _migrate_guild_scoped_tables()
+    _migrate_combat_maps_size()
     _migrate_json_files()
 
 
 def _table_columns(connection: sqlite3.Connection, table: str) -> set[str]:
     rows = connection.execute(f"PRAGMA table_info({table})").fetchall()
     return {str(row[1]) for row in rows}
+
+
+def _migrate_combat_maps_size() -> None:
+    with db_connection() as connection:
+        columns = _table_columns(connection, "combat_maps")
+        if not columns:
+            return
+        if "width" not in columns:
+            connection.execute(
+                "ALTER TABLE combat_maps ADD COLUMN width INTEGER NOT NULL DEFAULT 8"
+            )
+        if "height" not in columns:
+            connection.execute(
+                "ALTER TABLE combat_maps ADD COLUMN height INTEGER NOT NULL DEFAULT 8"
+            )
 
 
 def _legacy_guild_id() -> str:

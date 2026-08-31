@@ -17,6 +17,21 @@ _DAMAGE_TYPE = re.compile(
 _HIT_TAG = re.compile(r"\{@hit\s+([^}|]+)", re.IGNORECASE)
 _HP_LEADING = re.compile(r"(\d+)")
 _AC_NUMBER = re.compile(r"(\d+)")
+_MULTI_COUNT = re.compile(
+    r"\b(two|three|four|2|3|4|deux|trois|quatre)\b",
+    re.IGNORECASE,
+)
+_MULTI_WORDS = {
+    "two": 2,
+    "trois": 3,
+    "three": 3,
+    "four": 4,
+    "deux": 2,
+    "quatre": 4,
+    "2": 2,
+    "3": 3,
+    "4": 4,
+}
 
 DEFAULT_MONSTER_AC = 10
 DEFAULT_MONSTER_ATTACK_BONUS = 4
@@ -34,6 +49,7 @@ class MonsterProfile:
     flat_modifier: int
     damage_type_label: str | None
     traits: tuple[str, ...]
+    attacks: int = 1
 
 
 def _block_text(block: dict[str, Any]) -> str:
@@ -141,6 +157,19 @@ def _parse_attack(
     return "Claw", 1, 6, 0, None, DEFAULT_MONSTER_ATTACK_BONUS
 
 
+def _parse_attacks(monster: dict[str, Any]) -> int:
+    for block in _named_blocks(monster, "action"):
+        name = str(block.get("name") or "").lower()
+        if "multiattack" not in name and "attaques multiples" not in name:
+            continue
+        text = f"{name} {_block_text(block)}"
+        match = _MULTI_COUNT.search(text)
+        if match is None:
+            return 2
+        return _MULTI_WORDS.get(match.group(1).lower(), 2)
+    return 1
+
+
 def profile_from_monster(monster: dict[str, Any]) -> MonsterProfile:
     attack_name, count, sides, flat, type_label, attack_bonus = _parse_attack(monster)
     hp = _parse_hp(monster) or 20
@@ -155,6 +184,7 @@ def profile_from_monster(monster: dict[str, Any]) -> MonsterProfile:
         flat_modifier=flat,
         damage_type_label=type_label,
         traits=_trait_names(monster),
+        attacks=_parse_attacks(monster),
     )
 
 

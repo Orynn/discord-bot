@@ -5,7 +5,7 @@ from discord.ext.commands.context import Context
 
 from bot.checks import guild_only, is_staff, is_staff_user_id
 from bot.command_helpers import command_reply, delete_command
-from bot.help_text import HELP_COLOR
+from bot.help_text import HELP_COLOR, command_help
 from bot.messaging import send_message
 from bot.privacy import DENIED_OTHER_PLAYER
 from campaign.clock import MINUTES_PER_DAY
@@ -16,10 +16,11 @@ from sheets.context import (
     get_sheet_for_owner,
     parse_mention_and_text,
     save_owner_sheet,
-    target_label,
+    target_plain,
 )
 from sheets.data import CharacterSheet
 from sheets.hunger import (
+    apply_clock_hunger,
     consume_ration,
     eat_full,
     eat_half,
@@ -112,13 +113,16 @@ async def _show_hunger(ctx: Context, member: discord.Member | None) -> None:
         return
     _owner_id, sheet = result
     clock = get_clock(ctx.guild.id, _owner_id) if ctx.guild is not None else None
+    notices: list[str] = []
     if clock is not None:
-        sync_hunger_to_clock(sheet, clock)
-        save_owner_sheet(ctx, _owner_id, sheet)
-    label = target_label(member, sheet)
+        notices, dirty = apply_clock_hunger(sheet, clock)
+        if dirty:
+            save_owner_sheet(ctx, _owner_id, sheet)
+    label = target_plain(member, sheet)
+    notice = "\n".join(notices) if notices else None
     await send_message(
         ctx,
-        embed=_hunger_embed(sheet, who=label, clock=clock),
+        embed=_hunger_embed(sheet, who=label, notice=notice, clock=clock),
         definition_menu=False,
     )
     await delete_command(ctx)
@@ -131,15 +135,21 @@ async def _show_all(ctx: Context) -> None:
         await delete_command(ctx)
         return
     lines: list[str] = []
+    extra: list[str] = []
     for user_id in _party_user_ids(ctx.guild.id, fallback_id=ctx.author.id):
         sheet = get_sheet(user_id=user_id, guild_id=ctx.guild.id)
         if sheet is None:
             continue
         clock = get_clock(ctx.guild.id, user_id)
-        sync_hunger_to_clock(sheet, clock)
-        save_owner_sheet(ctx, user_id, sheet)
+        notices, dirty = apply_clock_hunger(sheet, clock)
+        if dirty:
+            save_owner_sheet(ctx, user_id, sheet)
         lines.append(_sheet_line(ctx.guild.id, user_id, sheet))
-    await send_message(ctx, embed=_party_embed(lines), definition_menu=False)
+        extra.extend(f"**{sheet.name}**: {notice}" for notice in notices)
+    notice = "\n".join(extra) if extra else None
+    await send_message(
+        ctx, embed=_party_embed(lines, notice=notice), definition_menu=False
+    )
     await delete_command(ctx)
 
 
@@ -181,7 +191,7 @@ async def _eat(
     await send_message(
         ctx,
         embed=_hunger_embed(
-            sheet, who=target_label(member, sheet), notice=notice, clock=clock
+            sheet, who=target_plain(member, sheet), notice=notice, clock=clock
         ),
         definition_menu=False,
     )
@@ -220,7 +230,7 @@ async def _skip(ctx: Context, member: discord.Member | None) -> None:
         ctx,
         embed=_hunger_embed(
             sheet,
-            who=target_label(member, sheet),
+            who=target_plain(member, sheet),
             notice=notice,
             clock=nxt,
         ),
@@ -254,7 +264,7 @@ async def _set(ctx: Context, member: discord.Member | None, amount: str) -> None
         ctx,
         embed=_hunger_embed(
             sheet,
-            who=target_label(member, sheet),
+            who=target_plain(member, sheet),
             notice=f"Set to {days:g} day(s) without food.",
             clock=clock,
         ),
@@ -298,7 +308,11 @@ def setup_hunger(bot: Bot) -> None:
         aliases=["faim", "food"],
         invoke_without_command=True,
         fallback="now",
-        help="Hunger follows that player's ;time clock (PHB starvation).",
+        help=command_help(
+            "La faim suit l’horloge `;time` de ce joueur (inanition PHB).",
+            f"`{PREFIX}hunger`",
+            f"Guide : `{PREFIX}help hunger`",
+        ),
     )
     @guild_only
     async def hunger_group(ctx: Context, *, spec: str = "") -> None:
@@ -339,7 +353,10 @@ def setup_hunger(bot: Bot) -> None:
     @hunger_group.command(
         name="eat",
         aliases=["manger", "feed"],
-        help="Eat a ration; stamps a full meal on this player's clock.",
+        help=command_help(
+            "Mange une ration : repas complet sur l’horloge de ce joueur.",
+            f"`{PREFIX}hunger eat [@joueur]`",
+        ),
     )
     @guild_only
     async def hunger_eat(ctx: Context, member: discord.Member | None = None) -> None:
@@ -348,7 +365,10 @@ def setup_hunger(bot: Bot) -> None:
     @hunger_group.command(
         name="half",
         aliases=["demi"],
-        help="Stamp half rations on this player's clock (0.5 missed day).",
+        help=command_help(
+            "Demi-rations (0,5 jour manqué).",
+            f"`{PREFIX}hunger half [@joueur]`",
+        ),
     )
     @guild_only
     async def hunger_half(ctx: Context, member: discord.Member | None = None) -> None:
@@ -357,14 +377,22 @@ def setup_hunger(bot: Bot) -> None:
     @hunger_group.command(
         name="skip",
         aliases=["starve", "jeune"],
-        help="Advance that player's clock by 1 day with no meal. (DM)",
+        help=command_help(
+            "Avance l’horloge d’un jour sans repas (MJ).",
+            f"`{PREFIX}hunger skip [@joueur]`",
+        ),
     )
     @guild_only
     async def hunger_skip(ctx: Context, member: discord.Member | None = None) -> None:
         await _skip(ctx, member)
 
     @hunger_group.command(
-        name="set", help="Set days without food. Example: `2` or `0`."
+        name="set",
+        help=command_help(
+            "Fixe les jours sans manger (MJ).",
+            f"`{PREFIX}hunger set [@joueur] <jours>`",
+            "Exemples : `2` · `0` · `2.5`",
+        ),
     )
     @app_commands.describe(days="Days without food, e.g. 0, 2, 2.5")
     @guild_only
@@ -376,13 +404,24 @@ def setup_hunger(bot: Bot) -> None:
         await _set(ctx, member, days)
 
     @hunger_group.command(
-        name="all", aliases=["party"], help="Show every player's hunger."
+        name="all",
+        aliases=["party"],
+        help=command_help(
+            "Affiche la faim de tout le groupe.",
+            f"`{PREFIX}hunger all`",
+        ),
     )
     @guild_only
     async def hunger_all(ctx: Context) -> None:
         await _show_all(ctx)
 
-    @hunger_group.command(name="eatall", help="Feed every character a full meal.")
+    @hunger_group.command(
+        name="eatall",
+        help=command_help(
+            "Fait manger une ration à chaque personnage.",
+            f"`{PREFIX}hunger eatall`",
+        ),
+    )
     @guild_only
     async def hunger_eat_all(ctx: Context) -> None:
         await _eat_all(ctx, half=False)

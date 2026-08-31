@@ -1,6 +1,11 @@
 import unittest
 
-from combat.cards import card_makes_attack_roll, parse_damage_roll
+from combat.cards import (
+    DEFAULT_SPELL_RANGE_SQUARES,
+    card_makes_attack_roll,
+    parse_damage_roll,
+    parse_range_squares,
+)
 from combat.deck import _spell_card
 from sheets.data import CharacterSheet
 
@@ -119,3 +124,23 @@ class TestSpellCard(unittest.TestCase):
         self.assertEqual(card.inflict_condition, "paralyzed")
         self.assertEqual(card.dice_count, 0)
         self.assertFalse(card_makes_attack_roll(card))
+        self.assertEqual(card.range_squares, DEFAULT_SPELL_RANGE_SQUARES)
+
+
+class TestParseRangeSquares(unittest.TestCase):
+    def test_melee_and_touch(self) -> None:
+        self.assertEqual(parse_range_squares("Melee"), 1)
+        self.assertEqual(parse_range_squares("Touch"), 1)
+
+    def test_self_is_zero(self) -> None:
+        self.assertEqual(parse_range_squares("Self"), 0)
+        self.assertEqual(parse_range_squares("Self (30-foot radius)"), 0)
+
+    def test_feet_and_weapon_range(self) -> None:
+        self.assertEqual(parse_range_squares("120 feet"), 24)
+        self.assertEqual(parse_range_squares("80/320 ft."), 16)
+        self.assertEqual(parse_range_squares("30 ft."), 6)
+
+    def test_unknown_is_unlimited(self) -> None:
+        self.assertIsNone(parse_range_squares(None))
+        self.assertIsNone(parse_range_squares("Sight"))

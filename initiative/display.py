@@ -21,6 +21,7 @@ def build_initiative_embed(
     state: InitiativeState,
     *,
     notice: str | None = None,
+    color: int | None = None,
 ) -> discord.Embed:
     active = None
     if state.order and 0 <= state.active_index < len(state.order):
@@ -28,7 +29,9 @@ def build_initiative_embed(
     title = "⚡ Initiative"
     if active is not None:
         title = f"⚡ Initiative — {active.name}'s turn"
-    embed = discord.Embed(title=title, description=notice, color=HELP_INIT_COLOR)
+    embed = discord.Embed(
+        title=title, description=notice, color=color or HELP_INIT_COLOR
+    )
     embed.add_field(
         name="Turn order", value=format_initiative(state) or "—", inline=False
     )

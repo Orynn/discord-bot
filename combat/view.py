@@ -10,14 +10,44 @@ from combat.cards import (
     is_spellbook_card,
     lookup_card,
 )
-from combat.display import build_combat_embed, build_hand_embed
-from combat.engine import can_control_combatant, end_turn, play_card, valid_targets
+from combat.display import (
+    BOARD_TITLE,
+    board_attachments,
+    build_combat_embed,
+    build_hand_embed,
+)
+from combat.editor_server import combat_board_url
+from combat.engine import (
+    can_control_combatant,
+    conclude_if_over,
+    attack_targets_in_weapon_range,
+    finish_turn,
+    map_attack,
+    move_combatant,
+    play_card,
+    valid_targets,
+)
+from combat.map import DIRECTION_DELTA, ensure_positions
+from combat.monster_sheet import (
+    load_monster_sheet,
+    npc_sheet_names,
+    preferred_sheet_name,
+)
 from combat.scope import PLAYER_COMBAT_ONLY, scope_id_for_channel
 from combat.storage import CombatState, get_combat, lock_for
+from combat.text import play_in_browser
 
 COMBAT_SELECT_ID = "arkann:combat:card"
 COMBAT_END_TURN_ID = "arkann:combat:end"
 COMBAT_HAND_ID = "arkann:combat:hand"
+COMBAT_SHEET_ID = "arkann:combat:sheet"
+COMBAT_MAP_ATTACK_ID = "arkann:combat:atk"
+COMBAT_MOVE_IDS = {
+    "w": "arkann:combat:w",
+    "n": "arkann:combat:n",
+    "s": "arkann:combat:s",
+    "e": "arkann:combat:e",
+}
 
 
 def build_hand_select_options(
@@ -80,8 +110,8 @@ def _scope_id(interaction: discord.Interaction) -> int | None:
 
 def _turn_denied_message(active_name: str, *, npc: bool) -> str:
     if npc:
-        return f"Only the DM or this player can play for **{active_name}**."
-    return f"It is **{active_name}**'s turn."
+        return f"Seul le MJ ou ce joueur peut jouer **{active_name}**."
+    return f"C’est le tour de **{active_name}**."
 
 
 def _can_play(
@@ -92,6 +122,48 @@ def _can_play(
         user_id=interaction.user.id,
         is_admin=is_staff_member(interaction.guild, interaction.user),
         scope_id=scope_id,
+    )
+
+
+async def _reply_play_in_browser(interaction: discord.Interaction) -> None:
+    guild_id = _guild_id(interaction)
+    scope_id = _scope_id(interaction)
+    url = (
+        combat_board_url(guild_id, scope_id)
+        if guild_id is not None and scope_id is not None
+        else None
+    )
+    await send_interaction_message(
+        interaction,
+        content=play_in_browser(url),
+        ephemeral=True,
+        definition_menu=False,
+    )
+
+
+async def _edit_board(
+    interaction: discord.Interaction,
+    state: CombatState,
+    *,
+    content: str | None = None,
+    combat_over: bool = False,
+) -> None:
+    ended = combat_over
+    if not ended:
+        victory = conclude_if_over(state)
+        if victory is not None:
+            ended = True
+            content = (
+                f"{content}\n{victory.message}" if content else victory.message
+            )
+    await send_interaction_message(
+        interaction,
+        content=content,
+        embed=build_combat_embed(state, ended=ended),
+        view=None if ended else build_combat_view(state),
+        attachments=board_attachments(state),
+        edit=True,
+        definition_menu=False,
     )
 
 
@@ -112,12 +184,12 @@ class CombatCardSelect(discord.ui.Select):
                 )
                 for card_id, label, description in hand[:25]
             ]
-            placeholder = "Play a card or spell…"
+            placeholder = "Jouer une carte ou un sort…"
             if page_count > 1:
-                placeholder = f"Play a card or spell… ({page + 1}/{page_count})"
+                placeholder = f"Jouer une carte ou un sort… ({page + 1}/{page_count})"
         else:
             options = [discord.SelectOption(label="—", value="noop")]
-            placeholder = "No combat active"
+            placeholder = "Aucun combat"
 
         super().__init__(
             placeholder=placeholder,
@@ -129,6 +201,8 @@ class CombatCardSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await _reply_play_in_browser(interaction)
+        return
         card_id = self.values[0]
         if card_id == "noop":
             await interaction.response.defer()
@@ -139,7 +213,7 @@ class CombatCardSelect(discord.ui.Select):
         if guild_id is None:
             await send_interaction_message(
                 interaction,
-                content="Combat is only available in a server.",
+                content="Le combat n’est disponible que sur un serveur.",
                 ephemeral=True,
             )
             return
@@ -153,14 +227,14 @@ class CombatCardSelect(discord.ui.Select):
             state = get_combat(guild_id=guild_id, scope_id=scope_id)
             if state is None:
                 await send_interaction_message(
-                    interaction, content="This combat has ended.", ephemeral=True
+                    interaction, content="Ce combat est terminé.", ephemeral=True
                 )
                 return
 
             active = state.active_combatant()
             if active is None:
                 await send_interaction_message(
-                    interaction, content="No active combatant.", ephemeral=True
+                    interaction, content="Aucun combattant actif.", ephemeral=True
                 )
                 return
 
@@ -177,14 +251,14 @@ class CombatCardSelect(discord.ui.Select):
             card = lookup_card(active.card_catalog, card_id)
             if card is None:
                 await send_interaction_message(
-                    interaction, content="Unknown card.", ephemeral=True
+                    interaction, content="Carte inconnue.", ephemeral=True
                 )
                 return
 
             if card_id not in active.hand and not is_spellbook_card(card):
                 await send_interaction_message(
                     interaction,
-                    content="That card is no longer in hand.",
+                    content="Cette carte n’est plus en main.",
                     ephemeral=True,
                 )
                 return
@@ -194,7 +268,7 @@ class CombatCardSelect(discord.ui.Select):
                 targets = valid_targets(state, actor=active, card_id=card_id)
                 if not targets:
                     await send_interaction_message(
-                        interaction, content="No valid targets.", ephemeral=True
+                        interaction, content="Aucune cible valide.", ephemeral=True
                     )
                     return
                 if len(targets) == 1:
@@ -210,7 +284,7 @@ class CombatCardSelect(discord.ui.Select):
                     )
                     await send_interaction_message(
                         interaction,
-                        content=f"Choose a target for **{card.label}**.",
+                        content=f"Choisis une cible pour **{card.label}**.",
                         view=view,
                         ephemeral=True,
                         definition_menu=False,
@@ -231,13 +305,11 @@ class CombatCardSelect(discord.ui.Select):
                 )
                 return
 
-        await send_interaction_message(
+        await _edit_board(
             interaction,
+            state,
             content=result.message,
-            embed=build_combat_embed(state),
-            view=build_combat_view(state),
-            edit=True,
-            definition_menu=False,
+            combat_over=result.combat_over,
         )
 
 
@@ -253,7 +325,7 @@ class CombatTargetSelect(discord.ui.Select):
             for key, name in targets[:25]
         ]
         super().__init__(
-            placeholder="Choose a target…",
+            placeholder="Choisis une cible…",
             min_values=1,
             max_values=1,
             options=options,
@@ -264,13 +336,15 @@ class CombatTargetSelect(discord.ui.Select):
         self.targets = targets
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await _reply_play_in_browser(interaction)
+        return
         target_key = self.values[0]
         guild_id = _guild_id(interaction)
         scope_id = _scope_id(interaction)
         if guild_id is None:
             await send_interaction_message(
                 interaction,
-                content="Combat is only available in a server.",
+                content="Le combat n’est disponible que sur un serveur.",
                 ephemeral=True,
             )
             await _reset_target_select(interaction, self)
@@ -286,7 +360,7 @@ class CombatTargetSelect(discord.ui.Select):
             state = get_combat(guild_id=guild_id, scope_id=scope_id)
             if state is None:
                 await send_interaction_message(
-                    interaction, content="This combat has ended.", ephemeral=True
+                    interaction, content="Ce combat est terminé.", ephemeral=True
                 )
                 await _reset_target_select(interaction, self)
                 return
@@ -294,7 +368,7 @@ class CombatTargetSelect(discord.ui.Select):
             actor = state.find_combatant(self.actor_name)
             if actor is None or not _can_play(interaction, actor, scope_id=scope_id):
                 await send_interaction_message(
-                    interaction, content="You cannot play that card.", ephemeral=True
+                    interaction, content="Tu ne peux pas jouer cette carte.", ephemeral=True
                 )
                 await _reset_target_select(interaction, self)
                 return
@@ -302,7 +376,7 @@ class CombatTargetSelect(discord.ui.Select):
             target = state.combatants.get(target_key)
             if target is None:
                 await send_interaction_message(
-                    interaction, content="Target not found.", ephemeral=True
+                    interaction, content="Cible introuvable.", ephemeral=True
                 )
                 await _reset_target_select(interaction, self)
                 return
@@ -328,13 +402,18 @@ class CombatTargetSelect(discord.ui.Select):
             async for message in channel.history(limit=20):
                 if message.author.bot and message.embeds:
                     embed = message.embeds[0]
-                    if embed.title and embed.title.startswith("🃏 Card combat"):
+                    if embed.title and embed.title.startswith(BOARD_TITLE):
                         board_message = message
                         break
             if board_message is not None:
                 await board_message.edit(
-                    embed=build_combat_embed(state),
-                    view=build_combat_view(state),
+                    embed=build_combat_embed(state, ended=result.combat_over),
+                    view=(
+                        None
+                        if result.combat_over
+                        else build_combat_view(state)
+                    ),
+                    attachments=board_attachments(state),
                 )
         await interaction.followup.send(result.message, ephemeral=True)
 
@@ -363,7 +442,7 @@ class CombatSpellPageButton(discord.ui.Button):
     def __init__(self, *, delta: int, page: int, page_count: int) -> None:
         going_prev = delta < 0
         super().__init__(
-            label="◀ Spells" if going_prev else "Spells ▶",
+            label="◀ Sorts" if going_prev else "Sorts ▶",
             style=discord.ButtonStyle.secondary,
             disabled=(page + delta < 0) or (page + delta >= page_count),
             row=1,
@@ -373,12 +452,14 @@ class CombatSpellPageButton(discord.ui.Button):
         self.page = page
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await _reply_play_in_browser(interaction)
+        return
         guild_id = _guild_id(interaction)
         scope_id = _scope_id(interaction)
         if guild_id is None:
             await send_interaction_message(
                 interaction,
-                content="Combat is only available in a server.",
+                content="Le combat n’est disponible que sur un serveur.",
                 ephemeral=True,
             )
             return
@@ -391,7 +472,7 @@ class CombatSpellPageButton(discord.ui.Button):
         state = get_combat(guild_id=guild_id, scope_id=scope_id)
         if state is None:
             await send_interaction_message(
-                interaction, content="This combat has ended.", ephemeral=True
+                interaction, content="Ce combat est terminé.", ephemeral=True
             )
             return
 
@@ -399,6 +480,7 @@ class CombatSpellPageButton(discord.ui.Button):
             interaction,
             embed=build_combat_embed(state),
             view=CombatBoardView(state, spell_page=self.page + self.delta),
+            attachments=board_attachments(state),
             edit=True,
             definition_menu=False,
         )
@@ -407,7 +489,7 @@ class CombatSpellPageButton(discord.ui.Button):
 class CombatEndTurnButton(discord.ui.Button):
     def __init__(self) -> None:
         super().__init__(
-            label="End turn",
+            label="Fin du tour",
             emoji="⏭️",
             style=discord.ButtonStyle.secondary,
             custom_id=COMBAT_END_TURN_ID,
@@ -415,12 +497,14 @@ class CombatEndTurnButton(discord.ui.Button):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await _reply_play_in_browser(interaction)
+        return
         guild_id = _guild_id(interaction)
         scope_id = _scope_id(interaction)
         if guild_id is None:
             await send_interaction_message(
                 interaction,
-                content="Combat is only available in a server.",
+                content="Le combat n’est disponible que sur un serveur.",
                 ephemeral=True,
             )
             return
@@ -434,14 +518,14 @@ class CombatEndTurnButton(discord.ui.Button):
             state = get_combat(guild_id=guild_id, scope_id=scope_id)
             if state is None:
                 await send_interaction_message(
-                    interaction, content="This combat has ended.", ephemeral=True
+                    interaction, content="Ce combat est terminé.", ephemeral=True
                 )
                 return
 
             active = state.active_combatant()
             if active is None:
                 await send_interaction_message(
-                    interaction, content="No active combatant.", ephemeral=True
+                    interaction, content="Aucun combattant actif.", ephemeral=True
                 )
                 return
 
@@ -456,27 +540,294 @@ class CombatEndTurnButton(discord.ui.Button):
                 return
 
             try:
-                result = end_turn(state, actor_name=active.name)
+                result = finish_turn(state, actor_name=active.name)
             except ValueError as exc:
                 await send_interaction_message(
                     interaction, content=str(exc), ephemeral=True
                 )
                 return
 
-        await send_interaction_message(
+        await _edit_board(
             interaction,
+            state,
             content=result.message,
-            embed=build_combat_embed(state),
-            view=build_combat_view(state),
-            edit=True,
-            definition_menu=False,
+            combat_over=result.combat_over,
         )
+
+
+class CombatMoveButton(discord.ui.Button):
+    def __init__(self, direction: str) -> None:
+        labels = {"n": "▲", "s": "▼", "w": "◀", "e": "▶"}
+        super().__init__(
+            label=labels[direction],
+            style=discord.ButtonStyle.secondary,
+            custom_id=COMBAT_MOVE_IDS[direction],
+            row=2,
+        )
+        self.direction = direction
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await _reply_play_in_browser(interaction)
+        return
+        guild_id = _guild_id(interaction)
+        scope_id = _scope_id(interaction)
+        if guild_id is None:
+            await send_interaction_message(
+                interaction,
+                content="Le combat n’est disponible que sur un serveur.",
+                ephemeral=True,
+            )
+            return
+        if scope_id is None:
+            await send_interaction_message(
+                interaction, content=PLAYER_COMBAT_ONLY, ephemeral=True
+            )
+            return
+
+        async with lock_for(guild_id=guild_id, scope_id=scope_id):
+            state = get_combat(guild_id=guild_id, scope_id=scope_id)
+            if state is None:
+                await send_interaction_message(
+                    interaction, content="Ce combat est terminé.", ephemeral=True
+                )
+                return
+
+            active = state.active_combatant()
+            if active is None:
+                await send_interaction_message(
+                    interaction, content="Aucun combattant actif.", ephemeral=True
+                )
+                return
+
+            if not _can_play(interaction, active, scope_id=scope_id):
+                await send_interaction_message(
+                    interaction,
+                    content=_turn_denied_message(
+                        active.name, npc=active.user_id is None
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            ensure_positions(state)
+            if active.x is None or active.y is None:
+                await send_interaction_message(
+                    interaction,
+                    content=f"**{active.name}** n’a pas de position sur la carte.",
+                    ephemeral=True,
+                )
+                return
+            dx, dy = DIRECTION_DELTA[self.direction]
+            try:
+                result = move_combatant(
+                    state,
+                    actor_name=active.name,
+                    dest_x=active.x + dx,
+                    dest_y=active.y + dy,
+                )
+            except ValueError as exc:
+                await send_interaction_message(
+                    interaction, content=str(exc), ephemeral=True
+                )
+                return
+
+        await _edit_board(
+            interaction,
+            state,
+            content=result.message,
+            combat_over=result.combat_over,
+        )
+
+
+class CombatMapAttackButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(
+            label="Attaquer",
+            emoji="⚔️",
+            style=discord.ButtonStyle.danger,
+            custom_id=COMBAT_MAP_ATTACK_ID,
+            row=2,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await _reply_play_in_browser(interaction)
+        return
+        guild_id = _guild_id(interaction)
+        scope_id = _scope_id(interaction)
+        if guild_id is None:
+            await send_interaction_message(
+                interaction,
+                content="Le combat n’est disponible que sur un serveur.",
+                ephemeral=True,
+            )
+            return
+        if scope_id is None:
+            await send_interaction_message(
+                interaction, content=PLAYER_COMBAT_ONLY, ephemeral=True
+            )
+            return
+
+        async with lock_for(guild_id=guild_id, scope_id=scope_id):
+            state = get_combat(guild_id=guild_id, scope_id=scope_id)
+            if state is None:
+                await send_interaction_message(
+                    interaction, content="Ce combat est terminé.", ephemeral=True
+                )
+                return
+
+            active = state.active_combatant()
+            if active is None:
+                await send_interaction_message(
+                    interaction, content="Aucun combattant actif.", ephemeral=True
+                )
+                return
+
+            if not _can_play(interaction, active, scope_id=scope_id):
+                await send_interaction_message(
+                    interaction,
+                    content=_turn_denied_message(
+                        active.name, npc=active.user_id is None
+                    ),
+                    ephemeral=True,
+                )
+                return
+
+            targets = attack_targets_in_weapon_range(state, active)
+            if not targets:
+                await send_interaction_message(
+                    interaction,
+                    content="Aucune cible à portée d’arme. Approche-toi d’abord.",
+                    ephemeral=True,
+                )
+                return
+            if len(targets) > 1:
+                view = CombatMapTargetView(
+                    actor_name=active.name,
+                    targets=[
+                        (combatant.name.lower(), combatant.name)
+                        for combatant in targets
+                    ],
+                )
+                await send_interaction_message(
+                    interaction,
+                    content="Choisis qui attaquer.",
+                    view=view,
+                    ephemeral=True,
+                    definition_menu=False,
+                )
+                return
+
+            try:
+                result = map_attack(
+                    state, actor_name=active.name, target_name=targets[0].name
+                )
+            except ValueError as exc:
+                await send_interaction_message(
+                    interaction, content=str(exc), ephemeral=True
+                )
+                return
+
+        await _edit_board(
+            interaction,
+            state,
+            content=result.message,
+            combat_over=result.combat_over,
+        )
+
+
+class CombatMapTargetSelect(discord.ui.Select):
+    def __init__(self, actor_name: str, targets: list[tuple[str, str]]) -> None:
+        options = [
+            discord.SelectOption(label=name[:100], value=key)
+            for key, name in targets[:25]
+        ]
+        super().__init__(
+            placeholder="Attaquer…",
+            min_values=1,
+            max_values=1,
+            options=options,
+            id=fresh_component_id(),
+        )
+        self.actor_name = actor_name
+        self.targets = targets
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await _reply_play_in_browser(interaction)
+        return
+        target_key = self.values[0]
+        guild_id = _guild_id(interaction)
+        scope_id = _scope_id(interaction)
+        if guild_id is None or scope_id is None:
+            await send_interaction_message(
+                interaction, content="Le combat n’est pas disponible ici.", ephemeral=True
+            )
+            return
+
+        async with lock_for(guild_id=guild_id, scope_id=scope_id):
+            state = get_combat(guild_id=guild_id, scope_id=scope_id)
+            if state is None:
+                await send_interaction_message(
+                    interaction, content="Ce combat est terminé.", ephemeral=True
+                )
+                return
+            actor = state.find_combatant(self.actor_name)
+            if actor is None or not _can_play(interaction, actor, scope_id=scope_id):
+                await send_interaction_message(
+                    interaction, content="Tu ne peux pas attaquer maintenant.", ephemeral=True
+                )
+                return
+            target = state.combatants.get(target_key)
+            if target is None:
+                await send_interaction_message(
+                    interaction, content="Cible introuvable.", ephemeral=True
+                )
+                return
+            try:
+                result = map_attack(
+                    state, actor_name=self.actor_name, target_name=target.name
+                )
+            except ValueError as exc:
+                await send_interaction_message(
+                    interaction, content=str(exc), ephemeral=True
+                )
+                return
+
+        await interaction.response.defer()
+        if interaction.message is not None:
+            channel = interaction.channel
+            if channel is not None and hasattr(channel, "history"):
+                board_message = None
+                async for message in channel.history(limit=20):
+                    if message.author.bot and message.embeds:
+                        embed = message.embeds[0]
+                        if embed.title and embed.title.startswith(BOARD_TITLE):
+                            board_message = message
+                            break
+                if board_message is not None:
+                    await board_message.edit(
+                        embed=build_combat_embed(
+                            state, ended=result.combat_over
+                        ),
+                        view=(
+                            None
+                            if result.combat_over
+                            else build_combat_view(state)
+                        ),
+                        attachments=board_attachments(state),
+                    )
+        await interaction.followup.send(result.message, ephemeral=True)
+
+
+class CombatMapTargetView(discord.ui.View):
+    def __init__(self, actor_name: str, targets: list[tuple[str, str]]) -> None:
+        super().__init__(timeout=120)
+        self.add_item(CombatMapTargetSelect(actor_name, targets))
 
 
 class CombatHandButton(discord.ui.Button):
     def __init__(self) -> None:
         super().__init__(
-            label="View hand",
+            label="Main",
             emoji="🖐️",
             style=discord.ButtonStyle.primary,
             custom_id=COMBAT_HAND_ID,
@@ -484,12 +835,14 @@ class CombatHandButton(discord.ui.Button):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        await _reply_play_in_browser(interaction)
+        return
         guild_id = _guild_id(interaction)
         scope_id = _scope_id(interaction)
         if guild_id is None:
             await send_interaction_message(
                 interaction,
-                content="Combat is only available in a server.",
+                content="Le combat n’est disponible que sur un serveur.",
                 ephemeral=True,
             )
             return
@@ -502,7 +855,7 @@ class CombatHandButton(discord.ui.Button):
         state = get_combat(guild_id=guild_id, scope_id=scope_id)
         if state is None:
             await send_interaction_message(
-                interaction, content="This combat has ended.", ephemeral=True
+                interaction, content="Ce combat est terminé.", ephemeral=True
             )
             return
 
@@ -519,7 +872,7 @@ class CombatHandButton(discord.ui.Button):
             if active is None or not _can_play(interaction, active, scope_id=scope_id):
                 await send_interaction_message(
                     interaction,
-                    content="You are not a combatant in this fight.",
+                    content="Tu n’es pas dans ce combat.",
                     ephemeral=True,
                 )
                 return
@@ -537,33 +890,126 @@ class CombatHandButton(discord.ui.Button):
         )
 
 
+async def _send_monster_sheet(
+    interaction: discord.Interaction, query: str, *, edit: bool = False
+) -> None:
+    embed, picker, error = await load_monster_sheet(query)
+    if error is not None:
+        await send_interaction_message(
+            interaction,
+            content=error,
+            ephemeral=True,
+            edit=edit,
+            definition_menu=False,
+        )
+        return
+    await send_interaction_message(
+        interaction,
+        embed=embed,
+        view=picker,
+        ephemeral=True,
+        edit=edit,
+        definition_menu=picker is None,
+    )
+
+
+class CombatMonsterSheetSelect(discord.ui.Select):
+    def __init__(self, names: list[str]) -> None:
+        options = [
+            discord.SelectOption(label=name[:100], value=name[:100])
+            for name in names[:25]
+        ]
+        super().__init__(
+            placeholder="Fiche de monstre…",
+            min_values=1,
+            max_values=1,
+            options=options,
+            id=fresh_component_id(),
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        await _send_monster_sheet(interaction, self.values[0], edit=True)
+
+
+class CombatMonsterSheetView(discord.ui.View):
+    def __init__(self, names: list[str]) -> None:
+        super().__init__(timeout=120)
+        self.add_item(CombatMonsterSheetSelect(names))
+
+
+class CombatSheetButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(
+            label="Fiche",
+            emoji="📖",
+            style=discord.ButtonStyle.secondary,
+            custom_id=COMBAT_SHEET_ID,
+            row=1,
+        )
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        guild_id = _guild_id(interaction)
+        scope_id = _scope_id(interaction)
+        if guild_id is None:
+            await send_interaction_message(
+                interaction,
+                content="Le combat n’est disponible que sur un serveur.",
+                ephemeral=True,
+            )
+            return
+        if scope_id is None:
+            await send_interaction_message(
+                interaction, content=PLAYER_COMBAT_ONLY, ephemeral=True
+            )
+            return
+
+        state = get_combat(guild_id=guild_id, scope_id=scope_id)
+        if state is None:
+            await send_interaction_message(
+                interaction, content="Ce combat est terminé.", ephemeral=True
+            )
+            return
+
+        names = npc_sheet_names(state)
+        if not names:
+            await send_interaction_message(
+                interaction,
+                content="Aucun monstre dans ce combat.",
+                ephemeral=True,
+            )
+            return
+
+        chosen = preferred_sheet_name(state)
+        if chosen is None:
+            await send_interaction_message(
+                interaction,
+                content="Choisis un monstre.",
+                view=CombatMonsterSheetView(names),
+                ephemeral=True,
+                definition_menu=False,
+            )
+            return
+
+        await _send_monster_sheet(interaction, chosen)
+
+
 class CombatBoardView(discord.ui.View):
     def __init__(
         self, state: CombatState | None = None, *, spell_page: int = 0
     ) -> None:
         super().__init__(timeout=None)
-        active = state.active_combatant() if state else None
-        if active is not None:
-            hand_options, page, page_count = build_play_select_options(
-                active.hand,
-                active.card_catalog,
-                page=spell_page,
-            )
-        else:
-            hand_options, page, page_count = [], 0, 1
-        self.spell_page = page
-        self.add_item(
-            CombatCardSelect(hand_options or None, page=page, page_count=page_count)
-        )
-        if page_count > 1:
-            self.add_item(
-                CombatSpellPageButton(delta=-1, page=page, page_count=page_count)
-            )
-            self.add_item(
-                CombatSpellPageButton(delta=1, page=page, page_count=page_count)
-            )
-        self.add_item(CombatEndTurnButton())
-        self.add_item(CombatHandButton())
+        self.spell_page = spell_page
+        if state is not None:
+            board_url = combat_board_url(state.guild_id, state.scope_id)
+            if board_url:
+                self.add_item(
+                    discord.ui.Button(
+                        label="Ouvrir le plateau",
+                        style=discord.ButtonStyle.link,
+                        url=board_url,
+                    )
+                )
+        self.add_item(CombatSheetButton())
 
 
 def build_combat_view(state: CombatState, *, spell_page: int = 0) -> CombatBoardView:
@@ -576,6 +1022,10 @@ class PersistentCombatBoardView(discord.ui.View):
         self.add_item(CombatCardSelect())
         self.add_item(CombatEndTurnButton())
         self.add_item(CombatHandButton())
+        self.add_item(CombatSheetButton())
+        for direction in ("w", "n", "s", "e"):
+            self.add_item(CombatMoveButton(direction))
+        self.add_item(CombatMapAttackButton())
 
 
 def register_combat_views(bot: discord.Client) -> None:

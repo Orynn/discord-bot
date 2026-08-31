@@ -4,7 +4,7 @@ from discord.ext.commands.context import Context
 
 from bot.checks import admin_only, guild_only
 from bot.command_helpers import command_reply, delete_command
-from bot.help_text import HELP_COLOR
+from bot.help_text import HELP_COLOR, command_help
 from bot.messaging import send_message
 from config import PREFIX
 from party.storage import get_party_currency, save_party_currency
@@ -28,7 +28,10 @@ def setup_party(bot: Bot) -> None:
         name="party",
         invoke_without_command=True,
         fallback="menu",
-        help="Party shared resources and treasury.",
+        help=command_help(
+            "Ressources partagées et trésor du groupe.",
+            f"`{PREFIX}party money`",
+        ),
     )
     @guild_only
     async def party_group(ctx: Context) -> None:
@@ -44,7 +47,10 @@ def setup_party(bot: Bot) -> None:
         name="money",
         invoke_without_command=True,
         fallback="show",
-        help="Show or manage the party treasury.",
+        help=command_help(
+            "Affiche ou gère le trésor du groupe.",
+            f"`{PREFIX}party money`",
+        ),
     )
     @guild_only
     async def party_money_group(ctx: Context) -> None:
@@ -56,7 +62,13 @@ def setup_party(bot: Bot) -> None:
         )
         await delete_command(ctx)
 
-    @party_money_group.command(name="set", help="Set the party treasury amount.")
+    @party_money_group.command(
+        name="set",
+        help=command_help(
+            "Fixe le trésor du groupe.",
+            f"`{PREFIX}party money set <montant>`",
+        ),
+    )
     @guild_only
     @admin_only
     async def party_money_set(ctx: Context, *, amount: str) -> None:
@@ -75,7 +87,13 @@ def setup_party(bot: Bot) -> None:
         )
         await delete_command(ctx)
 
-    @party_money_group.command(name="add", help="Add coins to the party treasury.")
+    @party_money_group.command(
+        name="add",
+        help=command_help(
+            "Ajoute des pièces au trésor du groupe.",
+            f"`{PREFIX}party money add <montant>`",
+        ),
+    )
     @guild_only
     @admin_only
     async def party_money_add(ctx: Context, *, amount: str) -> None:
@@ -98,7 +116,11 @@ def setup_party(bot: Bot) -> None:
         await delete_command(ctx)
 
     @party_money_group.command(
-        name="spend", help="Spend coins from the party treasury."
+        name="spend",
+        help=command_help(
+            "Dépense des pièces du trésor du groupe.",
+            f"`{PREFIX}party money spend <montant>`",
+        ),
     )
     @guild_only
     @admin_only

@@ -1,6 +1,6 @@
 import random
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import discord
 
@@ -16,6 +16,9 @@ DICE_PATTERN = re.compile(
     r"^(\d+)d(\d+)(?:(kh|kl)(\d+))?([+-]\d+)?$",
     re.IGNORECASE,
 )
+_ADVANTAGE_TOKENS = frozenset({"adv", "advantage", "avantage"})
+_DISADVANTAGE_TOKENS = frozenset({"dis", "disadvantage", "desavantage", "desav"})
+
 ABILITY_ALIASES: dict[str, str] = {
     "str": "str",
     "strength": "str",
@@ -104,20 +107,31 @@ def parse_dice(notation: str) -> ParsedDice:
     )
 
 
+def _split_advantage(tokens: list[str]) -> tuple[list[str], bool | None]:
+    advantage: bool | None = None
+    kept: list[str] = []
+    for token in tokens:
+        key = fold_lookup_key(token)
+        if key in _ADVANTAGE_TOKENS:
+            if advantage is False:
+                raise ValueError("Cannot combine advantage and disadvantage.")
+            advantage = True
+            continue
+        if key in _DISADVANTAGE_TOKENS:
+            if advantage is True:
+                raise ValueError("Cannot combine advantage and disadvantage.")
+            advantage = False
+            continue
+        kept.append(token)
+    return kept, advantage
+
+
 def parse_roll_args(args: str) -> ParsedRollRequest:
     tokens = args.split()
     if not tokens:
         raise ValueError("Missing roll. Example: `1d20`, `adv 1d20 athletics`, `2d6+3`")
 
-    advantage: bool | None = None
-    first = fold_lookup_key(tokens[0])
-    if first in {"adv", "advantage", "avantage"}:
-        advantage = True
-        tokens = tokens[1:]
-    elif first in {"dis", "disadvantage", "desavantage", "desav"}:
-        advantage = False
-        tokens = tokens[1:]
-
+    tokens, advantage = _split_advantage(tokens)
     if not tokens:
         raise ValueError("Missing dice or modifier after advantage/disadvantage.")
 
@@ -140,6 +154,40 @@ def parse_roll_args(args: str) -> ParsedRollRequest:
     modifier_tokens = tokens[:dice_index] + tokens[dice_index + 1 :]
     return ParsedRollRequest(
         dice=dice, modifier_tokens=modifier_tokens, advantage=advantage
+    )
+
+
+def parse_advantage_flag(text: str | None) -> bool | None:
+    if text is None:
+        return None
+    raw = str(text).strip()
+    if not raw:
+        return None
+    kept, advantage = _split_advantage([raw])
+    if kept or advantage is None:
+        raise ValueError("Advantage must be `advantage` or `disadvantage`.")
+    return advantage
+
+
+def apply_roll_options(
+    request: ParsedRollRequest,
+    *,
+    bonus: int | None = None,
+    advantage: bool | None = None,
+) -> ParsedRollRequest:
+    merged = request.advantage
+    if advantage is not None:
+        if merged is not None and merged != advantage:
+            raise ValueError("Cannot combine advantage and disadvantage.")
+        merged = advantage
+    extra = 0 if bonus is None else int(bonus)
+    dice = request.dice
+    if extra:
+        dice = replace(dice, flat_modifier=dice.flat_modifier + extra)
+    return ParsedRollRequest(
+        dice=dice,
+        modifier_tokens=request.modifier_tokens,
+        advantage=merged,
     )
 
 
@@ -213,10 +261,10 @@ def resolve_sheet_modifier(
         modifier = (score - 10) // 2
         return modifier, f"{ability.upper()} ({format_modifier(modifier)})"
 
-        raise ValueError(
-            "Unknown modifier. Use an ability (`str` / `force`), a skill (`athletics` / `discrétion`) "
-            "or a save (`dex save` / `sauvegarde sag`)."
-        )
+    raise ValueError(
+        "Unknown modifier. Use an ability (`str` / `force`), a skill (`athletics` / `discrétion`) "
+        "or a save (`dex save` / `sauvegarde sag`)."
+    )
 
 
 def _is_saving_throw(tokens: list[str]) -> bool:
@@ -321,6 +369,8 @@ ROLL_ADV_COLOR = 0x2980B9
 ROLL_DIS_COLOR = 0x7F8C8D
 ROLL_NAT20_COLOR = 0x27AE60
 ROLL_NAT1_COLOR = 0xC0392B
+CRIT_SUCCESS_LABEL = "🌟 Critique"
+CRIT_FAIL_LABEL = "💀 Échec critique"
 
 _KEEP_PATTERN = re.compile(r"(kh|kl)(\d+)", re.IGNORECASE)
 
@@ -331,6 +381,22 @@ def _effective_d20(result: RollResult) -> int | None:
     if len(result.kept_rolls) == 1 and "d20" in result.dice_notation.lower():
         return result.kept_rolls[0]
     return None
+
+
+def d20_crit_kind(face: int | None) -> str | None:
+    if face == 20:
+        return "success"
+    if face == 1:
+        return "fail"
+    return None
+
+
+def format_d20_face(face: int) -> str:
+    if face == 20:
+        return f"{CRIT_SUCCESS_LABEL} **20**"
+    if face == 1:
+        return f"{CRIT_FAIL_LABEL} **1**"
+    return f"**{face}**"
 
 
 def _roll_embed_color(result: RollResult) -> int:
@@ -362,7 +428,7 @@ def _format_roll_values(result: RollResult) -> str:
         kept = max(result.d20_pair) if result.advantage else min(result.d20_pair)
         dropped = min(result.d20_pair) if result.advantage else max(result.d20_pair)
         mode = "⬆️ Advantage" if result.advantage else "⬇️ Disadvantage"
-        return f"{mode}\n**{kept}** kept · ~~{dropped}~~ dropped"
+        return f"{mode}\n{format_d20_face(kept)} kept · ~~{dropped}~~ dropped"
 
     if result.kept_rolls != result.dice_rolls:
         keep_match = _KEEP_PATTERN.search(result.dice_notation)
@@ -376,7 +442,10 @@ def _format_roll_values(result: RollResult) -> str:
         return f"🎯 {label}\n{rolled} → **{kept}**"
 
     if len(result.dice_rolls) == 1:
-        return f"**{result.dice_rolls[0]}**"
+        face = result.dice_rolls[0]
+        if _effective_d20(result) == face:
+            return format_d20_face(face)
+        return f"**{face}**"
 
     if len(result.dice_rolls) <= 8:
         return " · ".join(str(value) for value in result.dice_rolls)
@@ -395,9 +464,20 @@ def _format_roll_breakdown(result: RollResult) -> str | None:
 
 def format_roll_embed(result: RollResult, *, roller_label: str) -> discord.Embed:
     clean_label = roller_label.replace("**", "").strip()
+    d20 = _effective_d20(result)
+    crit = d20_crit_kind(d20)
+    if crit == "success":
+        title = f"{CRIT_SUCCESS_LABEL} — {clean_label}"
+        description = f"**20** sur le d20\nTotal **{result.total}**"
+    elif crit == "fail":
+        title = f"{CRIT_FAIL_LABEL} — {clean_label}"
+        description = f"**1** sur le d20\nTotal **{result.total}**"
+    else:
+        title = f"🎲 {clean_label}"
+        description = f"**{result.total}**"
     embed = discord.Embed(
-        title=f"🎲 {clean_label}",
-        description=f"**{result.total}**",
+        title=title,
+        description=description,
         color=_roll_embed_color(result),
     )
     embed.add_field(name="🎯 Notation", value=f"`{result.dice_notation}`", inline=True)
@@ -411,16 +491,11 @@ def format_roll_embed(result: RollResult, *, roller_label: str) -> discord.Embed
     if breakdown:
         embed.add_field(name="🧮 Breakdown", value=breakdown, inline=False)
 
-    d20 = _effective_d20(result)
     footer_parts: list[str] = []
     if result.condition_note:
         footer_parts.append(f"⬇️ {result.condition_note}")
     if result.spent_inspiration:
         footer_parts.append("✨ Spent inspiration")
-    if d20 == 20:
-        footer_parts.append("🌟 Natural 20!")
-    elif d20 == 1:
-        footer_parts.append("💀 Natural 1!")
     if footer_parts:
         embed.set_footer(text=" · ".join(footer_parts))
     return embed
@@ -466,10 +541,11 @@ def format_roll_result(result: RollResult, *, roller_label: str) -> str:
                 mods.append(format_modifier(result.sheet_modifier))
             detail += f" ({' + '.join(mods)})"
 
-    if _effective_d20(result) == 20:
-        detail += " · 🌟 **Natural 20!**"
-    elif _effective_d20(result) == 1:
-        detail += " · 💀 **Natural 1!**"
+    crit = d20_crit_kind(_effective_d20(result))
+    if crit == "success":
+        detail += f" · {CRIT_SUCCESS_LABEL} !"
+    elif crit == "fail":
+        detail += f" · {CRIT_FAIL_LABEL} !"
 
     lines.append(detail)
     return "\n".join(lines)

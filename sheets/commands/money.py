@@ -4,7 +4,7 @@ from discord.ext.commands.context import Context
 
 from bot.checks import admin_only, is_admin
 from bot.command_helpers import command_reply, delete_command
-from bot.help_text import HELP_COLOR
+from bot.help_text import HELP_COLOR, command_help
 from bot.messaging import send_message
 from config import PREFIX
 from sheets.context import (
@@ -22,7 +22,10 @@ def register_money_commands(sheet_group: Group) -> None:
         name="money",
         aliases=["gold", "coins"],
         invoke_without_command=True,
-        help="Manage character wallet (50 gp, 5 gp 3 sp).",
+        help=command_help(
+            "Bourse du personnage (50 po, 5 po 3 pa).",
+            f"`{PREFIX}sheet money`",
+        ),
     )
     async def sheet_money_group(
         ctx: Context, member: discord.Member | None = None
@@ -56,7 +59,10 @@ def register_money_commands(sheet_group: Group) -> None:
 
     @sheet_money_group.command(
         name="show",
-        help=f"Display wallet. Usage: `{PREFIX}sheet money show [@player]`",
+        help=command_help(
+            "Affiche la bourse.",
+            f"`{PREFIX}sheet money show [@joueur]`",
+        ),
     )
     async def sheet_money_show(
         ctx: Context, member: discord.Member | None = None
@@ -72,7 +78,10 @@ def register_money_commands(sheet_group: Group) -> None:
 
     @sheet_money_group.command(
         name="set",
-        help=f"Set wallet. Usage: `{PREFIX}sheet money set [@player] <amount>` *(admin)*",
+        help=command_help(
+            "Fixe le contenu de la bourse (staff).",
+            f"`{PREFIX}sheet money set [@joueur] <montant>`",
+        ),
     )
     @admin_only
     async def sheet_money_set(
@@ -101,7 +110,10 @@ def register_money_commands(sheet_group: Group) -> None:
 
     @sheet_money_group.command(
         name="add",
-        help=f"Add coins. Usage: `{PREFIX}sheet money add [@player] <amount>` *(admin)*",
+        help=command_help(
+            "Ajoute des pièces à la bourse (staff).",
+            f"`{PREFIX}sheet money add [@joueur] <montant>`",
+        ),
     )
     @admin_only
     async def sheet_money_add(
@@ -133,7 +145,10 @@ def register_money_commands(sheet_group: Group) -> None:
     @sheet_money_group.command(
         name="spend",
         aliases=["remove"],
-        help=f"Spend coins. Usage: `{PREFIX}sheet money spend [@player] <amount>`",
+        help=command_help(
+            "Dépense des pièces de la bourse.",
+            f"`{PREFIX}sheet money spend [@joueur] <montant>`",
+        ),
     )
     async def sheet_money_spend(
         ctx: Context,
@@ -170,7 +185,10 @@ def register_money_commands(sheet_group: Group) -> None:
 
     @sheet_money_group.command(
         name="pay",
-        help=f"Pay another player. Usage: `{PREFIX}sheet money pay [@payer] @recipient <amount>`",
+        help=command_help(
+            "Paie un autre joueur.",
+            f"`{PREFIX}sheet money pay [@payeur] @destinataire <montant>`",
+        ),
     )
     async def sheet_money_pay(
         ctx: Context,
@@ -197,13 +215,13 @@ def register_money_commands(sheet_group: Group) -> None:
 
         guild_id = resolve_guild_id(ctx)
         if guild_id is None:
-            await command_reply(ctx, "This command can only be used in a server.")
+            await command_reply(ctx, "Cette commande marche seulement sur le serveur.")
             return
 
         recipient_sheet = get_sheet(user_id=recipient.id, guild_id=guild_id)
         if recipient_sheet is None:
             await command_reply(
-                ctx, f"**{recipient.display_name}** has no character sheet."
+                ctx, f"**{recipient.display_name}** n’a pas de fiche."
             )
             return
 

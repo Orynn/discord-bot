@@ -10,6 +10,7 @@ from discord.ext.commands.bot import Bot
 from discord.ext.commands.context import Context
 
 from bot.command_helpers import command_reply, delete_command
+from bot.help_text import command_help
 from bot.messaging import send_message
 from config import (
     IMAGE_COOLDOWN_SECONDS,
@@ -95,7 +96,10 @@ def setup_image(bot: Bot) -> None:
     @bot.hybrid_command(
         name="image",
         aliases=["dessine", "draw", "img"],
-        help="Illustrate this channel's roleplay, optionally focused by a prompt.",
+        help=command_help(
+            "Illustre le RP de ce salon, éventuellement guidé par un prompt.",
+            f"`{PREFIX}image [prompt]`",
+        ),
     )
     @app_commands.describe(
         prompt="Optional focus. The bot still reads this channel's RP."

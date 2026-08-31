@@ -16,6 +16,7 @@ from sheets.equipment import (
 )
 
 LIST_ALIASES = frozenset({"list", "here", "ici", "show", "places"})
+ALL_GEAR_ALIASES = frozenset({"all", "tout", "*"})
 _NOTE_SEPARATORS = (" -- ", " — ", " – ")
 _AT_SPLIT = re.compile(r"(?:^|\s+)(?:at|à)\s+", re.IGNORECASE)
 _THREAD_TYPES = {
@@ -29,6 +30,7 @@ _THREAD_TYPES = {
 class LetArgs:
     list_only: bool
     all_places: bool
+    all_gear: bool
     item: str
     quantity: int | None
     place: str | None
@@ -249,9 +251,13 @@ def parse_let_args(text: str) -> LetArgs:
         all_places = item.lower() == "places"
         item = ""
         quantity = None
+    all_gear = item.casefold() in ALL_GEAR_ALIASES
+    if all_gear:
+        quantity = None
     return LetArgs(
         list_only=list_only,
         all_places=all_places,
+        all_gear=all_gear,
         item=item,
         quantity=quantity,
         place=place,

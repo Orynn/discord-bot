@@ -82,6 +82,17 @@ class TestCatchupAllowlist(unittest.TestCase):
         ctx.command.qualified_name = "roll"
         self.assertTrue(_is_catchup_allowed(ctx))
 
+    def test_blocks_sheet_status(self) -> None:
+        ctx = MagicMock()
+        ctx.message.attachments = []
+        ctx.command = MagicMock()
+        ctx.command.qualified_name = "sheet status"
+        self.assertFalse(_is_catchup_allowed(ctx))
+        ctx.command.qualified_name = "status"
+        self.assertFalse(_is_catchup_allowed(ctx))
+        self.assertIn("status", CATCHUP_BLOCKED_COMMANDS)
+        self.assertIn("sheet status", CATCHUP_BLOCKED_COMMANDS)
+
     def test_blocks_campaign_subcommands(self) -> None:
         ctx = MagicMock()
         ctx.message.attachments = []
@@ -127,6 +138,19 @@ class TestCatchupAllowlist(unittest.TestCase):
         ctx.command.qualified_name = "image"
         self.assertFalse(_is_catchup_allowed(ctx))
         self.assertIn("image", CATCHUP_BLOCKED_COMMANDS)
+
+    def test_blocks_scene_and_whisper(self) -> None:
+        ctx = MagicMock()
+        ctx.message.attachments = []
+        ctx.command = MagicMock()
+        ctx.command.qualified_name = "scene set"
+        self.assertFalse(_is_catchup_allowed(ctx))
+        ctx.command.qualified_name = "whisper"
+        self.assertFalse(_is_catchup_allowed(ctx))
+        ctx.command.qualified_name = "arrive"
+        self.assertFalse(_is_catchup_allowed(ctx))
+        self.assertIn("whisper", CATCHUP_BLOCKED_COMMANDS)
+        self.assertIn("scene", CATCHUP_BLOCKED_COMMANDS)
 
 
 class TestRollValidation(unittest.TestCase):

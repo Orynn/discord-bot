@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import discord
 
-from sheets.context import parse_mention_and_text, resolve_owner
+from sheets.context import infer_player_id, parse_mention_and_text, resolve_owner
 
 
 class TestParseMentionAndText(unittest.TestCase):
@@ -65,7 +65,7 @@ class TestResolveOwner(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(owner_id)
         reply.assert_awaited_once()
         self.assertIn(
-            "cannot consult another player's information", reply.await_args.args[1]
+            "fiche d’un autre joueur", reply.await_args.args[1]
         )
 
     async def test_staff_without_mention_uses_player_section(self) -> None:
@@ -105,7 +105,7 @@ class TestResolveOwner(unittest.IsolatedAsyncioTestCase):
                 owner_id = await resolve_owner(ctx, None)
         self.assertIsNone(owner_id)
         reply.assert_awaited_once()
-        self.assertIn("player's section", reply.await_args.args[1])
+        self.assertIn("sa section", reply.await_args.args[1])
 
     async def test_staff_self_mention_uses_player_section(self) -> None:
         ctx = MagicMock()
@@ -124,6 +124,31 @@ class TestResolveOwner(unittest.IsolatedAsyncioTestCase):
         with unittest.mock.patch("sheets.context.infer_player_id", return_value=77):
             owner_id = await resolve_owner(ctx, member)
         self.assertEqual(owner_id, 77)
+
+    async def test_staff_in_trash_uses_mock_sheet(self) -> None:
+        ctx = MagicMock()
+        ctx.author = MagicMock(spec=discord.Member)
+        ctx.author.id = 1
+        ctx.author.name = "Orynn"
+        ctx.author.display_name = "Orynn"
+        ctx.author.global_name = "Orynn"
+        ctx.author.nick = None
+        ctx.author.guild_permissions.administrator = True
+        ctx.author.guild_permissions.manage_guild = True
+        ctx.guild = MagicMock(spec=discord.Guild)
+        ctx.guild.id = 7
+        ctx.guild.owner_id = 1
+        ctx.channel = MagicMock()
+        ctx.channel.name = "🚯trash"
+        ctx.channel.id = 404
+
+        with unittest.mock.patch(
+            "sheets.context.ensure_sandbox_sheet"
+        ) as ensure:
+            self.assertEqual(infer_player_id(ctx), -404)
+            owner_id = await resolve_owner(ctx, None)
+        self.assertEqual(owner_id, -404)
+        ensure.assert_called()
 
 
 if __name__ == "__main__":

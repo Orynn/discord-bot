@@ -16,6 +16,7 @@ _DEFAULT_CONFIG: dict = {
     "catchup_max_age_hours": 72,
     "campaign_category_id": 1186287629302501429,
     "campaign_category_name": "CAMPAIGN",
+    "home_guild_name": "Potato Head",
     "campaign_cache_ttl_seconds": 900,
     "campaign_messages_per_thread": 20,
     "fivetools_root": "5etools",
@@ -36,6 +37,9 @@ _DEFAULT_CONFIG: dict = {
     "image_timeout_seconds": 180,
     "image_cooldown_seconds": 20,
     "image_history_limit": 1000,
+    "editor_host": "0.0.0.0",
+    "editor_port": 8765,
+    "editor_public_url": "",
 }
 
 if _CONFIG_PATH.exists():
@@ -64,6 +68,24 @@ CAMPAIGN_GUILD_ID: int | None = (
 CAMPAIGN_CATEGORY_NAME = str(
     config.get("campaign_category_name", _DEFAULT_CONFIG["campaign_category_name"])
 )
+_raw_home_guild = config.get("home_guild_id")
+HOME_GUILD_ID: int | None = (
+    int(_raw_home_guild) if _raw_home_guild else CAMPAIGN_GUILD_ID
+)
+HOME_GUILD_NAME = str(config.get("home_guild_name", "Potato Head")).strip()
+
+
+def is_home_guild(guild: object | None) -> bool:
+    if guild is None:
+        return True
+    guild_id = getattr(guild, "id", None)
+    home_id = HOME_GUILD_ID if HOME_GUILD_ID is not None else CAMPAIGN_GUILD_ID
+    if home_id is not None and guild_id is not None:
+        return int(guild_id) == int(home_id)
+    name = getattr(guild, "name", None)
+    if HOME_GUILD_NAME and name:
+        return str(name).casefold() == HOME_GUILD_NAME.casefold()
+    return True
 CAMPAIGN_CACHE_TTL_SECONDS = int(
     config.get(
         "campaign_cache_ttl_seconds", _DEFAULT_CONFIG["campaign_cache_ttl_seconds"]
@@ -157,3 +179,16 @@ IMAGE_COOLDOWN_SECONDS = int(
 IMAGE_HISTORY_LIMIT = int(
     config.get("image_history_limit", _DEFAULT_CONFIG["image_history_limit"])
 )
+EDITOR_HOST = str(
+    os.environ.get("ARKANN_EDITOR_HOST")
+    or config.get("editor_host", _DEFAULT_CONFIG["editor_host"])
+)
+EDITOR_PORT = int(
+    os.environ.get("ARKANN_EDITOR_PORT")
+    or config.get("editor_port", _DEFAULT_CONFIG["editor_port"])
+)
+EDITOR_PUBLIC_URL = str(
+    os.environ.get("ARKANN_EDITOR_URL")
+    or config.get("editor_public_url", "")
+    or ""
+).strip()

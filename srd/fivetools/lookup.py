@@ -7,6 +7,7 @@ from typing import Any
 from urllib.parse import quote
 
 from srd.fivetools.edition import edition_rank, url_target
+from srd.fivetools.images import monster_token_url
 from srd.fivetools.loader import (
     FiveToolsIndex,
     ensure_index_loaded,
@@ -900,6 +901,9 @@ def normalize_monster(item: dict[str, Any]) -> dict[str, Any]:
         "legendary": _render_named_blocks(item.get("legendary")),
         "spellcasting": _render_named_blocks(item.get("spellcasting")),
         "stat_line": ", ".join(stat_bits),
+        "image_url": get_index().monster_image_url(item["name"], _item_source(item))
+        or "",
+        "token_url": monster_token_url(item) or "",
     }
 
 

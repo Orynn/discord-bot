@@ -125,6 +125,26 @@ class TestDiscoverPlayerSection(unittest.TestCase):
 
         self.assertEqual(discover_player_id(guild=guild, channel=channel), 42)
 
+    def test_trash_channel_is_sandbox_not_a_player_section(self) -> None:
+        from players.discover import (
+            discover_player_id,
+            is_sandbox_channel,
+            sandbox_scope_id,
+        )
+
+        trash = MagicMock()
+        trash.id = 404
+        trash.name = "🚯trash"
+        trash.category_id = 88
+        trash.category = MagicMock(id=88, name="staff", channels=[])
+        self.assertTrue(is_sandbox_channel(trash))
+        self.assertEqual(sandbox_scope_id(trash), 404)
+
+        guild = MagicMock()
+        guild.id = 1
+        guild.members = []
+        self.assertIsNone(discover_player_id(guild=guild, channel=trash))
+
     def test_discovers_uncached_overwrite_when_category_is_nickname(self) -> None:
         import discord
         from players.discover import discover_player_id

@@ -4,8 +4,8 @@ from discord.ext.commands.context import Context
 from bot.checks import is_staff
 from bot.command_helpers import command_reply, delete_command
 
-DENIED_OTHER_PLAYER = "You cannot consult another player's information."
-MISSING_PLAYER_TARGET = "Specify @player, or run this in that player's section."
+DENIED_OTHER_PLAYER = "Tu ne peux pas consulter la fiche d’un autre joueur."
+MISSING_PLAYER_TARGET = "Mentionne @joueur, ou lance la commande dans sa section."
 
 
 def targets_other_player(ctx: Context, member: discord.Member | None) -> bool:

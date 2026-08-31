@@ -6,7 +6,13 @@ from discord.ext import commands
 from discord.ext.commands.bot import Bot
 from discord.utils import snowflake_time
 
-from config import CATCHUP_ENABLED, CATCHUP_MAX_AGE_HOURS, CATCHUP_MAX_MESSAGES, PREFIX
+from config import (
+    CATCHUP_ENABLED,
+    CATCHUP_MAX_AGE_HOURS,
+    CATCHUP_MAX_MESSAGES,
+    PREFIX,
+    is_home_guild,
+)
 from data.db import mark_channel_message_processed
 
 logger = logging.getLogger(__name__)
@@ -63,7 +69,13 @@ CATCHUP_BLOCKED_COMMANDS: frozenset[str] = frozenset(
         "hunger",
         "faim",
         "food",
+        "status",
+        "sheet status",
         "image",
+        "whisper",
+        "scene",
+        "arrive",
+        "leave",
         "player setup",
         "player add",
         "player create",
@@ -79,7 +91,7 @@ def is_catchup_active() -> bool:
 
 
 def is_catchup_invoke(ctx: commands.Context) -> bool:
-    return bool(getattr(ctx, "_from_catchup", False))
+    return getattr(ctx, "_from_catchup", False) is True
 
 
 def mark_message_processed(*, channel_id: int, message_id: int) -> None:
@@ -236,6 +248,8 @@ async def catch_up_missed_commands(bot: Bot) -> int:
     _catchup_active = True
     try:
         for guild in bot.guilds:
+            if not is_home_guild(guild):
+                continue
             seen: set[int] = set()
             for channel in await _iter_catchup_channels(guild):
                 if channel.id in seen:

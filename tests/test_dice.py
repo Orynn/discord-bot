@@ -1,12 +1,17 @@
 import unittest
 
+from roll.commands import prepare_roll_request
 from sheets.currency import Currency, parse_currency
 from sheets.dice import (
     RollResult,
+    apply_roll_options,
     execute_roll,
     format_roll_embed,
+    parse_advantage_flag,
     parse_dice,
     parse_roll_args,
+    resolve_sheet_modifier,
+    validate_roll_request,
 )
 from sheets.data import CharacterSheet
 
@@ -107,14 +112,41 @@ class TestDice(unittest.TestCase):
         self.assertTrue(adv.advantage)
         self.assertEqual(adv.modifier_tokens, ["discrétion"])
 
+        trailing = parse_roll_args("investigation advantage")
+        self.assertTrue(trailing.advantage)
+        self.assertEqual(trailing.modifier_tokens, ["investigation"])
+
         dis = parse_roll_args("désavantage tromperie")
         self.assertFalse(dis.advantage)
-        from sheets.dice import resolve_sheet_modifier
 
         modifier, label = resolve_sheet_modifier(sheet, ["acrobaties"])
         self.assertIn("Acrobatics", label)
         modifier, label = resolve_sheet_modifier(sheet, ["escamotage"])
         self.assertIn("Sleight Of Hand", label)
+
+    def test_slash_options_add_bonus_and_advantage(self) -> None:
+        request = parse_roll_args("athletics")
+        merged = apply_roll_options(request, bonus=2, advantage=True)
+        self.assertEqual(merged.dice.flat_modifier, 2)
+        self.assertTrue(merged.advantage)
+        self.assertEqual(merged.modifier_tokens, ["athletics"])
+        validate_roll_request(merged)
+
+        stacked = apply_roll_options(parse_roll_args("2d6+3"), bonus=-1)
+        self.assertEqual(stacked.dice.flat_modifier, 2)
+
+    def test_slash_advantage_conflicts_with_args(self) -> None:
+        request = parse_roll_args("adv athletics")
+        with self.assertRaises(ValueError):
+            apply_roll_options(request, advantage=False)
+
+    def test_parse_advantage_flag(self) -> None:
+        self.assertTrue(parse_advantage_flag("avantage"))
+        self.assertFalse(parse_advantage_flag("désavantage"))
+        self.assertIsNone(parse_advantage_flag(None))
+        self.assertIsNone(parse_advantage_flag(""))
+        with self.assertRaises(ValueError):
+            parse_advantage_flag("athletics")
 
     def test_format_roll_embed_nat20(self) -> None:
         result = RollResult(
@@ -128,11 +160,30 @@ class TestDice(unittest.TestCase):
             advantage=None,
         )
         embed = format_roll_embed(result, roller_label="Hero")
-        self.assertIn("🎲 Hero", embed.title)
-        self.assertEqual(embed.description, "**25**")
+        self.assertIn("Critique", embed.title)
+        self.assertIn("Hero", embed.title)
+        self.assertIn("**20**", embed.description)
+        self.assertIn("**25**", embed.description)
         self.assertEqual(embed.color.value, 0x27AE60)
-        self.assertEqual(embed.footer.text, "🌟 Natural 20!")
         self.assertIn("🧮 Breakdown", [field.name for field in embed.fields])
+        rolls_field = next(field for field in embed.fields if field.name == "🎲 Rolls")
+        self.assertIn("Critique", rolls_field.value)
+
+    def test_format_roll_embed_nat1(self) -> None:
+        result = RollResult(
+            dice_notation="1d20",
+            dice_rolls=(1,),
+            kept_rolls=(1,),
+            flat_modifier=0,
+            sheet_modifier=0,
+            modifier_label="",
+            total=1,
+            advantage=None,
+        )
+        embed = format_roll_embed(result, roller_label="Hero")
+        self.assertIn("Échec critique", embed.title)
+        self.assertIn("**1**", embed.description)
+        self.assertEqual(embed.color.value, 0xC0392B)
 
     def test_format_roll_embed_advantage(self) -> None:
         result = RollResult(
@@ -214,6 +265,29 @@ class TestDice(unittest.TestCase):
         self.assertFalse(result.spent_inspiration)
         self.assertTrue(sheet.inspired)
         self.assertTrue(result.advantage)
+
+    def test_unknown_modifier_raises(self) -> None:
+        sheet = CharacterSheet(name="Test")
+        with self.assertRaisesRegex(ValueError, "Unknown modifier"):
+            resolve_sheet_modifier(sheet, ["help"])
+
+
+class TestPrepareRollRequest(unittest.TestCase):
+    def test_empty_args_without_options_is_help(self) -> None:
+        self.assertIsNone(prepare_roll_request(""))
+
+    def test_bonus_only_defaults_to_d20(self) -> None:
+        request = prepare_roll_request("", bonus=3)
+        assert request is not None
+        self.assertEqual(request.dice.count, 1)
+        self.assertEqual(request.dice.sides, 20)
+        self.assertEqual(request.dice.flat_modifier, 3)
+
+    def test_avantage_option_on_skill(self) -> None:
+        request = prepare_roll_request("perception", avantage="disadvantage")
+        assert request is not None
+        self.assertFalse(request.advantage)
+        self.assertEqual(request.modifier_tokens, ["perception"])
 
 
 if __name__ == "__main__":

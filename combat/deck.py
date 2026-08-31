@@ -4,6 +4,7 @@ from typing import Any
 
 from combat.cards import (
     BUFF_BY_SLUG,
+    DEFAULT_SPELL_RANGE_SQUARES,
     DODGE_CARD_ID,
     SCHOOL_EMOJI,
     WEAPON_CARD_ID,
@@ -11,7 +12,10 @@ from combat.cards import (
     homebrew_card_id,
     is_healing_spell,
     parse_damage_roll,
+    parse_aoe_radius,
+    parse_range_squares,
     spell_card_id,
+    spell_requires_concentration,
     spell_damage_roll,
     spell_save_ability,
     spell_save_half,
@@ -53,6 +57,7 @@ def _weapon_card(
     ability: str | None,
     uses_proficiency: bool,
     damage_type_label: str | None = None,
+    range_squares: int = 1,
 ) -> CardSnapshot:
     return CardSnapshot(
         card_id=WEAPON_CARD_ID,
@@ -68,6 +73,7 @@ def _weapon_card(
         uses_proficiency=uses_proficiency,
         ability=ability,
         damage_type_label=damage_type_label,
+        range_squares=range_squares,
     )
 
 
@@ -131,6 +137,7 @@ def _dodge_card() -> CardSnapshot:
         card_type="dodge",
         ability="dex",
         buff="dodge",
+        range_squares=0,
     )
 
 
@@ -204,6 +211,11 @@ def _spell_card(sheet: CharacterSheet, spell: dict[str, Any]) -> CardSnapshot | 
         needs_target = True
         effect = desc[:120] + ("…" if len(desc) > 120 else "")
 
+    range_squares = parse_range_squares(spell.get("range"))
+    if range_squares is None:
+        range_squares = DEFAULT_SPELL_RANGE_SQUARES
+    aoe_radius = parse_aoe_radius(spell)
+    concentration = spell_requires_concentration(spell)
     level_label = "Cantrip" if level == 0 else f"Level {level}"
     return CardSnapshot(
         card_id=spell_card_id(slug),
@@ -226,6 +238,9 @@ def _spell_card(sheet: CharacterSheet, spell: dict[str, Any]) -> CardSnapshot | 
         save_ability=save_ability,
         save_half=save_half,
         inflict_condition=inflict_condition,
+        range_squares=range_squares,
+        aoe_radius=aoe_radius,
+        concentration=concentration,
     )
 
 
@@ -243,6 +258,7 @@ def _homebrew_card(name: str) -> CardSnapshot:
         dice_count=1,
         dice_sides=8,
         damage_type_label=force_label,
+        range_squares=DEFAULT_SPELL_RANGE_SQUARES,
     )
 
 
@@ -304,6 +320,7 @@ async def _player_weapon_card(sheet: CharacterSheet) -> CardSnapshot:
         dice = f"{dice}+{flat}"
     type_text = f" {type_label}" if type_label else ""
     name = str(weapon.get("name") or "Weapon")
+    range_squares = parse_range_squares(weapon.get("range")) or 1
     return _weapon_card(
         label=name,
         description=f"{name}: {dice} + {ability.upper()} + proficiency{type_text}.",
@@ -313,6 +330,7 @@ async def _player_weapon_card(sheet: CharacterSheet) -> CardSnapshot:
         ability=ability,
         uses_proficiency=True,
         damage_type_label=type_label,
+        range_squares=range_squares,
     )
 
 

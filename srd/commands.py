@@ -3,6 +3,7 @@ from discord.ext.commands.bot import Bot
 from discord.ext.commands.context import Context
 
 from bot.command_helpers import command_reply, delete_command
+from bot.help_text import command_help
 from bot.messaging import send_message
 from config import PREFIX
 from srd import fivetools
@@ -47,7 +48,12 @@ def setup_srd(bot: Bot) -> None:
     @bot.group(
         name="srd",
         invoke_without_command=True,
-        help=f"Look up D&D rules. `{PREFIX}srd spell fireball` · `{PREFIX}help srd`",
+        help=command_help(
+            "Cherche une règle 5etools (sort, monstre, objet…).",
+            f"`{PREFIX}srd <type> <nom>`",
+            f"`{PREFIX}srd spell fireball`",
+            f"Guide : `{PREFIX}help srd`",
+        ),
     )
     async def srd_group(ctx: Context) -> None:
         from bot.help_commands import send_srd_help
@@ -55,45 +61,45 @@ def setup_srd(bot: Bot) -> None:
         await send_srd_help(ctx)
 
     lookups = (
-        ("spell", (), fivetools.search_spell, spell_embed, "Look up a spell"),
+        ("spell", (), fivetools.search_spell, spell_embed, "Cherche un sort"),
         (
             "species",
             ("race",),
             fivetools.search_species,
             species_embed,
-            "Look up a species",
+            "Cherche une espèce",
         ),
-        ("class", (), fivetools.search_class, class_embed, "Look up a class"),
+        ("class", (), fivetools.search_class, class_embed, "Cherche une classe"),
         (
             "background",
             (),
             fivetools.search_background,
             background_embed,
-            "Look up a background",
+            "Cherche un historique",
         ),
-        ("feat", (), fivetools.search_feat, feat_embed, "Look up a feat"),
+        ("feat", (), fivetools.search_feat, feat_embed, "Cherche un don"),
         (
             "condition",
             ("cond",),
             fivetools.search_condition,
             condition_embed,
-            "Look up a condition",
+            "Cherche un état",
         ),
         (
             "monster",
             ("statblock", "creature"),
             fivetools.search_monster,
             monster_embed,
-            "Look up a monster",
+            "Cherche un monstre",
         ),
-        ("weapon", (), fivetools.search_weapon, weapon_embed, "Look up a weapon"),
-        ("armor", (), fivetools.search_armor, armor_embed, "Look up armor"),
+        ("weapon", (), fivetools.search_weapon, weapon_embed, "Cherche une arme"),
+        ("armor", (), fivetools.search_armor, armor_embed, "Cherche une armure"),
         (
             "item",
             ("gear",),
             fivetools.search_item,
             item_embed,
-            "Look up adventuring gear",
+            "Cherche un objet d’aventurier",
         ),
     )
 
@@ -102,7 +108,7 @@ def setup_srd(bot: Bot) -> None:
         @srd_group.command(
             name=name,
             aliases=list(aliases),
-            help=f"{title}. Usage: `{PREFIX}srd {name} <name>`",
+            help=command_help(f"{title}.", f"`{PREFIX}srd {name} <nom>`"),
         )
         async def lookup_cmd(
             ctx: Context,

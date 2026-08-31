@@ -1,10 +1,17 @@
 import unittest
+from unittest.mock import patch
 
 from combat.cards import DODGE_CARD_ID, WEAPON_CARD_ID, CardSnapshot, spell_card_id
+from combat.display import build_combat_embed, format_combat_log
+from combat.storage import CombatState, CombatantState
+from combat.text import classify_log_line
 from combat.view import (
     COMBAT_END_TURN_ID,
     COMBAT_HAND_ID,
+    COMBAT_MAP_ATTACK_ID,
+    COMBAT_MOVE_IDS,
     COMBAT_SELECT_ID,
+    COMBAT_SHEET_ID,
     PersistentCombatBoardView,
     build_hand_select_options,
     build_play_select_options,
@@ -59,10 +66,48 @@ class TestHandSelectOptions(unittest.TestCase):
             },
         )
         embed = build_combat_embed(state)
-        self.assertIn("🃏", embed.title)
-        self.assertIn("⚔️ Combatants", [field.name for field in embed.fields])
-        self.assertIn("❤️", embed.fields[0].value)
-        self.assertIn("**Hero**", embed.fields[0].value)
+        self.assertIn("⚔️", embed.title)
+        self.assertEqual([field.name for field in embed.fields], ["📜 Actions"])
+        self.assertNotIn("❤️", embed.fields[0].value)
+        self.assertTrue(embed.image.url.endswith("combat-map.png"))
+        with patch(
+            "combat.display.combat_board_url",
+            return_value="http://127.0.0.1:8765/combat/1/0",
+        ):
+            html = build_combat_embed(state)
+        self.assertIn("Ouvrir le plateau", html.description or "")
+        self.assertFalse(html.image.url)
+        ended = build_combat_embed(state, ended=True)
+        self.assertIn("terminé", ended.title)
+        self.assertEqual(ended.footer.text, "Combat terminé")
+        self.assertIn("navigateur", embed.footer.text)
+
+    def test_combat_log_adds_emoji(self) -> None:
+        state = CombatState(
+            guild_id=1,
+            channel_id=2,
+            turn_order=["hero"],
+            active_index=0,
+            combatants={
+                "hero": CombatantState(
+                    name="Hero",
+                    user_id=1,
+                    hp=10,
+                    max_hp=20,
+                    hand=[],
+                    deck=[],
+                )
+            },
+            log=[
+                "**Hero** se déplace en **C4** (4 cases restantes).",
+                "**Hero** attaque **Goblin** avec **Weapon** — **6** dégâts",
+            ],
+        )
+        rendered = format_combat_log(state)
+        self.assertIn("👟", rendered)
+        self.assertIn("⚔️", rendered)
+        self.assertEqual(classify_log_line(state.log[0]), ("move", "👟"))
+        self.assertEqual(classify_log_line(state.log[1]), ("attack", "⚔️"))
 
     def test_monster_hp_is_hidden_on_the_board(self) -> None:
         from combat.display import format_combatants
@@ -175,8 +220,9 @@ class TestHandSelectOptions(unittest.TestCase):
         )
         view = CombatBoardView(state)
         labels = [getattr(item, "label", None) for item in view.children]
-        self.assertIn("Spells ▶", labels)
-        self.assertIn("◀ Spells", labels)
+        self.assertIn("Fiche", labels)
+        self.assertNotIn("Sorts ▶", labels)
+        self.assertNotIn("Attaquer", labels)
 
     def test_dying_player_shows_death_saves(self) -> None:
         from combat.display import format_combatants
@@ -209,7 +255,7 @@ class TestHandSelectOptions(unittest.TestCase):
             },
         )
         board = format_combatants(state)
-        self.assertIn("dying 1S/2F", board)
+        self.assertIn("mourant 1R/2E", board)
         self.assertIn("❤️ **0/20**", board)
         self.assertIn("**Goblin**", board)
         self.assertIn("💀", board)
@@ -219,6 +265,85 @@ class TestHandSelectOptions(unittest.TestCase):
         view = PersistentCombatBoardView()
         custom_ids = [item.custom_id for item in view.children]
         self.assertEqual(
-            custom_ids, [COMBAT_SELECT_ID, COMBAT_END_TURN_ID, COMBAT_HAND_ID]
+            custom_ids,
+            [
+                COMBAT_SELECT_ID,
+                COMBAT_END_TURN_ID,
+                COMBAT_HAND_ID,
+                COMBAT_SHEET_ID,
+                COMBAT_MOVE_IDS["w"],
+                COMBAT_MOVE_IDS["n"],
+                COMBAT_MOVE_IDS["s"],
+                COMBAT_MOVE_IDS["e"],
+                COMBAT_MAP_ATTACK_ID,
+            ],
         )
         self.assertNotIn("0", COMBAT_SELECT_ID)
+
+    def test_preferred_sheet_uses_active_npc_and_strips_copies(self) -> None:
+        from combat.monster_sheet import (
+            display_monster_name,
+            npc_sheet_names,
+            preferred_sheet_name,
+        )
+        from combat.storage import CombatState, CombatantState
+
+        self.assertEqual(display_monster_name("Goblin 2"), "Goblin")
+
+        hero = CombatantState(
+            name="Hero", user_id=1, hp=10, max_hp=20, hand=[], deck=[]
+        )
+        goblin = CombatantState(
+            name="Goblin 2", user_id=None, hp=7, max_hp=7, hand=[], deck=[]
+        )
+        wolf = CombatantState(
+            name="Wolf", user_id=None, hp=11, max_hp=11, hand=[], deck=[]
+        )
+        mixed = CombatState(
+            guild_id=1,
+            channel_id=2,
+            turn_order=["Hero", "Goblin 2", "Wolf"],
+            active_index=1,
+            combatants={
+                "hero": hero,
+                "goblin 2": goblin,
+                "wolf": wolf,
+            },
+        )
+        self.assertEqual(npc_sheet_names(mixed), ["Goblin", "Wolf"])
+        self.assertEqual(preferred_sheet_name(mixed), "Goblin")
+
+        mixed.active_index = 0
+        self.assertIsNone(preferred_sheet_name(mixed))
+
+        only_goblin = CombatState(
+            guild_id=1,
+            channel_id=2,
+            turn_order=["Hero", "Goblin 2"],
+            active_index=0,
+            combatants={"hero": hero, "goblin 2": goblin},
+        )
+        self.assertEqual(preferred_sheet_name(only_goblin), "Goblin")
+
+    def test_board_view_includes_fiche_button(self) -> None:
+        from combat.storage import CombatState, CombatantState
+        from combat.view import CombatBoardView
+
+        state = CombatState(
+            guild_id=1,
+            channel_id=2,
+            turn_order=["hero"],
+            active_index=0,
+            combatants={
+                "hero": CombatantState(
+                    name="Hero",
+                    user_id=1,
+                    hp=10,
+                    max_hp=20,
+                    hand=[],
+                    deck=[],
+                )
+            },
+        )
+        custom_ids = [item.custom_id for item in CombatBoardView(state).children]
+        self.assertIn(COMBAT_SHEET_ID, custom_ids)

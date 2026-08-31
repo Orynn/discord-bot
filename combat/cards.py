@@ -8,6 +8,8 @@ MAX_LOG_LINES = 8
 WEAPON_CARD_ID = "srd:weapon"
 DODGE_CARD_ID = "srd:dodge"
 
+DEFAULT_SPELL_RANGE_SQUARES = 24
+RANGE_NUMBER = re.compile(r"(\d+)")
 DAMAGE_ROLL_PATTERN = re.compile(
     r"^(?:(\d+)d(\d+))?(?:\s*\+\s*(\d+))?$",
     re.IGNORECASE,
@@ -60,6 +62,9 @@ class CardSnapshot:
     save_ability: str | None = None
     save_half: bool = False
     inflict_condition: str | None = None
+    range_squares: int | None = None
+    aoe_radius: int | None = None
+    concentration: bool = False
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -107,8 +112,49 @@ def is_spellbook_card(card: CardSnapshot) -> bool:
     return card.card_type in {"spell", "homebrew"}
 
 
+def parse_range_squares(text: str | None) -> int | None:
+    if not text:
+        return None
+    raw = str(text).strip().lower()
+    if raw in {"—", "-", "n/a", ""}:
+        return None
+    if raw == "self" or raw.startswith("self"):
+        return 0
+    if raw in {"melee", "touch"} or raw.startswith("melee") or raw.startswith("touch"):
+        return 1
+    if raw in {"sight", "unlimited", "special"}:
+        return None
+    if "mile" in raw:
+        return None
+    match = RANGE_NUMBER.search(raw)
+    if match is None:
+        return None
+    return max(1, int(match.group(1)) // 5)
+
+
 def card_requires_target(card: CardSnapshot) -> bool:
     return card.needs_target or is_spellbook_card(card)
+
+
+def resolve_card_id(query: str, catalog: dict[str, CardSnapshot]) -> str | None:
+    normalized = query.strip().lower().replace(" ", "-")
+    aliases = {
+        "weapon": WEAPON_CARD_ID,
+        "attack": WEAPON_CARD_ID,
+        "strike": WEAPON_CARD_ID,
+        "dodge": DODGE_CARD_ID,
+    }
+    if normalized in aliases and aliases[normalized] in catalog:
+        return aliases[normalized]
+    if normalized in catalog:
+        return normalized
+    for card_id, card in catalog.items():
+        label_key = card.label.lower().replace(" ", "-")
+        if normalized == label_key or normalized in label_key:
+            return card_id
+        if card.spell_slug and normalized in card.spell_slug:
+            return card_id
+    return None
 
 
 AUTO_HIT_SLUGS = frozenset({"magic-missile"})
@@ -205,6 +251,46 @@ BUFF_BY_SLUG: dict[str, str] = {
     "bless": "bless",
 }
 
+CONCENTRATION_SLUGS = frozenset(
+    {
+        "bless",
+        "hex",
+        "hunter-s-mark",
+        "hold-person",
+        "hold-monster",
+        "spirit-guardians",
+        "moonbeam",
+        "faerie-fire",
+        "web",
+        "hypnotic-pattern",
+        "cloudkill",
+        "fly",
+        "haste",
+        "slow",
+        "banishment",
+        "greater-invisibility",
+    }
+)
+
+AOE_RADIUS_BY_SLUG: dict[str, int] = {
+    "fireball": 4,
+    "shatter": 2,
+    "thunderwave": 3,
+    "burning-hands": 3,
+    "ice-storm": 4,
+    "flame-strike": 2,
+    "spirit-guardians": 3,
+    "moonbeam": 1,
+    "cloudkill": 4,
+    "hypnotic-pattern": 6,
+    "sleep": 4,
+}
+
+_RADIUS_FEET = re.compile(
+    r"(\d+)[-\s]*foot[-\s]*radius|rayon de\s*(\d+)",
+    re.IGNORECASE,
+)
+
 _SAVE_ABILITIES: dict[str, str] = {
     "str": "str",
     "strength": "str",
@@ -249,6 +335,38 @@ def is_healing_spell(*, damage_types: list[str] | None, desc: str) -> bool:
     return any(
         word in lowered for word in ("hit point", "regain", "healing", "restore")
     )
+
+
+def parse_aoe_radius(spell: dict) -> int | None:
+    slug = str(spell.get("slug") or "").lower()
+    if slug in AOE_RADIUS_BY_SLUG:
+        return AOE_RADIUS_BY_SLUG[slug]
+    texts = [str(spell.get("range") or ""), str(spell.get("desc") or "")]
+    entries = spell.get("entries")
+    if isinstance(entries, list):
+        texts.extend(str(part) for part in entries if isinstance(part, str))
+    elif isinstance(entries, str):
+        texts.append(entries)
+    for text in texts:
+        match = _RADIUS_FEET.search(text)
+        if match:
+            feet = int(match.group(1) or match.group(2))
+            return max(1, feet // 5)
+    return None
+
+
+def spell_requires_concentration(spell: dict) -> bool:
+    slug = str(spell.get("slug") or "").lower()
+    if slug in CONCENTRATION_SLUGS:
+        return True
+    raw = spell.get("duration")
+    if isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, dict) and item.get("concentration"):
+                return True
+            if "concentration" in str(item).lower():
+                return True
+    return "concentration" in str(raw or "").lower()
 
 
 def spellcasting_ability(char_class: str) -> str | None:

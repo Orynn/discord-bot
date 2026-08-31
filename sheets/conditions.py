@@ -22,6 +22,9 @@ _CONDITION_ALIASES: dict[str, str] = {
     "etourdi": "stunned",
     "incapacitated": "incapacitated",
     "incapacite": "incapacitated",
+    "grappled": "grappled",
+    "agrippe": "grappled",
+    "agrippé": "grappled",
 }
 
 CHECK_DISADVANTAGE = frozenset({"poisoned", "frightened", "exhaustion"})

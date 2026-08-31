@@ -3,6 +3,7 @@ from discord.ext.commands import Group
 from discord.ext.commands.context import Context
 
 from bot.command_helpers import command_reply, delete_command
+from bot.help_text import command_help
 from bot.messaging import send_message
 from config import PREFIX
 from sheets.context import get_sheet_for_owner, save_owner_sheet, target_label
@@ -21,7 +22,10 @@ def register_spell_commands(sheet_group: Group) -> None:
         name="spells",
         invoke_without_command=True,
         fallback="list",
-        help="Manage known spells on a sheet (not slot tracking).",
+        help=command_help(
+            "Sorts connus sur la fiche (pas le suivi des emplacements).",
+            f"`{PREFIX}sheet spells`",
+        ),
     )
     async def sheet_spells_group(
         ctx: Context, member: discord.Member | None = None
@@ -63,7 +67,10 @@ def register_spell_commands(sheet_group: Group) -> None:
 
     @sheet_spells_group.command(
         name="add",
-        help=f"Add a spell to a sheet. Usage: `{PREFIX}sheet spells add [@player] <name>`",
+        help=command_help(
+            "Ajoute un sort à la fiche.",
+            f"`{PREFIX}sheet spells add [@joueur] <nom>`",
+        ),
     )
     async def sheet_spells_add(
         ctx: Context,
@@ -107,7 +114,10 @@ def register_spell_commands(sheet_group: Group) -> None:
 
     @sheet_spells_group.command(
         name="remove",
-        help=f"Remove a spell from a sheet. Usage: `{PREFIX}sheet spells remove [@player] <name>`",
+        help=command_help(
+            "Retire un sort de la fiche.",
+            f"`{PREFIX}sheet spells remove [@joueur] <nom>`",
+        ),
     )
     async def sheet_spells_remove(
         ctx: Context,
@@ -159,7 +169,10 @@ def register_spell_commands(sheet_group: Group) -> None:
 
     @sheet_spells_group.command(
         name="show",
-        help=f"Show a spell from the sheet or SRD. Usage: `{PREFIX}sheet spells show [@player] <name>`",
+        help=command_help(
+            "Affiche un sort de la fiche ou du SRD.",
+            f"`{PREFIX}sheet spells show [@joueur] <nom>`",
+        ),
     )
     async def sheet_spells_show(
         ctx: Context,

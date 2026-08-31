@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Arkann · Éditeur de cartes</title>
+  <style>
+    :root {
+      --bg: #101218;
+      --panel: #1c2028;
+      --panel-2: #161a20;
+      --ink: #e6e8ee;
+      --muted: #8b919c;
+      --line: #2e3440;
+      --accent: #e8c547;
+      --accent-dim: rgba(232, 197, 71, 0.16);
+      --pc: #4a8fd4;
+      --npc: #c4453c;
+      --ok: #6ec8a0;
+      --radius: 12px;
+      --shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      min-height: 100%;
+      background:
+        radial-gradient(1200px 500px at 10% -10%, rgba(232, 197, 71, 0.07), transparent 55%),
+        radial-gradient(900px 420px at 100% 0%, rgba(74, 143, 212, 0.08), transparent 50%),
+        var(--bg);
+      color: var(--ink);
+      font: 14px/1.45 "Segoe UI", system-ui, sans-serif;
+    }
+    body {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-height: 100vh;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 22px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(16, 18, 24, 0.72);
+      backdrop-filter: blur(8px);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .mark {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: grid;
+      place-items: center;
+      background: var(--accent-dim);
+      border: 1px solid rgba(232, 197, 71, 0.35);
+      font-size: 18px;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+    header p {
+      margin: 2px 0 0;
+      color: var(--muted);
+    }
+    main {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr) 320px;
+      gap: 18px;
+      padding: 18px 22px 22px;
+    }
+    @media (max-width: 1100px) {
+      main { grid-template-columns: 1fr; }
+    }
+    section {
+      background: linear-gradient(180deg, var(--panel), var(--panel-2));
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px 16px 18px;
+      box-shadow: var(--shadow);
+    }
+    h2 {
+      margin: 0 0 12px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    h2.spaced { margin-top: 20px; }
+    label {
+      display: block;
+      margin: 10px 0 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    input, select, textarea, button {
+      font: inherit;
+      color: var(--ink);
+    }
+    input[type="text"], input[type="number"], select, textarea {
+      width: 100%;
+      background: #10141a;
+      border: 1px solid var(--line);
+      padding: 7px 8px;
+      border-radius: 8px;
+    }
+    input:focus, select:focus, textarea:focus, button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .tools {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 10px 0 4px;
+    }
+    button {
+      background: #14181f;
+      border: 1px solid var(--line);
+      padding: 6px 10px;
+      cursor: pointer;
+      border-radius: 8px;
+    }
+    button:hover { border-color: #6a7280; }
+    button.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-dim);
+    }
+    button.primary {
+      border-color: var(--accent);
+      color: #1a1608;
+      background: var(--accent);
+      font-weight: 700;
+    }
+    .hint { color: var(--muted); font-size: 12px; margin-top: 10px; }
+    .warn { color: #e8a0a0; font-size: 12px; min-height: 1.3em; margin-top: 8px; }
+    .board-wrap { overflow: auto; }
+    .board {
+      display: grid;
+      gap: 0;
+      width: max-content;
+      user-select: none;
+      touch-action: none;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+    }
+    .cell, .axis {
+      width: var(--cell, 36px);
+      height: var(--cell, 36px);
+      display: grid;
+      place-items: center;
+      font-size: 11px;
+    }
+    .axis { color: var(--muted); }
+    .tile {
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 0;
+      padding: 0;
+      cursor: crosshair;
+    }
+    .tile:hover { outline: 1px solid var(--accent); outline-offset: -1px; }
+    .tile.pc { box-shadow: inset 2px 0 0 var(--pc); }
+    .tile.npc { box-shadow: inset -2px 0 0 var(--npc); }
+    .tile.pc.npc { box-shadow: inset 2px 0 0 var(--pc), inset -2px 0 0 var(--npc); }
+    .legend {
+      display: flex;
+      gap: 14px;
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .swatch {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      margin-right: 5px;
+      vertical-align: -1px;
+      border: 1px solid var(--line);
+    }
+    #preview {
+      min-height: 280px;
+      height: calc(100vh - 220px);
+      resize: vertical;
+      font: 12px/1.35 ui-monospace, "DejaVu Sans Mono", monospace;
+    }
+    .actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+    .status { color: var(--ok); font-size: 12px; min-height: 1.3em; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="mark" aria-hidden="true">🗺️</span>
+      <div>
+        <h1>Éditeur de cartes</h1>
+        <p>Peins le plateau, puis importe le <code>.map</code> avec <code>;combat map import</code>.</p>
+      </div>
+    </div>
+  </header>
+  <main>
+    <section>
+      <h2>Carte</h2>
+      <label for="map-id">Identifiant</label>
+      <input id="map-id" type="text" value="crypt" maxlength="32" autocomplete="off">
+      <label for="map-label">Nom</label>
+      <input id="map-label" type="text" value="Crypte" maxlength="80" autocomplete="off">
+      <div class="row">
+        <div>
+          <label for="map-width">Largeur</label>
+          <input id="map-width" type="number" min="4" max="16" value="8">
+        </div>
+        <div>
+          <label for="map-height">Hauteur</label>
+          <input id="map-height" type="number" min="4" max="16" value="8">
+        </div>
+      </div>
+      <label for="map-theme">Thème</label>
+      <select id="map-theme">
+        <option value="dungeon" selected>Donjon</option>
+        <option value="arena">Arène</option>
+        <option value="tavern">Taverne</option>
+        <option value="camp">Camp</option>
+      </select>
+      <div class="row">
+        <div>
+          <label for="pc-col">Colonne PJ</label>
+          <select id="pc-col"></select>
+        </div>
+        <div>
+          <label for="npc-col">Colonne PNJ</label>
+          <select id="npc-col"></select>
+        </div>
+      </div>
+      <h2 class="spaced">Outil</h2>
+      <div class="tools">
+        <button type="button" id="tool-wall" class="active">Mur</button>
+        <button type="button" id="tool-floor">Sol</button>
+        <button type="button" id="tool-fill">Remplir</button>
+      </div>
+      <div class="tools">
+        <button type="button" id="btn-undo">Annuler</button>
+        <button type="button" id="btn-clear">Vider</button>
+      </div>
+      <h2 class="spaced">Modèles</h2>
+      <div class="tools">
+        <button type="button" data-template="arena">Arène</button>
+        <button type="button" data-template="tavern">Taverne</button>
+        <button type="button" data-template="dungeon">Donjon</button>
+        <button type="button" data-template="camp">Camp</button>
+      </div>
+      <p class="hint">Clic + glisser pour peindre. Clic droit = l’autre outil. Cellule : <strong id="hover-cell">—</strong></p>
+      <p class="warn" id="id-error"></p>
+    </section>
+
+    <section class="board-wrap">
+      <h2>Plateau</h2>
+      <div id="board" class="board"></div>
+      <div class="legend">
+        <span><i class="swatch" style="background:#3a7ac4"></i>PJ</span>
+        <span><i class="swatch" style="background:#b0342d"></i>PNJ</span>
+        <span id="size-label">8×8</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>Fichier .map</h2>
+      <div class="actions">
+        <button type="button" class="primary" id="btn-copy">Copier</button>
+        <button type="button" id="btn-download">Télécharger</button>
+        <button type="button" id="btn-load">Ouvrir…</button>
+      </div>
+      <input id="file-input" type="file" accept=".map,.json,.txt,text/plain" hidden>
+      <textarea id="preview" spellcheck="false"></textarea>
+      <p class="status" id="status"></p>
+      <p class="hint">Colle un export Arkann ici, ou joins le fichier dans Discord.</p>
+    </section>
+  </main>
+  <script>
+    const COLUMNS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const MIN = 4;
+    const MAX = 16;
+    const RESERVED = new Set([
+      "new", "import", "export", "delete", "list", "save", "wall",
+      "show", "remove", "help", "editor",
+    ]);
+    const THEMES = {
+      arena: { floorA: [60, 66, 80], floorB: [32, 36, 44], wall: [78, 64, 52] },
+      tavern: { floorA: [92, 68, 50], floorB: [50, 36, 26], wall: [92, 66, 46] },
+      dungeon: { floorA: [56, 60, 68], floorB: [28, 32, 36], wall: [62, 60, 66] },
+      camp: { floorA: [62, 80, 52], floorB: [34, 46, 30], wall: [70, 60, 44] },
+    };
+    const TEMPLATES = {
+      arena: { label: "Arène", theme: "arena", blocked: [], pc: 1, npc: 6 },
+      tavern: {
+        label: "Taverne", theme: "tavern", pc: 1, npc: 6,
+        blocked: [[0,2],[0,3],[0,4],[3,2],[4,2],[3,5],[4,5]],
+      },
+      dungeon: {
+        label: "Donjon", theme: "dungeon", pc: 1, npc: 6,
+        blocked: [[2,2],[2,3],[2,4],[3,4],[4,5],[5,3],[5,4],[5,5]],
+      },
+      camp: {
+        label: "Camp", theme: "camp", pc: 1, npc: 6,
+        blocked: [[1,1],[3,3],[4,3],[3,4],[4,4],[6,6]],
+      },
+    };
+
+    const state = {
+      width: 8,
+      height: 8,
+      walls: new Set(),
+      tool: "wall",
+      painting: false,
+      paintValue: true,
+      history: [],
+    };
+
+    const els = {
+      id: document.getElementById("map-id"),
+      label: document.getElementById("map-label"),
+      width: document.getElementById("map-width"),
+      height: document.getElementById("map-height"),
+      theme: document.getElementById("map-theme"),
+      pc: document.getElementById("pc-col"),
+      npc: document.getElementById("npc-col"),
+      board: document.getElementById("board"),
+      preview: document.getElementById("preview"),
+      hover: document.getElementById("hover-cell"),
+      size: document.getElementById("size-label"),
+      error: document.getElementById("id-error"),
+      status: document.getElementById("status"),
+      file: document.getElementById("file-input"),
+    };
+
+    function key(x, y) { return x + "," + y; }
+    function rgb(c) { return "rgb(" + c.join(",") + ")"; }
+    function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
+    function slugify(value) {
+      return value.trim().toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+    }
+    function validateId(raw) {
+      const id = slugify(raw);
+      if (!/^[a-z][a-z0-9-]{0,31}$/.test(id)) {
+        return "Identifiant invalide. Exemple : crypt ou salle-du-trone.";
+      }
+      if (RESERVED.has(id)) return "`" + id + "` est réservé.";
+      return "";
+    }
+
+    function snapshot() {
+      return {
+        width: state.width,
+        height: state.height,
+        walls: [...state.walls],
+        id: els.id.value,
+        label: els.label.value,
+        theme: els.theme.value,
+        pc: els.pc.value,
+        npc: els.npc.value,
+      };
+    }
+
+    function pushHistory() {
+      state.history.push(snapshot());
+      if (state.history.length > 80) state.history.shift();
+    }
+
+    function restore(entry) {
+      state.width = entry.width;
+      state.height = entry.height;
+      state.walls = new Set(entry.walls);
+      els.id.value = entry.id;
+      els.label.value = entry.label;
+      els.theme.value = entry.theme;
+      els.width.value = String(entry.width);
+      els.height.value = String(entry.height);
+      fillColumns();
+      els.pc.value = entry.pc;
+      els.npc.value = entry.npc;
+      render();
+    }
+
+    function fillColumns() {
+      const currentPc = els.pc.value;
+      const currentNpc = els.npc.value;
+      els.pc.innerHTML = "";
+      els.npc.innerHTML = "";
+      for (let i = 0; i < state.width; i += 1) {
+        const letter = COLUMNS[i];
+        els.pc.append(new Option(letter, letter));
+        els.npc.append(new Option(letter, letter));
+      }
+      els.pc.value = COLUMNS.includes(currentPc) && COLUMNS.indexOf(currentPc) < state.width
+        ? currentPc : "B";
+      const fallbackNpc = COLUMNS[Math.max(1, state.width - 2)];
+      els.npc.value = COLUMNS.includes(currentNpc) && COLUMNS.indexOf(currentNpc) < state.width
+        ? currentNpc : fallbackNpc;
+    }
+
+    function formatMap() {
+      const id = slugify(els.id.value) || "crypt";
+      const label = (els.label.value.trim() || id).slice(0, 80);
+      const theme = els.theme.value;
+      const lines = [
+        "# id: " + id,
+        "# label: " + label,
+        "# theme: " + theme,
+        "# size: " + state.width + "x" + state.height,
+        "# pc: " + els.pc.value,
+        "# npc: " + els.npc.value,
+      ];
+      for (let y = 0; y < state.height; y += 1) {
+        let row = "";
+        for (let x = 0; x < state.width; x += 1) {
+          row += state.walls.has(key(x, y)) ? "#" : ".";
+        }
+        lines.push(row);
+      }
+      return lines.join("\n") + "\n";
+    }
+
+    function applySize(nextW, nextH) {
+      state.width = clamp(nextW, MIN, MAX);
+      state.height = clamp(nextH, MIN, MAX);
+      const kept = new Set();
+      for (const cell of state.walls) {
+        const [x, y] = cell.split(",").map(Number);
+        if (x < state.width && y < state.height) kept.add(cell);
+      }
+      state.walls = kept;
+      els.width.value = String(state.width);
+      els.height.value = String(state.height);
+      fillColumns();
+    }
+
+    function setWall(x, y, value) {
+      const id = key(x, y);
+      if (value) state.walls.add(id);
+      else state.walls.delete(id);
+    }
+
+    function flood(sx, sy, toWall) {
+      const start = state.walls.has(key(sx, sy));
+      if (start === toWall) return;
+      const stack = [[sx, sy]];
+      const seen = new Set();
+      while (stack.length) {
+        const [x, y] = stack.pop();
+        const id = key(x, y);
+        if (seen.has(id)) continue;
+        if (x < 0 || y < 0 || x >= state.width || y >= state.height) continue;
+        if (state.walls.has(id) !== start) continue;
+        seen.add(id);
+        setWall(x, y, toWall);
+        stack.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]);
+      }
+    }
+
+    function paintAt(x, y) {
+      if (state.tool === "fill") {
+        flood(x, y, state.paintValue);
+        return;
+      }
+      setWall(x, y, state.paintValue);
+    }
+
+    function renderBoard() {
+      const theme = THEMES[els.theme.value];
+      const cell = state.width > 12 || state.height > 12 ? 28 : 36;
+      els.board.style.setProperty("--cell", cell + "px");
+      els.board.style.gridTemplateColumns = "repeat(" + (state.width + 1) + ", " + cell + "px)";
+      els.board.replaceChildren();
+      const corner = document.createElement("div");
+      corner.className = "axis";
+      els.board.append(corner);
+      for (let x = 0; x < state.width; x += 1) {
+        const head = document.createElement("div");
+        head.className = "axis";
+        head.textContent = COLUMNS[x];
+        els.board.append(head);
+      }
+      const pc = COLUMNS.indexOf(els.pc.value);
+      const npc = COLUMNS.indexOf(els.npc.value);
+      for (let y = 0; y < state.height; y += 1) {
+        const rowHead = document.createElement("div");
+        rowHead.className = "axis";
+        rowHead.textContent = String(y + 1);
+        els.board.append(rowHead);
+        for (let x = 0; x < state.width; x += 1) {
+          const tile = document.createElement("button");
+          tile.type = "button";
+          tile.className = "cell tile";
+          if (x === pc) tile.classList.add("pc");
+          if (x === npc) tile.classList.add("npc");
+          const wall = state.walls.has(key(x, y));
+          tile.style.background = wall
+            ? rgb(theme.wall)
+            : rgb((x + y) % 2 ? theme.floorB : theme.floorA);
+          tile.dataset.x = String(x);
+          tile.dataset.y = String(y);
+          tile.title = COLUMNS[x] + (y + 1);
+          els.board.append(tile);
+        }
+      }
+    }
+
+    function render() {
+      els.error.textContent = validateId(els.id.value);
+      els.size.textContent = state.width + "×" + state.height;
+      const preview = formatMap();
+      if (document.activeElement !== els.preview) els.preview.value = preview;
+      renderBoard();
+    }
+
+    function cellFromEvent(event) {
+      const tile = event.target.closest(".tile");
+      if (!tile) return null;
+      return { x: Number(tile.dataset.x), y: Number(tile.dataset.y) };
+    }
+
+    function parseSource(text) {
+      const cleaned = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+      if (cleaned.startsWith("{")) {
+        const data = JSON.parse(cleaned);
+        const width = clamp(Number(data.width) || 8, MIN, MAX);
+        const height = clamp(Number(data.height) || 8, MIN, MAX);
+        const walls = new Set();
+        if (Array.isArray(data.grid)) {
+          data.grid.forEach((row, y) => {
+            [...String(row)].forEach((ch, x) => {
+              if ("#XxWw1".includes(ch) && x < width && y < height) walls.add(key(x, y));
+            });
+          });
+        } else if (Array.isArray(data.blocked)) {
+          data.blocked.forEach((cell) => {
+            if (Array.isArray(cell) && cell.length >= 2) walls.add(key(cell[0], cell[1]));
+          });
+        }
+        return {
+          id: data.id || data.map_id || "custom",
+          label: data.label || data.name || "",
+          theme: THEMES[data.theme] ? data.theme : "arena",
+          width, height, walls,
+          pc: String(data.pc || data.pc_column || "B"),
+          npc: String(data.npc || data.npc_column || "G"),
+        };
+      }
+      const headers = {};
+      const rows = [];
+      cleaned.split("\n").forEach((line) => {
+        const stripped = line.trim();
+        const match = stripped.match(/^#\s*(id|label|name|theme|pc|npc|size)\s*[:=]\s*(.+?)\s*$/i);
+        if (match) {
+          headers[match[1].toLowerCase()] = match[2].trim();
+          return;
+        }
+        if (/^[.#XxWw01_ ]{3,}$/.test(stripped)) rows.push(stripped.replace(/ /g, ""));
+      });
+      let width = rows.reduce((max, row) => Math.max(max, row.length), 0);
+      let height = rows.length;
+      const size = (headers.size || "").match(/^(\d+)\s*[x×]\s*(\d+)$/i);
+      if (size) {
+        width = Number(size[1]);
+        height = Number(size[2]);
+      }
+      width = clamp(width || 8, MIN, MAX);
+      height = clamp(height || 8, MIN, MAX);
+      const walls = new Set();
+      rows.slice(0, height).forEach((row, y) => {
+        [...row.padEnd(width, ".")].slice(0, width).forEach((ch, x) => {
+          if ("#XxWw1".includes(ch)) walls.add(key(x, y));
+        });
+      });
+      return {
+        id: headers.id || "custom",
+        label: headers.label || headers.name || "",
+        theme: THEMES[headers.theme] ? headers.theme : "dungeon",
+        width, height, walls,
+        pc: headers.pc || "B",
+        npc: headers.npc || "G",
+      };
+    }
+
+    function loadParsed(parsed) {
+      pushHistory();
+      els.id.value = parsed.id;
+      els.label.value = parsed.label || parsed.id;
+      els.theme.value = parsed.theme;
+      state.walls = parsed.walls;
+      applySize(parsed.width, parsed.height);
+      if (/^[A-Z]$/.test(parsed.pc) && COLUMNS.indexOf(parsed.pc) < state.width) {
+        els.pc.value = parsed.pc;
+      }
+      if (/^[A-Z]$/.test(parsed.npc) && COLUMNS.indexOf(parsed.npc) < state.width) {
+        els.npc.value = parsed.npc;
+      }
+      render();
+    }
+
+    function loadTemplate(name) {
+      const template = TEMPLATES[name];
+      loadParsed({
+        id: name === "arena" ? "crypt" : name,
+        label: template.label,
+        theme: template.theme,
+        width: 8,
+        height: 8,
+        walls: new Set(template.blocked.map(([x, y]) => key(x, y))),
+        pc: COLUMNS[template.pc],
+        npc: COLUMNS[template.npc],
+      });
+    }
+
+    function setTool(tool) {
+      state.tool = tool;
+      document.getElementById("tool-wall").classList.toggle("active", tool === "wall");
+      document.getElementById("tool-floor").classList.toggle("active", tool === "floor");
+      document.getElementById("tool-fill").classList.toggle("active", tool === "fill");
+    }
+
+    function flash(message) {
+      els.status.textContent = message;
+      window.setTimeout(() => {
+        if (els.status.textContent === message) els.status.textContent = "";
+      }, 1800);
+    }
+
+    els.board.addEventListener("pointerdown", (event) => {
+      const cell = cellFromEvent(event);
+      if (!cell) return;
+      event.preventDefault();
+      pushHistory();
+      state.painting = true;
+      state.paintValue = state.tool !== "floor";
+      if (event.button === 2) state.paintValue = !state.paintValue;
+      paintAt(cell.x, cell.y);
+      render();
+      els.board.setPointerCapture(event.pointerId);
+    });
+    els.board.addEventListener("pointermove", (event) => {
+      const cell = cellFromEvent(event);
+      els.hover.textContent = cell ? COLUMNS[cell.x] + (cell.y + 1) : "—";
+      if (!state.painting || !cell || state.tool === "fill") return;
+      paintAt(cell.x, cell.y);
+      render();
+    });
+    els.board.addEventListener("pointerup", () => { state.painting = false; });
+    els.board.addEventListener("pointerleave", () => { els.hover.textContent = "—"; });
+    els.board.addEventListener("contextmenu", (event) => event.preventDefault());
+
+    ["map-id", "map-label", "map-theme", "pc-col", "npc-col"].forEach((id) => {
+      document.getElementById(id).addEventListener("input", render);
+      document.getElementById(id).addEventListener("change", render);
+    });
+    els.width.addEventListener("change", () => {
+      pushHistory();
+      applySize(Number(els.width.value), state.height);
+      render();
+    });
+    els.height.addEventListener("change", () => {
+      pushHistory();
+      applySize(state.width, Number(els.height.value));
+      render();
+    });
+    els.preview.addEventListener("change", () => {
+      try {
+        loadParsed(parseSource(els.preview.value));
+        flash("Carte chargée.");
+      } catch (error) {
+        els.error.textContent = error.message || "Import invalide.";
+      }
+    });
+
+    document.getElementById("tool-wall").onclick = () => setTool("wall");
+    document.getElementById("tool-floor").onclick = () => setTool("floor");
+    document.getElementById("tool-fill").onclick = () => setTool("fill");
+    document.getElementById("btn-undo").onclick = () => {
+      const entry = state.history.pop();
+      if (entry) restore(entry);
+    };
+    document.getElementById("btn-clear").onclick = () => {
+      pushHistory();
+      state.walls.clear();
+      render();
+    };
+    document.querySelectorAll("[data-template]").forEach((button) => {
+      button.onclick = () => loadTemplate(button.dataset.template);
+    });
+    document.getElementById("btn-copy").onclick = async () => {
+      els.preview.value = formatMap();
+      try {
+        await navigator.clipboard.writeText(els.preview.value);
+        flash("Copié.");
+      } catch {
+        els.preview.select();
+        flash("Sélectionne et copie (Ctrl+C).");
+      }
+    };
+    document.getElementById("btn-download").onclick = () => {
+      const text = formatMap();
+      const id = slugify(els.id.value) || "carte";
+      const blob = new Blob([text], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = id + ".map";
+      link.click();
+      URL.revokeObjectURL(url);
+      flash("Fichier " + id + ".map prêt.");
+    };
+    document.getElementById("btn-load").onclick = () => els.file.click();
+    els.file.addEventListener("change", async () => {
+      const file = els.file.files && els.file.files[0];
+      if (!file) return;
+      try {
+        loadParsed(parseSource(await file.text()));
+        flash("Fichier ouvert.");
+      } catch (error) {
+        els.error.textContent = error.message || "Fichier invalide.";
+      }
+      els.file.value = "";
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.target.matches("input, textarea, select")) return;
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        const entry = state.history.pop();
+        if (entry) restore(entry);
+      } else if (event.key.toLowerCase() === "w") setTool("wall");
+      else if (event.key.toLowerCase() === "s") setTool("floor");
+      else if (event.key.toLowerCase() === "f") setTool("fill");
+    });
+
+    fillColumns();
+    els.pc.value = "B";
+    els.npc.value = "G";
+    render();
+
+    if (location.hash === "#test") {
+      applySize(12, 10);
+      els.id.value = "hall";
+      els.label.value = "Grande salle";
+      els.theme.value = "dungeon";
+      fillColumns();
+      els.pc.value = "B";
+      els.npc.value = "K";
+      setWall(11, 9, true);
+      render();
+      const text = formatMap();
+      const ok = (
+        text.includes("# size: 12x10")
+        && text.includes("# npc: K")
+        && text.includes("...........#")
+        && !validateId(els.id.value)
+      );
+      document.title = ok ? "MAP-EDITOR-PASS" : "MAP-EDITOR-FAIL";
+      document.body.dataset.test = ok ? "pass" : "fail";
+    }
+  </script>
+</body>
+</html>

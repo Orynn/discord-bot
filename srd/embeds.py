@@ -572,4 +572,12 @@ def monster_embed(monster: dict) -> discord.Embed:
             add_chunked_field(embed, field_name, _monster_field(text))
 
     embed.set_footer(text=monster.get("document__title", "5etools"))
+    image_url = str(monster.get("image_url") or "")
+    token_url = str(monster.get("token_url") or "")
+    if image_url:
+        embed.set_image(url=image_url)
+        if token_url:
+            embed.set_thumbnail(url=token_url)
+    elif token_url:
+        embed.set_image(url=token_url)
     return embed

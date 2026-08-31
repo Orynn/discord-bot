@@ -6,6 +6,22 @@ from combat.cards import CardSnapshot
 from data.db import db_connection
 
 
+def _blocked_cells(value: object) -> list[list[int]]:
+    if not isinstance(value, list):
+        return []
+    cells: list[list[int]] = []
+    for item in value:
+        if isinstance(item, (list, tuple)) and len(item) >= 2:
+            cells.append([int(item[0]), int(item[1])])
+    return cells
+
+
+def _optional_int(value: object) -> int | None:
+    if value is None or value == "":
+        return None
+    return int(value)
+
+
 @dataclass
 class CombatantState:
     name: str
@@ -23,6 +39,13 @@ class CombatantState:
     death_save_successes: int = 0
     death_save_failures: int = 0
     conditions: list[str] = field(default_factory=list)
+    x: int | None = None
+    y: int | None = None
+    speed: int = 30
+    moved: int = 0
+    acted: bool = False
+    concentrating: str = ""
+    attacks: int = 1
 
     def to_dict(self) -> dict:
         return {
@@ -43,6 +66,13 @@ class CombatantState:
             "death_save_successes": self.death_save_successes,
             "death_save_failures": self.death_save_failures,
             "conditions": self.conditions,
+            "x": self.x,
+            "y": self.y,
+            "speed": self.speed,
+            "moved": self.moved,
+            "acted": self.acted,
+            "concentrating": self.concentrating,
+            "attacks": self.attacks,
         }
 
     @classmethod
@@ -67,6 +97,13 @@ class CombatantState:
             death_save_successes=int(data.get("death_save_successes", 0)),
             death_save_failures=int(data.get("death_save_failures", 0)),
             conditions=list(data.get("conditions", [])),
+            x=_optional_int(data.get("x")),
+            y=_optional_int(data.get("y")),
+            speed=int(data.get("speed", 30)),
+            moved=int(data.get("moved", 0)),
+            acted=bool(data.get("acted", False)),
+            concentrating=str(data.get("concentrating") or ""),
+            attacks=max(1, int(data.get("attacks") or 1)),
         )
 
 
@@ -79,6 +116,11 @@ class CombatState:
     combatants: dict[str, CombatantState]
     log: list[str] = field(default_factory=list)
     scope_id: int = 0
+    map_id: str = "arena"
+    map_width: int = 8
+    map_height: int = 8
+    blocked: list[list[int]] = field(default_factory=list)
+    board_message_id: int | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -91,6 +133,11 @@ class CombatState:
                 key: combatant.to_dict() for key, combatant in self.combatants.items()
             },
             "log": self.log,
+            "map_id": self.map_id,
+            "map_width": self.map_width,
+            "map_height": self.map_height,
+            "blocked": self.blocked,
+            "board_message_id": self.board_message_id,
         }
 
     @classmethod
@@ -107,7 +154,16 @@ class CombatState:
             active_index=int(data.get("active_index", 0)),
             combatants=combatants,
             log=list(data.get("log", [])),
+            map_id=str(data.get("map_id") or "arena"),
+            map_width=int(data.get("map_width") or 8),
+            map_height=int(data.get("map_height") or 8),
+            blocked=_blocked_cells(data.get("blocked")),
+            board_message_id=_optional_int(data.get("board_message_id")),
         )
+
+    @property
+    def blocked_set(self) -> set[tuple[int, int]]:
+        return {(int(cell[0]), int(cell[1])) for cell in self.blocked if len(cell) >= 2}
 
     @property
     def active_name(self) -> str | None:
@@ -160,6 +216,24 @@ def save_combat(state: CombatState) -> None:
             """,
             (str(state.guild_id), str(state.scope_id), payload),
         )
+
+
+async def set_board_message(
+    *,
+    guild_id: int,
+    scope_id: int,
+    message_id: int | None,
+    channel_id: int | None = None,
+) -> None:
+    """Update only the Discord board pointer. Reloads under the combat lock."""
+    async with lock_for(guild_id=guild_id, scope_id=scope_id):
+        state = get_combat(guild_id=guild_id, scope_id=scope_id)
+        if state is None:
+            return
+        state.board_message_id = message_id
+        if channel_id is not None:
+            state.channel_id = channel_id
+        save_combat(state)
 
 
 def clear_combat(*, guild_id: int, scope_id: int | None = None) -> None:

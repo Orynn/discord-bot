@@ -5,6 +5,7 @@ from discord.ext.commands.bot import Bot
 from discord.ext.commands.context import Context
 
 from bot.command_helpers import command_reply, delete_command
+from bot.help_text import command_help
 from bot.messaging import send_message
 from config import PREFIX
 from sheets.context import resolve_guild_id
@@ -43,7 +44,10 @@ def setup_fun(bot: Bot) -> None:
     @bot.hybrid_group(
         name="get",
         invoke_without_command=True,
-        help=f"Show a gif of dismay. Usage: `{PREFIX}get naked`",
+        help=command_help(
+            "Un gif de consternation.",
+            f"`{PREFIX}get naked`",
+        ),
     )
     async def get_group(ctx: Context) -> None:
         await _send_dismay(ctx)
@@ -51,7 +55,10 @@ def setup_fun(bot: Bot) -> None:
     @get_group.command(
         name="naked",
         aliases=["nu"],
-        help="Show a gif of dismay.",
+        help=command_help(
+            "Un gif de consternation.",
+            f"`{PREFIX}get naked`",
+        ),
     )
     async def get_naked(ctx: Context) -> None:
         await _send_dismay(ctx)

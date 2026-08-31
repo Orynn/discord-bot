@@ -20,6 +20,7 @@ from pc.commands import setup_pc
 from players.commands import setup_player
 from roll.commands import setup_roll
 from scene.commands import setup_desc
+from scene.rp_commands import setup_rp
 from sheets.commands import setup_sheet
 from srd.commands import setup_srd
 
@@ -28,6 +29,7 @@ def _register_commands(bot: commands.Bot) -> None:
     for setup in (
         setup_npc,
         setup_desc,
+        setup_rp,
         setup_fun,
         setup_image,
         setup_pc,
@@ -77,10 +79,15 @@ class TestSlashRegistration(unittest.TestCase):
                 "srd",
                 "pc",
                 "desc",
+                "think",
+                "whisper",
+                "scene",
+                "look",
                 "campaign",
                 "time",
                 "get",
                 "image",
+                "status",
             }.issubset(names)
         )
         campaign = next(
@@ -109,6 +116,24 @@ class TestSlashRegistration(unittest.TestCase):
         option_names = {option.name for option in import_cmd.parameters}
         self.assertIn("query", option_names)
         self.assertIn("liens", option_names)
+
+        roll = next(
+            command
+            for command in self.bot.tree.get_commands()
+            if command.name == "roll"
+        )
+        roll_options = {option.name for option in roll.parameters}
+        self.assertTrue({"args", "bonus", "avantage"}.issubset(roll_options))
+        avantage = next(
+            option for option in roll.parameters if option.name == "avantage"
+        )
+        choice_values = {choice.value for choice in (avantage.choices or [])}
+        self.assertEqual(choice_values, {"advantage", "disadvantage"})
+
+    def test_registers_sheet_gear_custom(self) -> None:
+        command = self.bot.get_command("sheet gear custom")
+        self.assertIsNotNone(command)
+        self.assertIn("perso", command.aliases)
 
     def test_slash_descriptions_fit_discord_limit(self) -> None:
         for name, description in _walk_descriptions(self.bot.tree.get_commands()):

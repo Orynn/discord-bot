@@ -2,12 +2,47 @@ import random
 
 import discord
 from discord.ext.commands import Group
+from discord.ext.commands.bot import Bot
 from discord.ext.commands.context import Context
 
 from bot.command_helpers import command_reply, delete_command
+from bot.help_text import command_help
+from bot.messaging import send_message
+from campaign.clock_storage import get_clock
 from config import PREFIX
-from sheets.context import get_sheet_for_owner, resolve_guild_id, save_owner_sheet
+from sheets.context import (
+    get_sheet_for_owner,
+    resolve_guild_id,
+    save_owner_sheet,
+    target_plain,
+)
 from sheets.data import ability_modifier
+from sheets.embeds import build_status_embed
+from sheets.hunger import apply_clock_hunger
+
+
+async def _send_sheet_status(
+    ctx: Context, member: discord.Member | None
+) -> None:
+    result = await get_sheet_for_owner(ctx, member)
+    if result is None:
+        await delete_command(ctx)
+        return
+    owner_id, sheet = result
+    clock = get_clock(ctx.guild.id, owner_id) if ctx.guild is not None else None
+    notices: list[str] = []
+    if clock is not None:
+        notices, dirty = apply_clock_hunger(sheet, clock)
+        if dirty:
+            save_owner_sheet(ctx, owner_id, sheet)
+    label = target_plain(member, sheet)
+    await send_message(
+        ctx,
+        embed=build_status_embed(
+            sheet, who=label, clock=clock, notices=notices
+        ),
+    )
+    await delete_command(ctx)
 
 
 def advance_clock_for_long_rest(
@@ -33,8 +68,24 @@ def advance_clock_for_long_rest(
 
 def register_status_commands(sheet_group: Group) -> None:
     @sheet_group.command(
+        name="status",
+        aliases=["recap", "etats"],
+        help=command_help(
+            "Récap PV, faim, repos et états.",
+            f"`{PREFIX}sheet status [@joueur]`",
+        ),
+    )
+    async def sheet_status(
+        ctx: Context, member: discord.Member | None = None
+    ) -> None:
+        await _send_sheet_status(ctx, member)
+
+    @sheet_group.command(
         name="condition",
-        help=f"Toggle a condition. `{PREFIX}sheet condition [@player] poisoned`",
+        help=command_help(
+            "Active ou retire un état.",
+            f"`{PREFIX}sheet condition [@joueur] poisoned`",
+        ),
     )
     async def sheet_condition(
         ctx: Context,
@@ -61,7 +112,10 @@ def register_status_commands(sheet_group: Group) -> None:
 
     @sheet_group.command(
         name="inspire",
-        help=f"Toggle heroic inspiration. `{PREFIX}sheet inspire [@player]`",
+        help=command_help(
+            "Active ou retire l’inspiration héroïque.",
+            f"`{PREFIX}sheet inspire [@joueur]`",
+        ),
     )
     async def sheet_inspire(ctx: Context, member: discord.Member | None = None) -> None:
         result = await get_sheet_for_owner(ctx, member)
@@ -76,7 +130,10 @@ def register_status_commands(sheet_group: Group) -> None:
 
     @sheet_group.command(
         name="deathsave",
-        help=f"Record a death save. `{PREFIX}sheet deathsave [@player] success|failure`",
+        help=command_help(
+            "Enregistre un jet de mort.",
+            f"`{PREFIX}sheet deathsave [@joueur] success|failure`",
+        ),
     )
     async def sheet_deathsave(
         ctx: Context,
@@ -110,7 +167,10 @@ def register_status_commands(sheet_group: Group) -> None:
         name="rest",
         invoke_without_command=True,
         fallback="help",
-        help="Take a short or long rest.",
+        help=command_help(
+            "Prend un repos court ou long.",
+            f"`{PREFIX}sheet rest short|long`",
+        ),
     )
     async def sheet_rest_group(ctx: Context) -> None:
         await command_reply(
@@ -122,7 +182,10 @@ def register_status_commands(sheet_group: Group) -> None:
 
     @sheet_rest_group.command(
         name="long",
-        help=f"Long rest. `{PREFIX}sheet rest long [@player]`",
+        help=command_help(
+            "Repos long : PV, dés de vie, emplacements, +8 h sur l’horloge.",
+            f"`{PREFIX}sheet rest long [@joueur]`",
+        ),
     )
     async def sheet_rest_long(
         ctx: Context, member: discord.Member | None = None
@@ -158,7 +221,10 @@ def register_status_commands(sheet_group: Group) -> None:
 
     @sheet_rest_group.command(
         name="short",
-        help=f"Short rest. `{PREFIX}sheet rest short [@player] [dice]`",
+        help=command_help(
+            "Repos court. Les emplacements de pacte du warlock reviennent.",
+            f"`{PREFIX}sheet rest short [@joueur] [dés]`",
+        ),
     )
     async def sheet_rest_short(
         ctx: Context,
@@ -197,3 +263,18 @@ def register_status_commands(sheet_group: Group) -> None:
             f"{slots_note}.",
         )
         await delete_command(ctx)
+
+
+def setup_status_shortcut(bot: Bot) -> None:
+    @bot.hybrid_command(
+        name="status",
+        aliases=["etats", "recap"],
+        help=command_help(
+            "Récap PV, faim, repos et états.",
+            f"`{PREFIX}status [@joueur]`",
+        ),
+    )
+    async def status_command(
+        ctx: Context, member: discord.Member | None = None
+    ) -> None:
+        await _send_sheet_status(ctx, member)

@@ -4,7 +4,7 @@ from discord.ext.commands.context import Context
 
 from bot.checks import is_admin
 from bot.command_helpers import command_reply, delete_command
-from bot.help_text import HELP_MAGIC_COLOR
+from bot.help_text import HELP_MAGIC_COLOR, command_help
 from bot.messaging import send_message
 from config import PREFIX
 from sheets.context import get_sheet_for_owner, save_owner_sheet, target_label
@@ -42,7 +42,10 @@ def register_slot_commands(sheet_group: Group) -> None:
         name="slots",
         aliases=["slot"],
         invoke_without_command=True,
-        help="Track spell slots (not known spells).",
+        help=command_help(
+            "Suivi des emplacements de sorts (pas les sorts connus).",
+            f"`{PREFIX}sheet slots`",
+        ),
     )
     async def sheet_slots_group(
         ctx: Context, member: discord.Member | None = None
@@ -67,7 +70,10 @@ def register_slot_commands(sheet_group: Group) -> None:
 
     @sheet_slots_group.command(
         name="show",
-        help=f"Display spell slots. Usage: `{PREFIX}sheet slots show [@player]`",
+        help=command_help(
+            "Affiche les emplacements restants.",
+            f"`{PREFIX}sheet slots show [@joueur]`",
+        ),
     )
     async def sheet_slots_show(
         ctx: Context, member: discord.Member | None = None
@@ -83,7 +89,10 @@ def register_slot_commands(sheet_group: Group) -> None:
     @sheet_slots_group.command(
         name="use",
         aliases=["spend", "cast"],
-        help=f"Spend spell slots. Usage: `{PREFIX}sheet slots use [@player] <level> [count]`",
+        help=command_help(
+            "Dépense des emplacements de sorts.",
+            f"`{PREFIX}sheet slots use [@joueur] <niveau> [nombre]`",
+        ),
     )
     async def sheet_slots_use(
         ctx: Context,
@@ -122,10 +131,9 @@ def register_slot_commands(sheet_group: Group) -> None:
     @sheet_slots_group.command(
         name="recover",
         aliases=["restore", "fill"],
-        help=(
-            f"Recover spell slots. "
-            f"`{PREFIX}sheet slots recover [@player]` or "
-            f"`{PREFIX}sheet slots recover [@player] <level> [count]`"
+        help=command_help(
+            "Récupère des emplacements de sorts.",
+            f"`{PREFIX}sheet slots recover [@joueur] [niveau] [nombre]`",
         ),
     )
     async def sheet_slots_recover(
@@ -159,9 +167,9 @@ def register_slot_commands(sheet_group: Group) -> None:
 
     @sheet_slots_group.command(
         name="set",
-        help=(
-            f"Set slots for one level. "
-            f"Usage: `{PREFIX}sheet slots set [@player] <level> <max> [current]`"
+        help=command_help(
+            "Fixe les emplacements d’un niveau.",
+            f"`{PREFIX}sheet slots set [@joueur] <niveau> <max> [actuel]`",
         ),
     )
     async def sheet_slots_set(
@@ -200,9 +208,9 @@ def register_slot_commands(sheet_group: Group) -> None:
 
     @sheet_slots_group.command(
         name="auto",
-        help=(
-            f"Fill max slots from class & level (PHB tables). "
-            f"Usage: `{PREFIX}sheet slots auto [@player]`"
+        help=command_help(
+            "Remplit le max d’emplacements selon classe et niveau (PHB).",
+            f"`{PREFIX}sheet slots auto [@joueur]`",
         ),
     )
     async def sheet_slots_auto(
@@ -244,7 +252,10 @@ def register_slot_commands(sheet_group: Group) -> None:
 
     @sheet_slots_group.command(
         name="clear",
-        help=f"Clear all spell slot tracking. Usage: `{PREFIX}sheet slots clear [@player]`",
+        help=command_help(
+            "Efface tout le suivi d’emplacements.",
+            f"`{PREFIX}sheet slots clear [@joueur]`",
+        ),
     )
     async def sheet_slots_clear(
         ctx: Context, member: discord.Member | None = None

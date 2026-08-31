@@ -7,6 +7,8 @@ from bot.messaging import send_reply
 
 logger = logging.getLogger(__name__)
 
+SERVER_ONLY = "Cette commande marche seulement sur le serveur."
+
 
 async def delete_command(ctx: Context) -> None:
     if ctx.interaction is not None:

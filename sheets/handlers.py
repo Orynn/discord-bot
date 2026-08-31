@@ -15,3 +15,5 @@ def apply_hp(sheet: CharacterSheet, current: int, maximum: int | None = None) ->
 
     if sheet.hp_current > sheet.hp_max:
         sheet.hp_current = sheet.hp_max
+    if sheet.hp_current > 0:
+        sheet.reset_death_saves()

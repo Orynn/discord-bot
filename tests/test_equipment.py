@@ -1,5 +1,7 @@
 import unittest
+from unittest.mock import AsyncMock, MagicMock, patch
 
+from sheets.commands.equipment import _give_custom_item
 from sheets.data import CharacterSheet
 from sheets.equipment import (
     ITEM_KIND_ARMOR,
@@ -9,6 +11,7 @@ from sheets.equipment import (
     InventoryItem,
     custom_slug,
     format_item_line,
+    is_custom_slug,
     parse_name_and_quantity,
 )
 
@@ -540,6 +543,24 @@ class TestEquipment(unittest.TestCase):
         with self.assertRaises(ValueError):
             official.mark_as_bag("Long Sword")
 
+    def test_add_custom_bag_creates_when_missing(self) -> None:
+        from sheets.containers import DEFAULT_BAG_CAPACITY_LB, STORED_WORN
+
+        equipment = Equipment()
+        item, created = equipment.add_custom_bag("Sac de voyage")
+        self.assertTrue(created)
+        self.assertTrue(equipment.is_container(item))
+        self.assertEqual(item.capacity_lb, DEFAULT_BAG_CAPACITY_LB)
+        self.assertEqual(item.stored_in, STORED_WORN)
+        self.assertTrue(is_custom_slug(item.slug))
+
+        again, created_again = equipment.add_custom_bag("Sac de voyage", capacity_lb=40)
+        self.assertFalse(created_again)
+        self.assertEqual(again.capacity_lb, 40)
+
+        with self.assertRaises(ValueError):
+            equipment.add_custom_bag("Missing", capacity_lb=0)
+
     def test_bag_of_holding_contents_are_weightless(self) -> None:
         equipment = Equipment()
         equipment.add_item(slug="bag-of-holding", name="Bag of Holding", kind="item")
@@ -600,6 +621,40 @@ class TestEquipment(unittest.TestCase):
         self.assertEqual(line, "Potion")
         self.assertNotIn("**", line)
         self.assertNotIn("open5e.com", line)
+
+
+class TestGiveCustomItem(unittest.IsolatedAsyncioTestCase):
+    async def test_adds_custom_item_without_catalog(self) -> None:
+        sheet = CharacterSheet(name="Hero")
+        ctx = MagicMock()
+        with (
+            patch("sheets.commands.equipment._persist_gear") as persist,
+            patch(
+                "sheets.commands.equipment._gear_reply", new_callable=AsyncMock
+            ) as reply,
+        ):
+            await _give_custom_item(
+                ctx,
+                None,
+                sheet,
+                42,
+                name="Amulette d'Eauprofonde",
+                quantity=2,
+                weight_lb=1.0,
+                ac_before=False,
+            )
+        persist.assert_called_once()
+        item = sheet.equipment.find_item("Amulette d'Eauprofonde")
+        assert item is not None
+        self.assertTrue(is_custom_slug(item.slug))
+        self.assertEqual(item.kind, ITEM_KIND_CUSTOM)
+        self.assertEqual(item.quantity, 2)
+        self.assertEqual(item.weight_lb, 1.0)
+        message = reply.await_args.args[1]
+        self.assertIn("custom item", message)
+        self.assertIn("Amulette d'Eauprofonde", message)
+        self.assertIn("×2", message)
+        self.assertIn("sheet gear bag", message)
 
 
 if __name__ == "__main__":

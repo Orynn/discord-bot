@@ -3,10 +3,14 @@ from discord.ext.commands import Group
 from discord.ext.commands.context import Context
 
 from bot.command_helpers import command_reply, delete_command
+from bot.help_text import command_help
 from bot.messaging import send_message
+from combat.engine import apply_hp_to_live_combat
+from combat.scope import scope_id_for_channel
 from config import PREFIX
 from sheets.context import (
     get_sheet_for_owner,
+    parse_mention_and_text,
     resolve_guild_id,
     resolve_owner,
     save_owner_sheet,
@@ -15,6 +19,14 @@ from sheets.context import (
 from sheets.data import CharacterSheet
 from sheets.embeds import build_sheet_embed, sheet_info_embeds
 from sheets.handlers import apply_hp
+from sheets.portrait import (
+    CLEAR_WORDS,
+    cache_portrait_from_url,
+    clear_portrait_file,
+    parse_image_url,
+    portrait_path,
+    save_portrait_attachment,
+)
 from sheets.storage import delete_sheet, get_sheet, set_character_name
 from srd import fivetools
 
@@ -22,7 +34,10 @@ from srd import fivetools
 def register_core_commands(sheet_group: Group) -> None:
     @sheet_group.command(
         name="create",
-        help=f"Create a character sheet. Usage: `{PREFIX}sheet create [@player] <name>`",
+        help=command_help(
+            "Crée une fiche de personnage.",
+            f"`{PREFIX}sheet create [@joueur] <nom>`",
+        ),
     )
     async def sheet_create(
         ctx: Context,
@@ -44,7 +59,7 @@ def register_core_commands(sheet_group: Group) -> None:
 
         guild_id = resolve_guild_id(ctx)
         if guild_id is None:
-            await command_reply(ctx, "This command can only be used in a server.")
+            await command_reply(ctx, "Cette commande marche seulement sur le serveur.")
             return
 
         if get_sheet(user_id=owner_id, guild_id=guild_id) is not None:
@@ -71,7 +86,10 @@ def register_core_commands(sheet_group: Group) -> None:
 
     @sheet_group.command(
         name="show",
-        help=f"Display a character sheet. Usage: `{PREFIX}sheet show [@player]`",
+        help=command_help(
+            "Affiche la fiche de personnage.",
+            f"`{PREFIX}sheet show [@joueur]`",
+        ),
     )
     async def sheet_show(ctx: Context, member: discord.Member | None = None) -> None:
         result = await get_sheet_for_owner(ctx, member)
@@ -81,15 +99,30 @@ def register_core_commands(sheet_group: Group) -> None:
         sheet.equipment.stow_unassigned()
         save_owner_sheet(ctx, owner_id, sheet)
 
-        await send_message(ctx, embed=build_sheet_embed(sheet=sheet))
+        guild_id = resolve_guild_id(ctx)
+        portrait = (
+            portrait_path(guild_id=guild_id, user_id=owner_id)
+            if guild_id is not None
+            else None
+        )
+        filename = f"portrait{portrait.suffix}" if portrait is not None else None
+        embed = build_sheet_embed(sheet=sheet, portrait_filename=filename)
+        if portrait is not None and filename is not None:
+            await send_message(
+                ctx,
+                embed=embed,
+                file=discord.File(portrait, filename=filename),
+            )
+        else:
+            await send_message(ctx, embed=embed)
         await delete_command(ctx)
 
     @sheet_group.command(
         name="set",
-        help=(
-            f"Set a sheet field. Usage: `{PREFIX}sheet set [@player] <field> <value>`\n"
-            f"Fields: name, species, char_class, subclass, level, background, "
-            f"ac, speed, notes, str, dex, con, int, wis, cha"
+        help=command_help(
+            "Modifie un champ de la fiche.",
+            f"`{PREFIX}sheet set [@joueur] <champ> <valeur>`",
+            "Champs : name, species, char_class, subclass, level, background, ac, speed, notes, str, dex, con, int, wis, cha",
         ),
     )
     async def sheet_set(
@@ -130,8 +163,100 @@ def register_core_commands(sheet_group: Group) -> None:
         await delete_command(ctx)
 
     @sheet_group.command(
+        name="image",
+        aliases=("portrait", "avatar"),
+        help=command_help(
+            "Définit le portrait du personnage.",
+            f"`{PREFIX}sheet image [@joueur]`",
+            "Joins une image, ou colle une URL · `clear` pour retirer",
+        ),
+    )
+    async def sheet_image(
+        ctx: Context,
+        member: discord.Member | None = None,
+        *,
+        args: str = "",
+        file: discord.Attachment | None = None,
+    ) -> None:
+        if member is None:
+            member, args = parse_mention_and_text(ctx, args)
+        result = await get_sheet_for_owner(ctx, member)
+        if result is None:
+            return
+        owner_id, sheet = result
+        guild_id = resolve_guild_id(ctx)
+        if guild_id is None:
+            await command_reply(ctx, "Cette commande marche seulement sur le serveur.")
+            return
+
+        attachment = file
+        if attachment is None and ctx.message is not None and ctx.message.attachments:
+            attachment = ctx.message.attachments[0]
+
+        cleaned = args.strip()
+        label = target_label(member, sheet)
+        if cleaned.casefold() in CLEAR_WORDS:
+            sheet.image_url = ""
+            clear_portrait_file(guild_id=guild_id, user_id=owner_id)
+            save_owner_sheet(ctx, owner_id, sheet)
+            await command_reply(ctx, f"{label}: portrait removed.")
+            await delete_command(ctx)
+            return
+
+        if attachment is not None:
+            try:
+                await save_portrait_attachment(
+                    attachment, guild_id=guild_id, user_id=owner_id
+                )
+            except ValueError as exc:
+                await command_reply(ctx, str(exc))
+                return
+            sheet.image_url = ""
+            save_owner_sheet(ctx, owner_id, sheet)
+            await command_reply(
+                ctx, f"{label}: portrait updated. `{PREFIX}sheet show` to see it."
+            )
+            await delete_command(ctx)
+            return
+
+        if not cleaned:
+            await command_reply(
+                ctx,
+                (
+                    f"Attach a picture or pass a URL.\n"
+                    f"`{PREFIX}sheet image` + image\n"
+                    f"`{PREFIX}sheet image https://…`\n"
+                    f"`{PREFIX}sheet image clear`"
+                ),
+            )
+            return
+
+        try:
+            sheet.image_url = parse_image_url(cleaned)
+        except ValueError as exc:
+            await command_reply(ctx, str(exc))
+            return
+        cached = cache_portrait_from_url(
+            guild_id=guild_id, user_id=owner_id, url=sheet.image_url
+        )
+        save_owner_sheet(ctx, owner_id, sheet)
+        token_note = (
+            ""
+            if cached is not None
+            else " Token uses initials until the image can be downloaded."
+        )
+        await command_reply(
+            ctx,
+            f"{label}: portrait URL set. `{PREFIX}sheet show` to see it.{token_note}",
+        )
+        await delete_command(ctx)
+
+    @sheet_group.command(
         name="hp",
-        help=f"Set HP. Usage: `{PREFIX}sheet hp [@player] <current> [max]`",
+        help=command_help(
+            "Fixe les points de vie.",
+            f"`{PREFIX}sheet hp [@joueur] <actuel> [max]`",
+        ),
     )
     async def sheet_hp(
         ctx: Context,
@@ -159,14 +284,31 @@ def register_core_commands(sheet_group: Group) -> None:
 
         save_owner_sheet(ctx, owner_id, sheet)
         label = target_label(member, sheet)
+        combat_note = ""
+        if ctx.guild is not None:
+            scope_id = scope_id_for_channel(guild=ctx.guild, channel=ctx.channel)
+            if scope_id is not None:
+                fighter = apply_hp_to_live_combat(
+                    guild_id=ctx.guild.id,
+                    scope_id=scope_id,
+                    user_id=owner_id,
+                    hp=sheet.hp_current,
+                    max_hp=sheet.hp_max,
+                )
+                if fighter is not None and sheet.hp_current > 0:
+                    combat_note = f" **{fighter}** is up in combat."
         await command_reply(
-            ctx, f"{label}: HP set to **{sheet.hp_current}/{sheet.hp_max}**."
+            ctx,
+            f"{label}: HP set to **{sheet.hp_current}/{sheet.hp_max}**.{combat_note}",
         )
         await delete_command(ctx)
 
     @sheet_group.command(
         name="info",
-        help=f"Show 5etools info for your sheet's species, class and background. Usage: `{PREFIX}sheet info [@player]`",
+        help=command_help(
+            "Infos 5etools pour l’espèce, la classe et l’historique.",
+            f"`{PREFIX}sheet info [@joueur]`",
+        ),
     )
     async def sheet_info(ctx: Context, member: discord.Member | None = None) -> None:
         result = await get_sheet_for_owner(ctx, member)
@@ -235,7 +377,10 @@ def register_core_commands(sheet_group: Group) -> None:
 
     @sheet_group.command(
         name="delete",
-        help=f"Delete a character sheet. Usage: `{PREFIX}sheet delete [@player]`",
+        help=command_help(
+            "Supprime la fiche de personnage.",
+            f"`{PREFIX}sheet delete [@joueur]`",
+        ),
     )
     async def sheet_delete(ctx: Context, member: discord.Member | None = None) -> None:
         owner_id = await resolve_owner(ctx, member)
@@ -244,7 +389,7 @@ def register_core_commands(sheet_group: Group) -> None:
 
         guild_id = resolve_guild_id(ctx)
         if guild_id is None:
-            await command_reply(ctx, "This command can only be used in a server.")
+            await command_reply(ctx, "Cette commande marche seulement sur le serveur.")
             return
 
         sheet = get_sheet(user_id=owner_id, guild_id=guild_id)

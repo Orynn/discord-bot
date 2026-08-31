@@ -7,7 +7,7 @@ from discord.ext.commands.context import Context
 
 from bot.checks import admin_only, guild_only, is_admin, is_staff_user_id
 from bot.command_helpers import command_reply, delete_command
-from bot.help_text import HELP_COLOR
+from bot.help_text import HELP_COLOR, command_help
 from bot.messaging import send_message
 from bot.privacy import DENIED_OTHER_PLAYER
 from campaign.clock import (
@@ -253,7 +253,11 @@ def setup_time(bot: Bot) -> None:
         aliases=["clock", "calendar", "date", "temps"],
         invoke_without_command=True,
         fallback="now",
-        help="Show or advance a player's Harptos calendar. New calendar days tick hunger.",
+        help=command_help(
+            "Horloge Harptos de ce joueur. Un nouveau jour de calendrier fait avancer la faim.",
+            f"`{PREFIX}time`",
+            f"`{PREFIX}time advance 2h` — staff",
+        ),
     )
     @guild_only
     async def time_group(ctx: Context, *, spec: str = "") -> None:
@@ -314,7 +318,12 @@ def setup_time(bot: Bot) -> None:
             await delete_command(ctx)
 
     @time_group.command(
-        name="all", aliases=["party"], help="Show every player's campaign clock."
+        name="all",
+        aliases=["party"],
+        help=command_help(
+            "Affiche l’horloge de chaque joueur.",
+            f"`{PREFIX}time all`",
+        ),
     )
     @guild_only
     @admin_only
@@ -324,7 +333,11 @@ def setup_time(bot: Bot) -> None:
     @time_group.command(
         name="advance",
         aliases=["add", "skip"],
-        help="Advance time. Example: `2h`, `3d`, `1h 30m`.",
+        help=command_help(
+            "Avance l’horloge (staff).",
+            f"`{PREFIX}time advance [@joueur] <durée>`",
+            "`2h` · `3d` · `1h 30m`",
+        ),
     )
     @app_commands.describe(amount="Duration to skip, e.g. 2h, 3d, 1h 30m")
     @guild_only
@@ -352,7 +365,12 @@ def setup_time(bot: Bot) -> None:
         )
 
     @time_group.command(
-        name="set", help="Set the date. Example: `12 Hammer 1492 14:00`."
+        name="set",
+        help=command_help(
+            "Fixe la date Harptos (staff).",
+            f"`{PREFIX}time set [@joueur] <date>`",
+            "`12 Hammer 1492 14:00`",
+        ),
     )
     @app_commands.describe(when="Harptos date and time, e.g. 12 Hammer 1492 14:00")
     @guild_only
@@ -394,25 +412,49 @@ def setup_time(bot: Bot) -> None:
             member=member,
         )
 
-    @time_group.command(name="dawn", help="Skip to the next dawn (06:00).")
+    @time_group.command(
+        name="dawn",
+        help=command_help(
+            "Passe à l’aube suivante (06:00).",
+            f"`{PREFIX}time dawn [@joueur]`",
+        ),
+    )
     @guild_only
     @admin_only
     async def time_dawn(ctx: Context, member: discord.Member | None = None) -> None:
         await _skip_to(ctx, 6, label="dawn (06:00)", member=member)
 
-    @time_group.command(name="noon", help="Skip to the next noon (12:00).")
+    @time_group.command(
+        name="noon",
+        help=command_help(
+            "Passe à midi (12:00).",
+            f"`{PREFIX}time noon [@joueur]`",
+        ),
+    )
     @guild_only
     @admin_only
     async def time_noon(ctx: Context, member: discord.Member | None = None) -> None:
         await _skip_to(ctx, 12, label="noon (12:00)", member=member)
 
-    @time_group.command(name="dusk", help="Skip to the next dusk (18:00).")
+    @time_group.command(
+        name="dusk",
+        help=command_help(
+            "Passe au crépuscule (18:00).",
+            f"`{PREFIX}time dusk [@joueur]`",
+        ),
+    )
     @guild_only
     @admin_only
     async def time_dusk(ctx: Context, member: discord.Member | None = None) -> None:
         await _skip_to(ctx, 18, label="dusk (18:00)", member=member)
 
-    @time_group.command(name="midnight", help="Skip to the next midnight (00:00).")
+    @time_group.command(
+        name="midnight",
+        help=command_help(
+            "Passe à minuit (00:00).",
+            f"`{PREFIX}time midnight [@joueur]`",
+        ),
+    )
     @guild_only
     @admin_only
     async def time_midnight(ctx: Context, member: discord.Member | None = None) -> None:
@@ -422,7 +464,10 @@ def setup_time(bot: Bot) -> None:
         name="rest",
         invoke_without_command=True,
         fallback="help",
-        help="Advance time for a short (1h) or long (8h) rest.",
+        help=command_help(
+            "Avance l’horloge d’un repos court (1 h) ou long (8 h).",
+            f"`{PREFIX}time rest short|long [@joueur]`",
+        ),
     )
     @guild_only
     @admin_only
@@ -436,7 +481,13 @@ def setup_time(bot: Bot) -> None:
         )
         await delete_command(ctx)
 
-    @time_rest_group.command(name="short", help="Advance 1 hour (short rest).")
+    @time_rest_group.command(
+        name="short",
+        help=command_help(
+            "Avance 1 heure (repos court).",
+            f"`{PREFIX}time rest short [@joueur]`",
+        ),
+    )
     @guild_only
     @admin_only
     async def time_rest_short(
@@ -454,7 +505,13 @@ def setup_time(bot: Bot) -> None:
             member=member,
         )
 
-    @time_rest_group.command(name="long", help="Advance 8 hours (long rest).")
+    @time_rest_group.command(
+        name="long",
+        help=command_help(
+            "Avance 8 heures (repos long).",
+            f"`{PREFIX}time rest long [@joueur]`",
+        ),
+    )
     @guild_only
     @admin_only
     async def time_rest_long(

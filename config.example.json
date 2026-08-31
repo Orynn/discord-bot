@@ -5,6 +5,7 @@
   "catchup_max_age_hours": 72,
   "campaign_category_id": 1186287629302501429,
   "campaign_category_name": "CAMPAIGN",
+  "home_guild_name": "Potato Head",
   "campaign_cache_ttl_seconds": 900,
   "campaign_messages_per_thread": 20,
   "fivetools_root": "5etools",
@@ -23,5 +24,8 @@
   "image_height": 1024,
   "image_timeout_seconds": 180,
   "image_cooldown_seconds": 20,
-  "image_history_limit": 1000
+  "image_history_limit": 1000,
+  "editor_host": "0.0.0.0",
+  "editor_port": 8765,
+  "editor_public_url": ""
 }

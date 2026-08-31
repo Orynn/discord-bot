@@ -7,7 +7,7 @@ from discord.ext.commands.context import Context
 
 from bot.checks import admin_only, guild_only
 from bot.command_helpers import command_reply, delete_command
-from bot.help_text import HELP_COLOR, HELP_LOOKUP_COLOR
+from bot.help_text import HELP_COLOR, HELP_LOOKUP_COLOR, command_help
 from bot.messaging import send_message
 from campaign.forums import (
     CampaignForumError,
@@ -280,7 +280,10 @@ def setup_campaign(bot: Bot) -> None:
         aliases=["lore", "camp"],
         invoke_without_command=True,
         fallback="search",
-        help="Browse or create CAMPAIGN forum lore.",
+        help=command_help(
+            "Parcourt ou crée le lore des forums CAMPAGNE.",
+            f"`{PREFIX}campaign [recherche]`",
+        ),
     )
     @guild_only
     @admin_only
@@ -289,7 +292,11 @@ def setup_campaign(bot: Bot) -> None:
 
     @campaign_group.command(
         name="post",
-        help="Create a CAMPAIGN forum post. `post lieux Title -- body`",
+        help=command_help(
+            "Crée un post dans un forum CAMPAGNE.",
+            f"`{PREFIX}campaign post <forum> <titre> [-- texte]`",
+            f"`{PREFIX}campaign post lieux Padhiver -- Une auberge…`",
+        ),
     )
     @app_commands.describe(
         section="Forum name, e.g. lieux, pnj, quêtes",
@@ -364,7 +371,11 @@ def setup_campaign(bot: Bot) -> None:
 
     @campaign_group.command(
         name="forum",
-        help="Create a forum channel in CAMPAIGN. `forum lieux` → 📍 lieux",
+        help=command_help(
+            "Crée un forum dans CAMPAGNE.",
+            f"`{PREFIX}campaign forum <nom>`",
+            "`lieux` → 📍 lieux",
+        ),
     )
     @guild_only
     @admin_only
@@ -413,7 +424,11 @@ def setup_campaign(bot: Bot) -> None:
     @campaign_group.command(
         name="document",
         aliases=["parchemin"],
-        help=f"Génère un parchemin. `{PREFIX}campaign document Texte` ou `Titre -- texte`",
+        help=command_help(
+            "Génère un parchemin illustré.",
+            f"`{PREFIX}campaign document <texte>`",
+            f"`{PREFIX}campaign document Titre -- texte`",
+        ),
     )
     @app_commands.describe(
         text="Texte du parchemin. Utilise `Titre -- corps` pour un titre."
@@ -446,7 +461,10 @@ def setup_campaign(bot: Bot) -> None:
 
     @campaign_group.command(
         name="channels",
-        help="Export every server channel with its category to a file.",
+        help=command_help(
+            "Exporte tous les salons du serveur, avec leur catégorie.",
+            f"`{PREFIX}campaign channels`",
+        ),
     )
     @guild_only
     @admin_only
@@ -468,7 +486,11 @@ def setup_campaign(bot: Bot) -> None:
 
     @campaign_group.command(
         name="audit",
-        help="Vérifie que chaque post CAMPAIGN est dans le bon forum wiki.",
+        help=command_help(
+            "Vérifie que chaque post CAMPAGNE est dans le bon forum wiki.",
+            f"`{PREFIX}campaign audit`",
+            f"`{PREFIX}campaign audit fix` — recatégoriser",
+        ),
     )
     @app_commands.describe(mode="`fix` pour recatégoriser les posts mal classés")
     @guild_only
@@ -558,7 +580,11 @@ def setup_campaign(bot: Bot) -> None:
 
     @campaign_group.command(
         name="move",
-        help="Déplace un post CAMPAIGN vers un autre forum et met à jour les liens.",
+        help=command_help(
+            "Déplace un post CAMPAGNE vers un autre forum et met à jour les liens.",
+            f"`{PREFIX}campaign move <forum> <titre>`",
+            f"`{PREFIX}campaign move pnj Padhiver`",
+        ),
     )
     @app_commands.describe(
         section="Forum de destination, ex. pnj, race",
@@ -721,7 +747,11 @@ def setup_campaign(bot: Bot) -> None:
 
     @campaign_group.command(
         name="wiki",
-        help="Aperçu d'une page du wiki FR des Royaumes Oubliés.",
+        help=command_help(
+            "Aperçu d’une page du wiki FR des Royaumes Oubliés.",
+            f"`{PREFIX}campaign wiki <page>`",
+            f"`{PREFIX}campaign wiki Eauprofonde`",
+        ),
     )
     @app_commands.describe(query="Nom de page ou URL wiki, ex. Eauprofonde")
     @guild_only
@@ -753,7 +783,11 @@ def setup_campaign(bot: Bot) -> None:
 
     @campaign_group.command(
         name="import",
-        help="Importe une page wiki. Ajoute `--liens` pour les fiches infobox.",
+        help=command_help(
+            "Importe une page wiki. `--liens` ajoute les fiches infobox.",
+            f"`{PREFIX}campaign import <page>`",
+            f"`{PREFIX}campaign import Padhiver --liens`",
+        ),
     )
     @app_commands.describe(
         query="Page wiki, `lieux Padhiver`, ou `Padhiver --liens`",
@@ -905,7 +939,10 @@ def setup_campaign(bot: Bot) -> None:
 
     @campaign_group.command(
         name="repair",
-        help="Remplit les posts « Import des liens… » et « … suite sur le wiki. ».",
+        help=command_help(
+            "Remplit les posts « Import des liens… » et « … suite sur le wiki. ».",
+            f"`{PREFIX}campaign repair`",
+        ),
     )
     @guild_only
     @admin_only

@@ -53,3 +53,31 @@ class TestMonsterProfiles(unittest.IsolatedAsyncioTestCase):
             (profile.dice_count, profile.dice_sides, profile.flat_modifier), (1, 6, 2)
         )
         self.assertEqual(profile.traits, ("Nimble Escape",))
+        self.assertEqual(profile.attacks, 1)
+
+    def test_multiattack_parses_two_attacks(self) -> None:
+        profile = profile_from_monster(
+            {
+                "name": "Ogre",
+                "action": [
+                    {
+                        "name": "Multiattack",
+                        "entries": ["The ogre makes two Greatclub attacks."],
+                    },
+                    {
+                        "name": "Greatclub",
+                        "entries": ["{@damage 2d8 + 4} bludgeoning"],
+                    },
+                ],
+            }
+        )
+        self.assertEqual(profile.attacks, 2)
+
+    async def test_monster_sheet_lookup_strips_copy_suffix(self) -> None:
+        from combat.monster_sheet import load_monster_sheet
+
+        embed, view, error = await load_monster_sheet("Wolf 2")
+        self.assertIsNone(error)
+        self.assertIsNone(view)
+        assert embed is not None
+        self.assertIn("Wolf", embed.title or "")

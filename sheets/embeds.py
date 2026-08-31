@@ -1,8 +1,16 @@
 import discord
 
+from bot.help_text import HELP_STATUS_COLOR
+from campaign.clock import CampaignTime
 from sheets.armor import format_ac_field
 from sheets.data import ABILITIES, CharacterSheet, ability_modifier, format_modifier
-from sheets.hunger import format_hunger_line, hunger_state
+from sheets.portrait import apply_sheet_portrait
+from sheets.hunger import (
+    format_hunger_line,
+    hunger_embed_color,
+    hunger_state,
+    meal_clock,
+)
 from sheets.skills import format_skills_block
 from srd.embeds import (
     SHEET_COLOR,
@@ -16,12 +24,105 @@ from srd.embeds import (
 DISCORD_EMBED_DESCRIPTION_LIMIT = 4096
 
 
+def status_embed_color(sheet: CharacterSheet) -> int:
+    if sheet.hp_max and sheet.hp_current <= 0:
+        return 0xC0392B
+    if hunger_state(sheet) != "fed":
+        return hunger_embed_color(sheet)
+    if (
+        sheet.conditions
+        or sheet.death_save_successes
+        or sheet.death_save_failures
+        or sheet.is_overloaded()
+    ):
+        return 0xE67E22
+    return HELP_STATUS_COLOR
+
+
+def build_status_embed(
+    sheet: CharacterSheet,
+    *,
+    who: str | None = None,
+    clock: CampaignTime | None = None,
+    notices: list[str] | None = None,
+) -> discord.Embed:
+    title = "📌 Status"
+    if who:
+        title = f"{title} — {who}"
+    embed = discord.Embed(
+        title=title,
+        description=f"**{sheet.name}**",
+        color=status_embed_color(sheet),
+    )
+
+    hp_value = (
+        f"**{sheet.hp_current}/{sheet.hp_max}**" if sheet.hp_max else "—"
+    )
+    embed.add_field(name="❤️ HP", value=hp_value, inline=True)
+    embed.add_field(
+        name="✨ Inspiration",
+        value="Heroic Inspiration" if sheet.inspired else "—",
+        inline=True,
+    )
+    embed.add_field(
+        name="🩹 Conditions",
+        value=(
+            ", ".join(condition.title() for condition in sheet.conditions)
+            if sheet.conditions
+            else "none"
+        ),
+        inline=False,
+    )
+
+    if sheet.hp_current <= 0 or sheet.death_save_successes or sheet.death_save_failures:
+        embed.add_field(
+            name="💀 Death saves",
+            value=(
+                f"**{sheet.death_save_successes}** successes / "
+                f"**{sheet.death_save_failures}** failures"
+            ),
+            inline=False,
+        )
+
+    embed.add_field(name="🍖 Hunger", value=format_hunger_line(sheet), inline=False)
+
+    rest_bits = [f"Hit dice **{sheet.hit_dice_remaining}/{sheet.level}**"]
+    if sheet.spell_slots.has_slots():
+        rest_bits.append(f"Spell slots {sheet.spell_slots.format()}")
+    rest_bits.append("Long rest: HP, hit dice, slots")
+    embed.add_field(name="🏕️ Sleep & rest", value=" · ".join(rest_bits), inline=False)
+
+    if clock is not None:
+        embed.add_field(name="📅 Time", value=clock.format_line(), inline=False)
+        last_meal = meal_clock(sheet)
+        if last_meal is not None:
+            kind = "half rations" if sheet.hunger_meal_kind == "half" else "full meal"
+            embed.add_field(
+                name="Last meal",
+                value=f"{last_meal.format_date()} ({kind})",
+                inline=False,
+            )
+
+    if notices:
+        embed.add_field(name="⚠️ Starvation", value="\n".join(notices), inline=False)
+
+    if sheet.is_overloaded():
+        embed.add_field(name="⚖️ Load", value=sheet.format_load(), inline=False)
+
+    embed.set_footer(
+        text="Hunger follows ;time · eat: ;hunger eat · sleep: ;sheet rest long"
+    )
+    return embed
+
+
 def _append_description(embed: discord.Embed, text: str) -> None:
     current = embed.description or ""
     embed.description = truncate(f"{current}{text}", DISCORD_EMBED_DESCRIPTION_LIMIT)
 
 
-def build_sheet_embed(sheet: CharacterSheet) -> discord.Embed:
+def build_sheet_embed(
+    sheet: CharacterSheet, *, portrait_filename: str | None = None
+) -> discord.Embed:
     prof = sheet.get_prof_bonus()
     class_line = sheet.char_class
     if sheet.subclass:
@@ -113,6 +214,9 @@ def build_sheet_embed(sheet: CharacterSheet) -> discord.Embed:
             spell_parts.append(f"Homebrew: {homebrew}{extra}")
         embed.add_field(name="✨ Spells", value="\n".join(spell_parts), inline=False)
 
+    apply_sheet_portrait(
+        embed, image_url=sheet.image_url, attachment_name=portrait_filename
+    )
     embed.set_footer(text="● proficient · ◆ expertise")
     return embed
 

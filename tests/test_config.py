@@ -51,5 +51,35 @@ class TestConfigImport(unittest.TestCase):
                 app_config.config["campaign_guild_id"] = previous_guild
 
 
+    def test_is_home_guild_uses_id_then_name(self) -> None:
+        import config as app_config
+        from types import SimpleNamespace
+
+        previous_home = app_config.HOME_GUILD_ID
+        previous_campaign = app_config.CAMPAIGN_GUILD_ID
+        previous_name = app_config.HOME_GUILD_NAME
+        try:
+            app_config.HOME_GUILD_ID = 11
+            self.assertTrue(app_config.is_home_guild(SimpleNamespace(id=11, name="X")))
+            self.assertFalse(
+                app_config.is_home_guild(SimpleNamespace(id=22, name="Potato Head"))
+            )
+            self.assertTrue(app_config.is_home_guild(None))
+
+            app_config.HOME_GUILD_ID = None
+            app_config.CAMPAIGN_GUILD_ID = None
+            app_config.HOME_GUILD_NAME = "Potato Head"
+            self.assertTrue(
+                app_config.is_home_guild(SimpleNamespace(id=99, name="potato head"))
+            )
+            self.assertFalse(
+                app_config.is_home_guild(SimpleNamespace(id=99, name="Le Moulin"))
+            )
+        finally:
+            app_config.HOME_GUILD_ID = previous_home
+            app_config.CAMPAIGN_GUILD_ID = previous_campaign
+            app_config.HOME_GUILD_NAME = previous_name
+
+
 if __name__ == "__main__":
     unittest.main()

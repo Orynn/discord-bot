@@ -4,6 +4,7 @@ from discord.ext.commands.context import Context
 
 from bot.checks import is_admin
 from bot.command_helpers import command_reply, delete_command
+from bot.help_text import command_help
 from config import PREFIX
 from sheets.context import (
     format_skill_name,
@@ -19,7 +20,10 @@ def register_proficiency_commands(sheet_group: Group) -> None:
         name="prof",
         invoke_without_command=True,
         fallback="help",
-        help="Manage save and skill proficiencies.",
+        help=command_help(
+            "Maîtrises de sauvegarde et de compétences.",
+            f"`{PREFIX}sheet prof`",
+        ),
     )
     async def sheet_prof_group(ctx: Context) -> None:
         admin_hint = " [@player]" if is_admin(ctx) else ""
@@ -35,7 +39,10 @@ def register_proficiency_commands(sheet_group: Group) -> None:
 
     @sheet_prof_group.command(
         name="save",
-        help=f"Toggle saving throw proficiency. Usage: `{PREFIX}sheet prof save [@player] <ability>`",
+        help=command_help(
+            "Active ou retire une maîtrise de sauvegarde.",
+            f"`{PREFIX}sheet prof save [@joueur] <carac>`",
+        ),
     )
     async def sheet_prof_save(
         ctx: Context,
@@ -72,9 +79,9 @@ def register_proficiency_commands(sheet_group: Group) -> None:
 
     @sheet_prof_group.command(
         name="skill",
-        help=(
-            f"Toggle skill proficiency or expertise. "
-            f"Usage: `{PREFIX}sheet prof skill [@player] <skill> [expertise]`"
+        help=command_help(
+            "Active ou retire une maîtrise de compétence (ou l’expertise).",
+            f"`{PREFIX}sheet prof skill [@joueur] <compétence> [expertise]`",
         ),
     )
     async def sheet_prof_skill(

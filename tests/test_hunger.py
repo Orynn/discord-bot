@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import data.db as db_module
 from campaign.clock import CampaignTime, calendar_days_between, parse_duration
@@ -9,6 +10,7 @@ from sheets.embeds import build_sheet_embed
 from sheets.equipment import ITEM_KIND_ITEM
 from sheets.hunger import (
     advance_hunger,
+    apply_clock_hunger,
     consume_ration,
     eat_full,
     eat_half,
@@ -21,6 +23,7 @@ from sheets.hunger import (
     starvation_limit,
     tick_hunger_for_clock,
 )
+from sheets.commands.hunger import _show_all
 from sheets.storage import get_sheet, save_sheet
 
 
@@ -206,6 +209,95 @@ class TestHungerClockTick(unittest.TestCase):
         later = get_clock(1, 1)
         self.assertEqual(later, start.advance(parse_duration("long")))
         self.assertIn("8 hours", note)
+
+
+class TestApplyClockHunger(unittest.TestCase):
+    def test_first_sync_is_dirty_repeat_is_not(self) -> None:
+        sheet = CharacterSheet(name="Graosh")
+        clock = CampaignTime()
+        notices, dirty = apply_clock_hunger(sheet, clock)
+        self.assertEqual(notices, [])
+        self.assertTrue(dirty)
+        notices, dirty = apply_clock_hunger(sheet, clock)
+        self.assertEqual(notices, [])
+        self.assertFalse(dirty)
+
+    def test_clock_skip_past_limit_reports_starvation(self) -> None:
+        sheet = CharacterSheet(name="Ping", hunger_days=3)
+        clock = CampaignTime()
+        apply_clock_hunger(sheet, clock)
+        later = clock.advance(parse_duration("1d"))
+        notices, dirty = apply_clock_hunger(sheet, later)
+        self.assertTrue(dirty)
+        self.assertTrue(any("exhaustion 1" in notice for notice in notices))
+        self.assertEqual(exhaustion_level(sheet), 1)
+        notices, dirty = apply_clock_hunger(sheet, later)
+        self.assertFalse(dirty)
+        self.assertEqual(notices, [])
+
+
+class TestShowAllHungerNotices(unittest.IsolatedAsyncioTestCase):
+    async def test_party_embed_includes_starvation_notices(self) -> None:
+        sheet = CharacterSheet(name="Ping")
+        ctx = MagicMock()
+        ctx.guild.id = 1
+        ctx.author.id = 42
+        with (
+            patch("sheets.commands.hunger.is_staff", return_value=True),
+            patch(
+                "sheets.commands.hunger._party_user_ids", return_value=[42]
+            ),
+            patch("sheets.commands.hunger.get_sheet", return_value=sheet),
+            patch(
+                "sheets.commands.hunger.get_clock", return_value=MagicMock()
+            ),
+            patch(
+                "sheets.commands.hunger.apply_clock_hunger",
+                return_value=(["starvation → exhaustion 1"], True),
+            ),
+            patch("sheets.commands.hunger.save_owner_sheet") as save,
+            patch(
+                "sheets.commands.hunger.send_message", new_callable=AsyncMock
+            ) as send,
+            patch(
+                "sheets.commands.hunger.delete_command", new_callable=AsyncMock
+            ),
+        ):
+            await _show_all(ctx)
+        save.assert_called_once()
+        embed = send.await_args.kwargs["embed"]
+        change = next(field for field in embed.fields if field.name == "Change")
+        self.assertIn("Ping", change.value)
+        self.assertIn("exhaustion 1", change.value)
+
+    async def test_skips_save_when_hunger_unchanged(self) -> None:
+        sheet = CharacterSheet(name="Ping")
+        ctx = MagicMock()
+        ctx.guild.id = 1
+        ctx.author.id = 42
+        with (
+            patch("sheets.commands.hunger.is_staff", return_value=True),
+            patch(
+                "sheets.commands.hunger._party_user_ids", return_value=[42]
+            ),
+            patch("sheets.commands.hunger.get_sheet", return_value=sheet),
+            patch(
+                "sheets.commands.hunger.get_clock", return_value=MagicMock()
+            ),
+            patch(
+                "sheets.commands.hunger.apply_clock_hunger",
+                return_value=([], False),
+            ),
+            patch("sheets.commands.hunger.save_owner_sheet") as save,
+            patch(
+                "sheets.commands.hunger.send_message", new_callable=AsyncMock
+            ),
+            patch(
+                "sheets.commands.hunger.delete_command", new_callable=AsyncMock
+            ),
+        ):
+            await _show_all(ctx)
+        save.assert_not_called()
 
 
 if __name__ == "__main__":

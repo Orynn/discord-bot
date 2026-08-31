@@ -40,8 +40,20 @@ class TestParseLetArgs(unittest.TestCase):
     def test_item_only(self) -> None:
         args = parse_let_args("Rope")
         self.assertEqual(args.item, "Rope")
+        self.assertFalse(args.all_gear)
         self.assertIsNone(args.place)
         self.assertEqual(args.note, "")
+
+    def test_all_gear(self) -> None:
+        args = parse_let_args("all at Padhiver -- camp")
+        self.assertTrue(args.all_gear)
+        self.assertFalse(args.list_only)
+        self.assertEqual(args.place, "Padhiver")
+        self.assertEqual(args.note, "camp")
+
+        french = parse_let_args("tout à l'auberge")
+        self.assertTrue(french.all_gear)
+        self.assertEqual(french.place, "l'auberge")
 
 
 class TestInferPlace(unittest.TestCase):
@@ -114,6 +126,33 @@ class TestDetachAndRestore(unittest.TestCase):
         self.assertEqual(bag.stored_in, STORED_WORN)
         self.assertEqual(rope.stored_in, "backpack")
         self.assertEqual(torch.stored_in, "loose")
+
+    def test_detach_all_keeps_bags_packed(self) -> None:
+        equipment = Equipment()
+        equipment.add_item(slug="backpack", name="Backpack", kind="item", weight_lb=5)
+        equipment.add_item(
+            slug="rope", name="Rope", kind="item", stored_in="backpack", auto_stow=False
+        )
+        equipment.add_item(
+            slug="torch",
+            name="Torch",
+            kind="item",
+            stored_in="loose",
+            auto_stow=False,
+        )
+        detached = equipment.detach_all_for_stash()
+        self.assertEqual(equipment.items, [])
+        names = [item.name for item in detached]
+        self.assertEqual(set(names), {"Backpack", "Rope", "Torch"})
+        bag = next(item for item in detached if item.name == "Backpack")
+        rope = next(item for item in detached if item.name == "Rope")
+        torch = next(item for item in detached if item.name == "Torch")
+        self.assertIsNone(bag.stored_in)
+        self.assertEqual(rope.stored_in, "backpack")
+        self.assertIsNone(torch.stored_in)
+
+    def test_detach_all_empty(self) -> None:
+        self.assertEqual(Equipment().detach_all_for_stash(), [])
 
 
 class TestStashStorage(unittest.TestCase):

@@ -7,6 +7,7 @@ from typing import Any
 
 from config import FIVETOOLS_DATA_DIR, FIVETOOLS_EXPORT_FILE, FIVETOOLS_HOMEBREW_FILE
 from srd.fivetools.edition import should_replace
+from srd.fivetools.images import first_image_url
 from srd.fivetools.paths import is_official_mirror_entry
 from srd.fivetools.source import build_official_body
 from srd.fivetools_parser import slugify
@@ -58,6 +59,7 @@ class FiveToolsIndex:
         self.skills_by_name: dict[str, dict[str, Any]] = {}
         self.monsters_by_slug: dict[str, dict[str, Any]] = {}
         self.monsters_by_name: dict[str, dict[str, Any]] = {}
+        self._monster_fluff: dict[tuple[str, str], dict[str, Any]] = {}
         self._property_names: dict[str, str] = {}
         self._subclass_features: dict[tuple[str, str], list[dict[str, Any]]] = {}
         self._class_features: dict[str, list[dict[str, Any]]] = {}
@@ -292,6 +294,48 @@ class FiveToolsIndex:
                 by_slug=self.monsters_by_slug,
                 by_name=self.monsters_by_name,
             )
+
+        for raw in body.get("monsterFluff", []):
+            self._ingest_monster_fluff(raw)
+
+    def _ingest_monster_fluff(self, raw: dict[str, Any]) -> None:
+        name = raw.get("name")
+        if not name:
+            return
+        source = str(raw.get("source") or "XMM")
+        key = (str(name).casefold(), source)
+        existing = self._monster_fluff.get(key)
+        if existing is None or (raw.get("images") and not existing.get("images")):
+            self._monster_fluff[key] = raw
+
+    def _fluff_images(
+        self,
+        name: str,
+        source: str,
+        _seen: set[tuple[str, str]] | None = None,
+    ) -> list[Any]:
+        key = (name.casefold(), source)
+        seen = _seen if _seen is not None else set()
+        if key in seen:
+            return []
+        seen.add(key)
+        raw = self._monster_fluff.get(key)
+        if raw is None:
+            return []
+        images = raw.get("images")
+        if isinstance(images, list) and images:
+            return images
+        copy = raw.get("_copy")
+        if isinstance(copy, dict) and copy.get("name"):
+            return self._fluff_images(
+                str(copy["name"]),
+                str(copy.get("source") or source),
+                seen,
+            )
+        return []
+
+    def monster_image_url(self, name: str, source: str) -> str | None:
+        return first_image_url(self._fluff_images(name, source))
 
     def property_name(self, code: str) -> str:
         base = code.split("|", 1)[0]

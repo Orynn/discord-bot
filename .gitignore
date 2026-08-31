@@ -5,6 +5,8 @@ data/arkann.db-*
 data/backups/
 data/hf-cache/
 data/exports/
+data/portraits/
+data/monster_tokens/
 5etools.json
 5etools/5etools.json
 5etools/homebrew.json

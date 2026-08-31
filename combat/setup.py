@@ -5,6 +5,7 @@ import random
 from campaign.clock import format_duration, parse_duration
 from campaign.clock_storage import get_clock, save_clock
 from combat.monsters import lookup_monster_profile
+from combat.templates import known_map_ids
 from sheets.hunger import tick_hunger_for_clock
 from initiative.storage import (
     InitiativeState,
@@ -16,19 +17,28 @@ from sheets.data import ability_modifier
 from sheets.storage import get_sheet
 
 
-def parse_start_args(text: str) -> tuple[str | None, int | None]:
-    """Split `;combat start Dire Wolf 2h` into a monster name and optional minutes."""
+def parse_start_args(
+    text: str, *, guild_id: int | None = None
+) -> tuple[str | None, int | None, str]:
+    """Split `;combat start Dire Wolf tavern 2h` into monster, minutes, and map."""
     cleaned = text.strip()
     if not cleaned:
-        return None, None
+        return None, None, "arena"
     parts = cleaned.split()
+    minutes = None
     last = parts[-1].lstrip("+")
     try:
         minutes = parse_duration(last)
+        parts = parts[:-1]
     except ValueError:
-        return cleaned, None
-    name = " ".join(parts[:-1]).strip() or None
-    return name, minutes
+        pass
+    map_id = "arena"
+    known = known_map_ids(guild_id=guild_id)
+    if parts and parts[-1].lower() in known:
+        map_id = parts[-1].lower()
+        parts = parts[:-1]
+    name = " ".join(parts).strip() or None
+    return name, minutes, map_id
 
 
 def _already_listed(
@@ -69,7 +79,7 @@ async def ensure_section_fight(
 
     if not state.order:
         raise ValueError(
-            "No initiative tracked. Use `;init add` first, then `;combat start`."
+            "Pas d’initiative. Utilise `;init add`, puis `;combat start`."
         )
 
     save_initiative(guild_id=guild_id, scope_id=scope_id, state=state)

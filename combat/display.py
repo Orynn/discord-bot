@@ -3,23 +3,25 @@ import discord
 from combat.cards import (
     CardSnapshot,
     card_description,
-    card_label,
     is_spellbook_card,
     lookup_card,
 )
+from combat.editor_server import combat_board_url
+from combat.map import cell_label, ensure_positions, remaining_squares, speed_squares
+from combat.render import MAP_FILENAME, render_combat_map
 from combat.storage import CombatState
+from combat.templates import template_for_state
+from combat.text import format_log_line
+from combat.tokens import prefetch_monster_tokens
 
 
-COMBAT_COLOR = 0xC0392B
-
-
-def _card_for(combatant, card_id: str) -> CardSnapshot | None:
-    return lookup_card(combatant.card_catalog, card_id)
+COMBAT_COLOR = 0x2B3038
+BOARD_TITLE = "⚔️ Combat"
 
 
 def format_hand(hand: list[str], catalog: dict[str, CardSnapshot]) -> str:
     if not hand:
-        return "*(empty hand)*"
+        return "*(main vide)*"
     lines = []
     for card_id in hand:
         card = lookup_card(catalog, card_id)
@@ -32,8 +34,8 @@ def format_hand(hand: list[str], catalog: dict[str, CardSnapshot]) -> str:
 
 def format_combat_log(state: CombatState) -> str:
     if not state.log:
-        return "*(no actions yet)*"
-    return "\n".join(f"• {line}" for line in state.log[-5:])
+        return "*(aucune action)*"
+    return "\n".join(format_log_line(line) for line in state.log[-5:])
 
 
 def _effect_label(combatant, effect_id: str) -> str:
@@ -67,13 +69,15 @@ def format_combatants(state: CombatState) -> str:
                 extras.append(effect_labels)
         if combatant.user_id is not None and combatant.hp <= 0:
             if combatant.death_save_failures >= 3:
-                extras.append("dead")
+                extras.append("mort")
             elif combatant.death_save_successes >= 3:
                 extras.append("stable")
             else:
                 extras.append(
-                    f"dying {combatant.death_save_successes}S/{combatant.death_save_failures}F"
+                    f"mourant {combatant.death_save_successes}R/{combatant.death_save_failures}E"
                 )
+        if combatant.x is not None and combatant.y is not None:
+            extras.insert(0, cell_label(combatant.x, combatant.y, state))
         extra = f" · _{', '.join(extras)}_" if extras else ""
         if combatant.user_id is None:
             status = " 💀" if combatant.hp <= 0 else ""
@@ -86,31 +90,54 @@ def format_combatants(state: CombatState) -> str:
                 f"{marker}**{combatant.name}** — ❤️ **{combatant.hp}/{combatant.max_hp}**"
                 f"{bar_part}{extra}{status}"
             )
-    return "\n".join(lines) if lines else "*(no combatants)*"
+    return "\n".join(lines) if lines else "*(aucun combattant)*"
 
 
-def build_combat_embed(state: CombatState) -> discord.Embed:
+def build_combat_map_file(state: CombatState) -> discord.File:
+    ensure_positions(state)
+    prefetch_monster_tokens(state)
+    return discord.File(render_combat_map(state), filename=MAP_FILENAME)
+
+
+def board_attachments(state: CombatState) -> list[discord.File]:
+    if combat_board_url(state.guild_id, state.scope_id):
+        return []
+    return [build_combat_map_file(state)]
+
+
+def build_combat_embed(state: CombatState, *, ended: bool = False) -> discord.Embed:
+    ensure_positions(state)
     active = state.active_combatant()
-    title = "🃏 Card combat"
-    if active is not None:
-        title = f"🃏 Card combat — {active.name}'s turn"
+    title = BOARD_TITLE
+    if ended:
+        title = f"{BOARD_TITLE} — terminé"
+    elif active is not None:
+        title = f"{BOARD_TITLE} — tour de {active.name}"
 
     embed = discord.Embed(title=title, color=COMBAT_COLOR)
-    embed.add_field(name="⚔️ Combatants", value=format_combatants(state), inline=False)
-    embed.add_field(
-        name="📜 Recent actions", value=format_combat_log(state), inline=False
-    )
-    if active is not None and active.hand:
-        preview = ", ".join(
-            card_label(card)
-            for card_id in active.hand[:5]
-            if (card := _card_for(active, card_id)) is not None
-        )
-        embed.set_footer(text=f"🖐️ {active.name}'s hand: {preview}")
-    else:
+    details: list[str] = []
+    if state.map_id and state.map_id != "arena":
+        details.append(f"Carte : **{template_for_state(state).label}**")
+    board_url = combat_board_url(state.guild_id, state.scope_id)
+    if board_url:
+        details.append(f"[Ouvrir le plateau]({board_url})")
+    if details:
+        embed.description = "\n".join(details)
+    embed.add_field(name="📜 Actions", value=format_combat_log(state), inline=False)
+    if board_url is None:
+        embed.set_image(url=f"attachment://{MAP_FILENAME}")
+    if ended:
+        embed.set_footer(text="Combat terminé")
+    elif active is not None:
+        left = remaining_squares(active)
+        total = speed_squares(active.speed)
+        action = "faite" if active.acted else "prête"
+        cell = cell_label(active.x, active.y, state)
         embed.set_footer(
-            text="Decks come from character sheets and your 5etools export"
+            text=f"{active.name} · {cell} · {left}/{total} cases · joue dans le navigateur"
         )
+    else:
+        embed.set_footer(text="Joue sur le plateau navigateur")
     return embed
 
 
@@ -126,7 +153,7 @@ def build_hand_embed(
     *, combatant_name: str, hand: list[str], catalog: dict[str, CardSnapshot]
 ) -> discord.Embed:
     embed = discord.Embed(
-        title=f"🖐️ {combatant_name}'s hand",
+        title=f"🖐️ Main de {combatant_name}",
         description=format_hand(hand, catalog),
         color=COMBAT_COLOR,
     )
@@ -134,8 +161,8 @@ def build_hand_embed(
     if spellbook:
         if len(spellbook) > 1024:
             spellbook = spellbook[:1021] + "…"
-        embed.add_field(name="📖 Spellbook", value=spellbook, inline=False)
+        embed.add_field(name="📖 Grimoire", value=spellbook, inline=False)
     embed.set_footer(
-        text="Every known spell is in the play menu. One target is chosen automatically."
+        text="Tous tes sorts sont dans le menu. Une seule cible est choisie automatiquement."
     )
     return embed

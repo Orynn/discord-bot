@@ -273,6 +273,33 @@ class Equipment:
         removed.stored_in = None
         return [removed]
 
+    def detach_all_for_stash(self) -> list[InventoryItem]:
+        detached: list[InventoryItem] = []
+        while self.items:
+            slugs = {item.slug for item in self.items}
+            top = next(
+                (
+                    item
+                    for item in self.items
+                    if not item.stored_in
+                    or item.stored_in in SPECIAL_LOCATIONS
+                    or item.stored_in not in slugs
+                ),
+                self.items[0],
+            )
+            chunk = self.detach_for_stash(top.slug) or self.detach_for_stash(
+                top.name
+            )
+            if not chunk:
+                self.items.remove(top)
+                top.equipped = False
+                if top.stored_in in SPECIAL_LOCATIONS:
+                    top.stored_in = None
+                detached.append(top)
+                continue
+            detached.extend(chunk)
+        return detached
+
     def restore_item(
         self, item: InventoryItem, *, auto_stow: bool = True
     ) -> InventoryItem:
@@ -997,7 +1024,10 @@ class Equipment:
         if item is None:
             raise ValueError(f"Item not found: {query}")
         if not is_custom_slug(item.slug) and item.kind != ITEM_KIND_CUSTOM:
-            raise ValueError("Only custom items can be marked as bags.")
+            raise ValueError(
+                f"**{item.name}** is catalog gear. "
+                "Create a custom bag with a new name instead."
+            )
 
         if capacity_lb is not None and capacity_lb <= 0:
             item.capacity_lb = None
@@ -1015,6 +1045,30 @@ class Equipment:
             item.equipped = False
         self.stow_loose()
         return item
+
+    def add_custom_bag(
+        self,
+        name: str,
+        *,
+        capacity_lb: float | None = None,
+        weight_lb: float | None = None,
+    ) -> tuple[InventoryItem, bool]:
+        cleaned = name.strip()
+        if not cleaned:
+            raise ValueError("Item name cannot be empty.")
+        existing = self.find_item(cleaned)
+        created = existing is None
+        if created:
+            if capacity_lb is not None and capacity_lb <= 0:
+                raise ValueError(f"Item not found: {cleaned}")
+            self.add_item(
+                slug=custom_slug(cleaned),
+                name=cleaned,
+                kind=ITEM_KIND_CUSTOM,
+                quantity=1,
+                weight_lb=weight_lb,
+            )
+        return self.mark_as_bag(cleaned, capacity_lb), created
 
     def stow_loose(self) -> int:
         moved = 0

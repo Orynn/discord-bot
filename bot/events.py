@@ -11,16 +11,38 @@ from bot.catchup import (
     mark_message_processed,
     reset_session_tracking,
 )
-from bot.command_helpers import command_reply, delete_command
+from bot.command_helpers import SERVER_ONLY, command_reply, delete_command
 from bot.command_log import log_command
+from bot.errors import (
+    collect_command_names,
+    format_command_suggestions,
+    invoked_command_name,
+    suggest_commands,
+)
+from bot.help_commands import is_command_help_shown
 from bot.views import register_persistent_views
 from campaign.forums import CampaignForumError, ensure_default_campaign_forums
-from config import PREFIX
+from config import PREFIX, is_home_guild
 from players.discover import refresh_guild_player_sections, sync_guild_player_sections
 from srd import fivetools, glossary
 from srd.fivetools.paths import is_available
 
 logger = logging.getLogger(__name__)
+
+
+async def leave_if_foreign(guild: discord.Guild) -> bool:
+    if is_home_guild(guild):
+        return False
+    logger.warning(
+        "Leaving %s (%s) — Arkann stays only on the home server.",
+        guild.name,
+        guild.id,
+    )
+    try:
+        await guild.leave()
+    except discord.HTTPException:
+        logger.exception("Could not leave %s", guild.name)
+    return True
 
 
 async def _error_reply(ctx: Context, message: str) -> None:
@@ -39,7 +61,9 @@ def register_events(bot: Bot) -> None:
         register_persistent_views(bot)
 
         async def _startup() -> None:
-            for guild in bot.guilds:
+            for guild in list(bot.guilds):
+                if await leave_if_foreign(guild):
+                    continue
                 try:
                     mapped = sync_guild_player_sections(guild)
                     if mapped:
@@ -102,10 +126,14 @@ def register_events(bot: Bot) -> None:
 
     @bot.event
     async def on_guild_available(guild: discord.Guild) -> None:
+        if await leave_if_foreign(guild):
+            return
         _refresh_sections(guild)
 
     @bot.event
     async def on_guild_join(guild: discord.Guild) -> None:
+        if await leave_if_foreign(guild):
+            return
         _refresh_sections(guild)
 
     @bot.event
@@ -128,6 +156,14 @@ def register_events(bot: Bot) -> None:
     @bot.event
     async def on_command_error(ctx: Context, error: commands.CommandError) -> None:
         if isinstance(error, commands.CommandNotFound):
+            query = invoked_command_name(error, getattr(ctx, "invoked_with", None))
+            suggestions = suggest_commands(query, collect_command_names(bot))
+            hint = format_command_suggestions(suggestions)
+            if hint:
+                await _error_reply(ctx, hint)
+            return
+
+        if is_command_help_shown(error):
             return
 
         if is_catchup_invoke(ctx):
@@ -135,36 +171,27 @@ def register_events(bot: Bot) -> None:
 
         if isinstance(error, commands.CommandOnCooldown):
             wait = max(1, int(error.retry_after + 0.999))
-            await _error_reply(
-                ctx, f"That command is on cooldown. Try again in {wait}s."
-            )
+            await _error_reply(ctx, f"Cette commande est en pause. Réessaie dans {wait}s.")
             return
 
         if isinstance(error, commands.UserInputError):
-            help_text = ctx.command.help if ctx.command and ctx.command.help else ""
-            if isinstance(error, commands.MissingRequiredArgument):
-                usage = ""
-                if ctx.command is not None:
-                    usage = f"\nUsage: `{PREFIX}{ctx.command.qualified_name} <{error.param.name}>`"
-                message = f"Missing required argument: `{error.param.name}`.{usage}"
-            else:
-                message = "Invalid command usage."
-            if help_text:
-                message = f"{message}\n{help_text}"
-            await _error_reply(ctx, message)
+            if ctx.command is not None:
+                await ctx.send_help(ctx.command)
+                return
+            await _error_reply(
+                ctx, f"Usage invalide. Essaie `{PREFIX}help` ou `{PREFIX}commande -h`."
+            )
             return
 
         if isinstance(error, commands.CheckFailure):
             if ctx.guild is None:
-                await _error_reply(ctx, "This command can only be used in a server.")
+                await _error_reply(ctx, SERVER_ONLY)
             else:
-                await _error_reply(
-                    ctx, "You don't have permission to use this command."
-                )
+                await _error_reply(ctx, "Tu n’as pas le droit d’utiliser cette commande.")
             return
 
         logger.exception("Unhandled command error in %s", ctx.command, exc_info=error)
-        await _error_reply(ctx, "Something went wrong running that command.")
+        await _error_reply(ctx, "Quelque chose s’est mal passé. Réessaie, ou `;help`.")
 
     @bot.event
     async def on_command_completion(ctx: Context) -> None:

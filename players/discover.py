@@ -18,10 +18,13 @@ from sheets.storage import find_user_id_by_character_name, get_sheet
 logger = logging.getLogger(__name__)
 
 _PLAIN = re.compile(r"[^a-z0-9]+")
+SANDBOX_CHANNEL_KEY = "trash"
 
 
 def _plain_name(name: str | None) -> str:
-    return _PLAIN.sub("", (name or "").casefold())
+    if not isinstance(name, str):
+        return ""
+    return _PLAIN.sub("", name.casefold())
 
 
 def _unwrap_channel(channel: Any) -> Any:
@@ -31,6 +34,36 @@ def _unwrap_channel(channel: Any) -> Any:
     ):
         return channel.parent
     return channel
+
+
+def is_sandbox_channel(channel: Any) -> bool:
+    """True for #🚯trash (and any name that strips to 'trash')."""
+    channel = _unwrap_channel(channel)
+    if channel is None:
+        return False
+    return _plain_name(getattr(channel, "name", None)) == SANDBOX_CHANNEL_KEY
+
+
+def sandbox_scope_id(channel: Any) -> int | None:
+    channel = _unwrap_channel(channel)
+    if channel is None or not is_sandbox_channel(channel):
+        return None
+    channel_id = getattr(channel, "id", None)
+    if channel_id is None:
+        return None
+    return int(channel_id)
+
+
+def sandbox_player_id(channel: Any) -> int | None:
+    """Reserved negative id so trash never writes a real Discord user's sheet."""
+    scope = sandbox_scope_id(channel)
+    if scope is None:
+        return None
+    return -abs(scope)
+
+
+def is_sandbox_owner_id(user_id: int | None) -> bool:
+    return user_id is not None and int(user_id) < 0
 
 
 def _is_player_channel_name(name: str | None) -> bool:
@@ -279,7 +312,7 @@ def _resolve_category(guild: discord.Guild, channel: Any) -> Any:
 
 def discover_player_id(*, guild: discord.Guild, channel: Any) -> int | None:
     channel = _unwrap_channel(channel)
-    if channel is None:
+    if channel is None or is_sandbox_channel(channel):
         return None
     category = _resolve_category(guild, channel)
     category_id = getattr(category, "id", None)

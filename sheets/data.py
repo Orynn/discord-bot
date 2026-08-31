@@ -160,6 +160,7 @@ class CharacterSheet:
     hunger_meal_day: int | None = None
     hunger_meal_kind: str = ""
     notes: str = ""
+    image_url: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -214,6 +215,7 @@ class CharacterSheet:
             ),
             hunger_meal_kind=str(data.get("hunger_meal_kind", "") or ""),
             notes=data.get("notes", ""),
+            image_url=str(data.get("image_url", "") or ""),
         )
 
     def __post_init__(self) -> None:
