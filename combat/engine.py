@@ -40,12 +40,14 @@ from combat.map import (
     targets_in_range,
     weapon_range_squares,
 )
+from combat.history import finish_combat
 from combat.monsters import lookup_monster_profile
 from combat.storage import (
     CombatState,
     CombatantState,
-    clear_combat,
     get_combat,
+    lock_for,
+    new_board_token,
     save_combat,
 )
 from combat.text import (
@@ -244,8 +246,7 @@ def _concentration_check(
     if success:
         _append_log(
             state,
-            f"{concentration_held(combatant.name)} "
-            f"(CON {roll_note}{bonus} vs DD {dc})",
+            f"{concentration_held(combatant.name)} (CON {roll_note}{bonus} vs DD {dc})",
         )
         return
     _drop_concentration(
@@ -412,9 +413,7 @@ def _resolve_attack_roll(
 ) -> tuple[bool, bool, str]:
     bonus = _attack_bonus(actor, card, guild_id=state.guild_id)
     ac = _combatant_ac(target, guild_id=state.guild_id)
-    advantage = _attack_advantage(
-        state, actor, target, card, guild_id=state.guild_id
-    )
+    advantage = _attack_advantage(state, actor, target, card, guild_id=state.guild_id)
     roll, roll_note = _roll_d20(advantage)
     total = roll + bonus
     bonus_note = f"{bonus:+d}" if bonus else "+0"
@@ -532,7 +531,7 @@ def _living_of(state: CombatState, side: str) -> list[CombatantState]:
     return [
         combatant
         for combatant in state.combatants.values()
-        if combatant.hp > 0 and _side(combatant) == side
+        if _in_fight(combatant) and _side(combatant) == side
     ]
 
 
@@ -571,7 +570,7 @@ def conclude_if_over(state: CombatState) -> PlayResult | None:
     victory = _check_victory(state)
     if victory is None:
         return None
-    clear_combat(guild_id=state.guild_id, scope_id=state.scope_id)
+    finish_combat(state, winner=victory.winner)
     return victory
 
 
@@ -922,8 +921,10 @@ def _has_spell_slot(
     if card.spell_level <= 0:
         return True
     sheet = _sheet_for(actor, guild_id=guild_id)
-    if sheet is None or not sheet.spell_slots.has_slots():
+    if sheet is None:
         return True
+    if not sheet.spell_slots.has_slots():
+        return False
     return sheet.spell_slots.lowest_available(card.spell_level) is not None
 
 
@@ -937,13 +938,7 @@ async def start_combat(
 ) -> CombatState:
     initiative = get_initiative(guild_id=guild_id, scope_id=scope_id)
     if initiative is None or not initiative.order:
-        raise ValueError(
-            "Pas d’initiative. Utilise `;init add`, puis `;combat start`."
-        )
-    previous = get_combat(guild_id=guild_id, scope_id=scope_id)
-    board_message_id = (
-        previous.board_message_id if previous is not None else None
-    )
+        raise ValueError("Pas d’initiative. Utilise `;init add`, puis `;combat start`.")
 
     combatants: dict[str, CombatantState] = {}
     turn_order: list[str] = []
@@ -1016,12 +1011,18 @@ async def start_combat(
         active_index=initiative.active_index % len(turn_order),
         combatants=combatants,
         log=[combat_started()],
-        board_message_id=board_message_id,
+        board_token=new_board_token(),
     )
     apply_template(state, map_id)
     _prepare_active_turn(state)
-    save_combat(state)
-    resolve_npc_turns(state)
+    async with lock_for(guild_id=guild_id, scope_id=scope_id):
+        previous = get_combat(guild_id=guild_id, scope_id=scope_id)
+        if previous is not None:
+            state.board_message_id = previous.board_message_id
+            if previous.board_token:
+                state.board_token = previous.board_token
+        save_combat(state)
+        resolve_npc_turns(state)
     return state
 
 
@@ -1082,11 +1083,22 @@ async def add_combatant(
         attacks=monster.attacks if monster is not None else 1,
     )
     _shuffle_and_deal(combatant)
-    state.combatants[key] = combatant
-    if name not in state.turn_order:
-        state.turn_order.append(name)
-    place_new_combatant(state, combatant)
-    save_combat(state)
+    async with lock_for(guild_id=state.guild_id, scope_id=state.scope_id):
+        live = get_combat(guild_id=state.guild_id, scope_id=state.scope_id)
+        if live is None:
+            raise ValueError("Aucun combat en cours.")
+        if key in live.combatants:
+            raise ValueError(f"**{name}** est déjà dans ce combat.")
+        live.combatants[key] = combatant
+        if name not in live.turn_order:
+            live.turn_order.append(name)
+        place_new_combatant(live, combatant)
+        save_combat(live)
+        state.combatants[key] = combatant
+        if name not in state.turn_order:
+            state.turn_order.append(name)
+        state.board_token = live.board_token
+        state.board_message_id = live.board_message_id
     return combatant
 
 
@@ -1143,9 +1155,11 @@ def play_card(
             if actor.x is None or actor.y is None:
                 _restore_hand()
                 raise ValueError(f"**{actor.name}** n’a pas de position sur la carte.")
-            if chebyshev(actor.x, actor.y, cell[0], cell[1]) > (
-                card.range_squares or 0
-            ) and card.range_squares is not None:
+            if (
+                chebyshev(actor.x, actor.y, cell[0], cell[1])
+                > (card.range_squares or 0)
+                and card.range_squares is not None
+            ):
                 _restore_hand()
                 raise ValueError(
                     out_of_range(
@@ -1195,9 +1209,7 @@ def play_card(
         if card.card_type == "spell":
             _consume_spell_slot(actor, card, guild_id=state.guild_id)
         _begin_concentration(state, actor, card)
-        message = _resolve_aoe_card(
-            state, actor=actor, card=card, center=aoe_center
-        )
+        message = _resolve_aoe_card(state, actor=actor, card=card, center=aoe_center)
     elif card.is_healing:
         assert target is not None
         _consume_spell_slot(actor, card, guild_id=state.guild_id)
@@ -1447,7 +1459,9 @@ def move_combatant(
     if actor.x is None or actor.y is None:
         raise ValueError(f"**{actor.name}** n’a pas de position sur la carte.")
     if actor.x == dest_x and actor.y == dest_y:
-        raise ValueError(f"**{actor.name}** est déjà sur {cell_label(dest_x, dest_y, state)}.")
+        raise ValueError(
+            f"**{actor.name}** est déjà sur {cell_label(dest_x, dest_y, state)}."
+        )
     blocked = movement_blockers(actor)
     if blocked:
         raise ValueError(cannot_move(next(iter(blocked))))
@@ -1555,9 +1569,7 @@ def enemies_in_melee(state: CombatState, actor: CombatantState) -> list[Combatan
     return enemies_in_weapon_range(state, actor)
 
 
-def _nearest_enemy(
-    state: CombatState, actor: CombatantState
-) -> CombatantState | None:
+def _nearest_enemy(state: CombatState, actor: CombatantState) -> CombatantState | None:
     living = [
         combatant
         for combatant in state.combatants.values()

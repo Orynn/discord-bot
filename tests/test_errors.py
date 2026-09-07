@@ -47,6 +47,8 @@ class TestCollectCommandNames(unittest.TestCase):
         self.assertIn("roll", names)
         self.assertIn("r", names)
         self.assertIn("desc", names)
+        self.assertIn("desc clear", names)
+        self.assertIn("desc set", names)
         self.assertIn("sheet create", names)
         self.assertNotIn("help", names)
 
@@ -65,9 +67,22 @@ class TestCommandErrorHandler(unittest.IsolatedAsyncioTestCase):
         ctx.command = None
         ctx.guild = object()
         with patch("bot.events._error_reply", new_callable=AsyncMock) as reply:
-            await bot.on_command_error(ctx, commands.CommandNotFound('Command "rol" is not found'))
+            await bot.on_command_error(
+                ctx, commands.CommandNotFound('Command "rol" is not found')
+            )
         reply.assert_awaited_once()
         self.assertIn(";roll", reply.await_args.args[1])
+
+    async def test_catchup_marks_command_failed(self) -> None:
+        bot = self._bot()
+        ctx = MagicMock()
+        ctx.command = bot.get_command("roll")
+        ctx.command_failed = False
+        ctx._from_catchup = True
+        await bot.on_command_error(
+            ctx, commands.CommandInvokeError(RuntimeError("boom"))
+        )
+        self.assertTrue(ctx.command_failed)
 
     async def test_unknown_unrelated_text_stays_quiet(self) -> None:
         bot = self._bot()
@@ -92,3 +107,14 @@ class TestCommandErrorHandler(unittest.IsolatedAsyncioTestCase):
             await bot.on_command_error(ctx, commands.MissingRequiredArgument(param))
         ctx.send_help.assert_awaited_once_with(ctx.command)
         reply.assert_not_awaited()
+
+    async def test_app_command_check_failure_replies(self) -> None:
+        bot = self._bot()
+        interaction = MagicMock()
+        interaction.guild = object()
+        interaction.command = None
+        interaction.response.is_done.return_value = False
+        interaction.response.send_message = AsyncMock()
+        await bot.tree.on_error(interaction, discord.app_commands.CheckFailure("no"))
+        interaction.response.send_message.assert_awaited_once()
+        self.assertIn("droit", interaction.response.send_message.await_args.args[0])

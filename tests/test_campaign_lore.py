@@ -5,6 +5,8 @@ from campaign.lore import (
     extract_query_terms,
     filter_campaign_entries,
     markdown_channel_link,
+    score_campaign_entry,
+    select_campaign_entries,
 )
 
 SAMPLE = [
@@ -51,6 +53,17 @@ class TestCampaignLore(unittest.TestCase):
         matched = filter_campaign_entries(SAMPLE, "Toblen")
         self.assertEqual(len(matched), 1)
         self.assertIn("Toblen", matched[0].title)
+
+    def test_selects_title_hits_first(self) -> None:
+        chosen = select_campaign_entries(SAMPLE, "Phandalin", limit=2)
+        self.assertEqual(
+            [entry.title for entry in chosen],
+            ["Phandalin", "[Phandalin] Toblen Stonehill"],
+        )
+        self.assertGreater(
+            score_campaign_entry(SAMPLE[0], ["phandalin"]),
+            score_campaign_entry(SAMPLE[1], ["phandalin"]),
+        )
 
     def test_markdown_link_keeps_emoji_outside_label(self) -> None:
         self.assertEqual(

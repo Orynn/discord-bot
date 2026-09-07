@@ -1,0 +1,29 @@
+---
+description: Run the test suite in a background agent; spawn a fixer if it fails
+alwaysApply: true
+---
+
+# Tests in the background
+
+Do not keep the main agent blocked on the full unittest / ruff suite. Those logs eat the conversation context.
+
+## After a coding change
+
+1. Finish the code change and tell the user what changed.
+2. Launch a **background** `Task` (`run_in_background: true`, `subagent_type: shell`) that runs:
+
+```bash
+python -m unittest discover -s tests -q
+.venv/bin/ruff check .
+```
+
+3. **End the turn.** Do not poll, `AwaitShell`, or paste the suite output here.
+4. Mid-work, a **quiet** targeted test of 1–3 modules is OK in the main agent (`python -m unittest tests.test_foo -q`). Never the full discover.
+
+## On background failure
+
+When the test agent reports failures, immediately launch a **new** background `Task` (`subagent_type: generalPurpose`) to fix only those failures, then re-run the same suite in background.
+
+- Give the fixer the failing test names and the error text, not the whole log.
+- At most **two** fix rounds. If it still fails, report the remaining errors to the user.
+- Do not dump 689-test transcripts into the chat.

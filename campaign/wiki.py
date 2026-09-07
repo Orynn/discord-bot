@@ -11,6 +11,7 @@ from urllib.parse import quote, unquote, urlparse
 import aiohttp
 import discord
 
+from bot.rate_limits import retry_after_from_headers
 from campaign.forums import DEFAULT_FORUM_EMOJIS, normalize_section_key
 
 WIKI_NAME = "Wiki Le Monde des Royaumes Oubliés"
@@ -934,13 +935,11 @@ async def _api(params: dict[str, str], *, version2: bool = True) -> dict | list:
     for attempt in range(6):
         async with session.get(API_URL, params=query) as response:
             if response.status in {429, 502, 503}:
-                retry_after = response.headers.get("Retry-After")
-                try:
-                    delay = float(retry_after) if retry_after else min(2**attempt, 20)
-                except ValueError:
-                    delay = min(2**attempt, 20)
+                delay = retry_after_from_headers(
+                    response.headers, fallback=min(2**attempt, 20)
+                )
                 last_error = WikiError(f"{WIKI_NAME} a renvoyé HTTP {response.status}.")
-                await asyncio.sleep(delay)
+                await asyncio.sleep(delay if delay is not None else 1)
                 continue
             if response.status != 200:
                 raise WikiError(f"{WIKI_NAME} a renvoyé HTTP {response.status}.")

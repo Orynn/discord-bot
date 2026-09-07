@@ -16,7 +16,7 @@
   "player_category_emoji": "🐉",
   "player_channel_ooc": "📢blabla",
   "player_channel_rp": "🎲roleplay",
-  "staff_usernames": ["Orynn"],
+  "staff_user_ids": [],
   "image_provider": "auto",
   "image_local_url": "http://127.0.0.1:7860",
   "image_model": "flux",
@@ -25,7 +25,12 @@
   "image_timeout_seconds": 180,
   "image_cooldown_seconds": 20,
   "image_history_limit": 1000,
-  "editor_host": "0.0.0.0",
+  "editor_host": "127.0.0.1",
   "editor_port": 8765,
-  "editor_public_url": ""
+  "editor_public_url": "",
+  "gemini_model": "gemini-3.5-flash",
+  "gemini_timeout_seconds": 45,
+  "gemini_max_output_tokens": 1600,
+  "gemini_history_limit": 20,
+  "gemini_cooldown_seconds": 8
 }

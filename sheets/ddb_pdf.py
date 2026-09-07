@@ -1,14 +1,25 @@
 import re
+import zlib
 from dataclasses import dataclass, field
 
+from sheets.armor import apply_armor_ac
 from sheets.currency import Currency
-from sheets.data import ABILITIES, CharacterSheet, ability_modifier, proficiency_bonus
+from sheets.data import (
+    ABILITIES,
+    SKILL_ABILITIES,
+    CharacterSheet,
+    ability_modifier,
+    proficiency_bonus,
+)
 from sheets.equipment import (
     ITEM_KIND_ARMOR,
     ITEM_KIND_CUSTOM,
+    ITEM_KIND_WEAPON,
     custom_slug,
     pack_bundle_contents,
 )
+from sheets.spell_slots import slots_table_for_class
+from srd.fivetools_parser import parse_weight_lb
 
 DDB_ABILITY_FIELDS: dict[str, str] = {
     "STR": "str",
@@ -46,8 +57,83 @@ DDB_SKILL_FIELDS: dict[str, str] = {
     "ReligionProf": "religion",
     "StealthProf": "stealth",
     "SleightProf": "sleight_of_hand",
+    "SleightofHandProf": "sleight_of_hand",
+    "SleightOfHandProf": "sleight_of_hand",
     "SurvivalProf": "survival",
 }
+
+DDB_SKILL_SCORE_FIELDS: dict[str, str] = {
+    "Acrobatics": "acrobatics",
+    "Animal": "animal_handling",
+    "Arcana": "arcana",
+    "Athletics": "athletics",
+    "Deception": "deception",
+    "History": "history",
+    "Insight": "insight",
+    "Intimidation": "intimidation",
+    "Investigation": "investigation",
+    "Medicine": "medicine",
+    "Nature": "nature",
+    "Perception": "perception",
+    "Performance": "performance",
+    "Persuasion": "persuasion",
+    "Religion": "religion",
+    "SleightofHand": "sleight_of_hand",
+    "Stealth": "stealth",
+    "Survival": "survival",
+}
+
+DDB_SAVE_PROF_FIELDS: dict[str, str] = {
+    "StrProf": "str",
+    "DexProf": "dex",
+    "ConProf": "con",
+    "IntProf": "int",
+    "WisProf": "wis",
+    "ChaProf": "cha",
+}
+
+_PROF_MARKERS = frozenset({"P", "O", "YES", "Y", "•", "●", "X", "ON", "TRUE", "1"})
+_EXPERTISE_MARKERS = frozenset({"E"})
+_SKILL_PROF_STEMS: dict[str, str] = {
+    "acrobatics": "acrobatics",
+    "animal": "animal_handling",
+    "animalhandling": "animal_handling",
+    "arcana": "arcana",
+    "athletics": "athletics",
+    "deception": "deception",
+    "history": "history",
+    "insight": "insight",
+    "intimidation": "intimidation",
+    "investigation": "investigation",
+    "medicine": "medicine",
+    "nature": "nature",
+    "perception": "perception",
+    "performance": "performance",
+    "persuasion": "persuasion",
+    "religion": "religion",
+    "sleight": "sleight_of_hand",
+    "sleightofhand": "sleight_of_hand",
+    "stealth": "stealth",
+    "survival": "survival",
+}
+_SAVE_PROF_STEMS: dict[str, str] = {
+    "strprof": "str",
+    "dexprof": "dex",
+    "conprof": "con",
+    "intprof": "int",
+    "wisprof": "wis",
+    "chaprof": "cha",
+}
+_SKIP_TRAIT_TITLES = frozenset(
+    {
+        "creature type",
+        "size",
+        "speed",
+        "languages",
+        "soldier ability score improvements",
+    }
+)
+_NOTES_LIMIT = 2000
 
 
 @dataclass
@@ -56,6 +142,7 @@ class DdbPdfImport:
     spell_names: list[str] = field(default_factory=list)
     equipment_entries: list[tuple[str, int]] = field(default_factory=list)
     equipped_names: list[str] = field(default_factory=list)
+    equipment_weights: dict[str, float] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
 
 
@@ -97,30 +184,153 @@ def _parse_pdf_literal(source: str, start: int) -> tuple[str, int]:
     return "".join(chars), index
 
 
-def _field_value_from_block(block: str) -> str | None:
-    match = re.search(r"/V\s*", block)
-    if not match:
-        return None
-    index = match.end()
-    while index < len(block) and block[index].isspace():
+def _skip_ws(source: str, index: int) -> int:
+    while index < len(source) and source[index].isspace():
         index += 1
-    if index >= len(block) or block[index] != "(":
+    return index
+
+
+def _parse_pdf_hex_string(source: str, start: int) -> tuple[str, int]:
+    if start >= len(source) or source[start] != "<":
+        return "", start
+    end = source.find(">", start + 1)
+    if end == -1:
+        return "", start
+    hexdigits = re.sub(r"\s+", "", source[start + 1 : end])
+    if len(hexdigits) % 2:
+        hexdigits += "0"
+    try:
+        raw = bytes.fromhex(hexdigits)
+    except ValueError:
+        return "", end + 1
+    if raw.startswith(b"\xfe\xff"):
+        text = raw[2:].decode("utf-16-be", errors="replace")
+    elif raw.startswith(b"\xff\xfe"):
+        text = raw[2:].decode("utf-16-le", errors="replace")
+    else:
+        text = raw.decode("latin-1", errors="replace")
+    return _decode_pdf_string(text), end + 1
+
+
+def _parse_pdf_string_token(source: str, start: int) -> tuple[str | None, int]:
+    index = _skip_ws(source, start)
+    if index >= len(source):
+        return None, index
+    if source[index] == "(":
+        text, nxt = _parse_pdf_literal(source, index)
+        return _decode_pdf_string(text), nxt
+    if source[index] == "<" and (index + 1 >= len(source) or source[index + 1] != "<"):
+        text, nxt = _parse_pdf_hex_string(source, index)
+        return text, nxt
+    return None, index
+
+
+def _index_pdf_objects(raw: str) -> dict[int, str]:
+    objects: dict[int, str] = {}
+    for match in re.finditer(r"(\d+)\s+0\s+obj\b", raw):
+        start = match.end()
+        end = raw.find("endobj", start)
+        if end == -1:
+            continue
+        objects[int(match.group(1))] = raw[start:end]
+    return objects
+
+
+def _inflate_stream(body: str) -> str | None:
+    stream_match = re.search(r"stream\r?\n", body)
+    if not stream_match:
         return None
-    raw, _ = _parse_pdf_literal(block, index)
-    return _decode_pdf_string(raw)
+    end = body.rfind("endstream")
+    if end == -1:
+        return None
+    data = body[stream_match.end() : end]
+    if data.endswith("\r\n"):
+        data = data[:-2]
+    elif data.endswith(("\n", "\r")):
+        data = data[:-1]
+    raw_bytes = data.encode("latin-1")
+    if "FlateDecode" in body[: stream_match.start()]:
+        try:
+            raw_bytes = zlib.decompress(raw_bytes)
+        except zlib.error:
+            return None
+    return raw_bytes.decode("latin-1", errors="replace")
+
+
+def _string_from_object(body: str) -> str | None:
+    parsed, _ = _parse_pdf_string_token(body, 0)
+    if parsed:
+        return parsed
+    for match in re.finditer(r"\(|<(?!<)", body):
+        parsed, _ = _parse_pdf_string_token(body, match.start())
+        if parsed:
+            return parsed
+    inflated = _inflate_stream(body)
+    if not inflated:
+        return None
+    for match in re.finditer(r"\(|<(?!<)", inflated):
+        parsed, _ = _parse_pdf_string_token(inflated, match.start())
+        if parsed:
+            return parsed
+    cleaned = inflated.strip()
+    return cleaned or None
+
+
+def _value_after_v(source: str, v_end: int, objects: dict[int, str]) -> str | None:
+    index = _skip_ws(source, v_end)
+    parsed, _ = _parse_pdf_string_token(source, index)
+    if parsed is not None:
+        return parsed
+    ref = re.match(r"(\d+)\s+\d+\s+R", source[index:])
+    if not ref:
+        return None
+    body = objects.get(int(ref.group(1)))
+    if not body:
+        return None
+    return _string_from_object(body)
+
+
+def _first_pdf_value(block: str, objects: dict[int, str]) -> str | None:
+    for match in re.finditer(r"/V(?![A-Za-z0-9])\s*", block):
+        value = _value_after_v(block, match.end(), objects)
+        if value:
+            return value
+    return None
+
+
+def _next_field_name(raw: str, start: int) -> int:
+    match = re.search(r"/T(?![A-Za-z0-9])\s*", raw[start:])
+    if match is None:
+        return min(len(raw), start + 900)
+    return start + match.start()
 
 
 def extract_ddb_fields(pdf_bytes: bytes) -> dict[str, str]:
     raw = pdf_bytes.decode("latin-1", errors="ignore")
+    objects = _index_pdf_objects(raw)
     fields: dict[str, str] = {}
 
-    for name_match, block in re.findall(
-        r"/T\(([^)]+)\)(.*?)(?=/T\(|$)", raw, re.DOTALL
-    ):
-        value = _field_value_from_block(block)
+    for match in re.finditer(r"/T(?![A-Za-z0-9])\s*", raw):
+        name, after_name = _parse_pdf_string_token(raw, match.end())
+        if not name:
+            continue
+        fwd_end = _next_field_name(raw, after_name)
+        dict_end = raw.find(">>", after_name)
+        if dict_end != -1:
+            fwd_end = min(fwd_end, dict_end)
+        forward = raw[after_name:fwd_end]
+        value = _first_pdf_value(forward, objects)
+        if not value:
+            dict_start = raw.rfind("<<", max(0, match.start() - 4000), match.start())
+            dict_end = raw.find(">>", match.end())
+            if dict_start != -1 and dict_end != -1 and dict_end > dict_start:
+                value = _first_pdf_value(raw[dict_start:dict_end], objects)
+            else:
+                value = _first_pdf_value(
+                    raw[max(0, match.start() - 200) : match.start()], objects
+                )
         if not value or value in {"Off", "/Off"}:
             continue
-        name = _decode_pdf_string(name_match)
         if name not in fields:
             fields[name] = value
 
@@ -158,11 +368,56 @@ def _parse_speed(raw: str) -> int:
     return int(match.group(1)) if match else 30
 
 
+def _fold_field(name: str) -> str:
+    return re.sub(r"[\s_]+", "", name).casefold()
+
+
+def _one_line(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _is_prof_marker(value: str) -> bool:
+    return value.strip().upper() in _PROF_MARKERS
+
+
+def _first_field(fields: dict[str, str], *names: str) -> str:
+    for name in names:
+        value = fields.get(name, "").strip()
+        if value and value not in {"--", "-", "—"}:
+            return value
+    return ""
+
+
+def _character_name(fields: dict[str, str]) -> str:
+    name = fields.get("CharacterName", "").strip()
+    player = fields.get("PLAYER NAME", "").strip()
+    if player:
+        placeholder = f"{player}'s Character"
+        if not name or name.casefold() == placeholder.casefold():
+            return player
+    return name or player or "Unknown"
+
+
+def _skill_from_prof_field(field_name: str) -> str | None:
+    if field_name in DDB_SKILL_FIELDS:
+        return DDB_SKILL_FIELDS[field_name]
+    folded = _fold_field(field_name)
+    if not folded.endswith("prof"):
+        return None
+    return _SKILL_PROF_STEMS.get(folded[:-4])
+
+
 def _collect_save_proficiencies(
     fields: dict[str, str], sheet: CharacterSheet
 ) -> list[str]:
     prof_bonus = proficiency_bonus(sheet.level)
     proficiencies: list[str] = []
+    seen: set[str] = set()
+
+    def add(ability: str) -> None:
+        if ability not in seen:
+            seen.add(ability)
+            proficiencies.append(ability)
 
     for field_name, ability in DDB_SAVE_FIELDS.items():
         modifier = _parse_modifier(fields.get(field_name, ""))
@@ -171,24 +426,174 @@ def _collect_save_proficiencies(
 
         base = ability_modifier(sheet.abilities[ability])
         if modifier >= base + prof_bonus:
-            proficiencies.append(ability)
+            add(ability)
+
+    for field_name, ability in DDB_SAVE_PROF_FIELDS.items():
+        if _is_prof_marker(fields.get(field_name, "")):
+            add(ability)
+
+    for field_name, value in fields.items():
+        ability = _SAVE_PROF_STEMS.get(_fold_field(field_name))
+        if ability and _is_prof_marker(value):
+            add(ability)
 
     return proficiencies
 
 
-def _collect_skill_proficiencies(fields: dict[str, str]) -> tuple[list[str], list[str]]:
+def _collect_skill_proficiencies(
+    fields: dict[str, str], sheet: CharacterSheet
+) -> tuple[list[str], list[str]]:
     proficiencies: list[str] = []
     expertise: list[str] = []
+    seen_prof: set[str] = set()
+    seen_exp: set[str] = set()
 
-    for field_name, skill in DDB_SKILL_FIELDS.items():
-        marker = fields.get(field_name, "").strip().upper()
-        if marker in {"P", "O", "YES", "Y"}:
+    def add(skill: str, *, expert: bool = False) -> None:
+        if skill not in seen_prof:
+            seen_prof.add(skill)
             proficiencies.append(skill)
-        if marker == "E":
-            proficiencies.append(skill)
+        if expert and skill not in seen_exp:
+            seen_exp.add(skill)
             expertise.append(skill)
 
+    for field_name, value in fields.items():
+        skill = _skill_from_prof_field(field_name)
+        if not skill:
+            continue
+        marker = value.strip().upper()
+        if marker in _EXPERTISE_MARKERS:
+            add(skill, expert=True)
+        elif _is_prof_marker(value):
+            add(skill)
+
+    prof_bonus = proficiency_bonus(sheet.level)
+    for field_name, skill in DDB_SKILL_SCORE_FIELDS.items():
+        if skill in seen_prof:
+            continue
+        modifier = _parse_modifier(fields.get(field_name, ""))
+        if modifier is None:
+            continue
+        ability = SKILL_ABILITIES[skill]
+        base = ability_modifier(sheet.abilities[ability])
+        if modifier >= base + (2 * prof_bonus):
+            add(skill, expert=True)
+        elif modifier >= base + prof_bonus:
+            add(skill)
+
     return proficiencies, expertise
+
+
+def _proficiency_sections(text: str) -> dict[str, str]:
+    sections: dict[str, str] = {}
+    for match in re.finditer(
+        r"===\s*(?P<header>[^=]+?)\s*===\s*(?P<body>.*?)(?=\n===|\Z)",
+        text,
+        re.S,
+    ):
+        header = _one_line(match.group("header")).casefold()
+        body = _one_line(match.group("body"))
+        if body:
+            sections[header] = body
+    return sections
+
+
+def _feature_titles(fields: dict[str, str]) -> list[str]:
+    chunks: list[str] = []
+    for key, value in fields.items():
+        folded = _fold_field(key)
+        if folded.startswith("featurestraits") or folded.startswith(
+            "featuresandtraits"
+        ):
+            chunks.append(value)
+    titles: list[str] = []
+    seen: set[str] = set()
+    for match in re.finditer(r"^\*\s+(.+?)(?:\s+•|\s*$)", "\n".join(chunks), re.M):
+        title = _one_line(match.group(1))
+        key = title.casefold()
+        if not title or key in _SKIP_TRAIT_TITLES or key in seen:
+            continue
+        seen.add(key)
+        titles.append(title)
+    return titles
+
+
+def _collect_notes(fields: dict[str, str]) -> str:
+    parts: list[str] = []
+    identity: list[str] = []
+    alignment = _first_field(fields, "ALIGNMENT", "Alignment")
+    if alignment:
+        identity.append(alignment)
+    gender = _first_field(fields, "GENDER", "Gender")
+    if gender:
+        identity.append(gender)
+    age = _first_field(fields, "AGE", "Age")
+    if age:
+        identity.append(f"{age} ans" if age.isdigit() else age)
+    height = _first_field(fields, "HEIGHT", "Height")
+    if height:
+        identity.append(height)
+    weight = _first_field(fields, "WEIGHT", "Weight")
+    if weight:
+        identity.append(weight)
+    size = _first_field(fields, "SIZE", "Size")
+    if size:
+        identity.append(size)
+    looks: list[str] = []
+    eyes = _first_field(fields, "EYES", "Eyes")
+    if eyes:
+        looks.append(f"yeux {eyes}")
+    skin = _first_field(fields, "SKIN", "Skin")
+    if skin:
+        looks.append(f"peau {skin}")
+    identity.extend(looks)
+    if identity:
+        parts.append(" · ".join(identity))
+
+    faith = _first_field(fields, "FAITH", "Faith")
+    if faith:
+        parts.append(f"Foi : {faith}")
+    senses = _first_field(fields, "AdditionalSenses", "Senses")
+    if senses:
+        parts.append(f"Sens : {senses}")
+    defenses = _first_field(fields, "Defenses", "Defence", "Defense")
+    if defenses:
+        parts.append(f"Défenses : {defenses}")
+
+    sections = _proficiency_sections(fields.get("ProficienciesLang", ""))
+    labels = (
+        ("armor", "Armures"),
+        ("weapons", "Armes"),
+        ("tools", "Outils"),
+        ("languages", "Langues"),
+    )
+    for key, label in labels:
+        body = sections.get(key, "")
+        if body:
+            parts.append(f"{label} : {body}")
+
+    traits = _feature_titles(fields)
+    if traits:
+        parts.append("Traits : " + ", ".join(traits))
+
+    notes = "\n".join(parts)
+    return notes[:_NOTES_LIMIT]
+
+
+def _parse_inspired(fields: dict[str, str]) -> bool:
+    for name in ("Inspiration", "Inspired", "Heroic Inspiration"):
+        if _is_prof_marker(fields.get(name, "")):
+            return True
+    return False
+
+
+def _apply_class_spell_slots(sheet: CharacterSheet) -> None:
+    level = min(20, max(1, sheet.level))
+    try:
+        table = slots_table_for_class(sheet.char_class, level, subclass=sheet.subclass)
+    except ValueError:
+        return
+    if table is not None:
+        sheet.spell_slots.apply_table(table)
 
 
 def _collect_spell_names(fields: dict[str, str]) -> list[str]:
@@ -225,9 +630,7 @@ _CONTAINER_HINTS = (
 
 def _is_equipment_field(name: str) -> bool:
     key = re.sub(r"[\s_]+", "", name.casefold())
-    if "equipment" in key:
-        return True
-    return key == "treasure"
+    return any(token in key for token in ("equipment", "treasure", "inventory"))
 
 
 def _is_weapon_name_field(name: str) -> bool:
@@ -318,12 +721,60 @@ def _likely_container(name: str) -> bool:
     return any(hint in lowered for hint in _CONTAINER_HINTS)
 
 
+_EQ_NAME_FIELD = re.compile(r"^eq\s*name\s*(\d+)$", re.IGNORECASE)
+_EQ_QTY_FIELD = re.compile(r"^eq\s*qty\s*(\d+)$", re.IGNORECASE)
+_EQ_WEIGHT_FIELD = re.compile(r"^eq\s*weight\s*(\d+)$", re.IGNORECASE)
+_ATTACK_ONLY = frozenset({"unarmed strike", "unarmed", "fist"})
+
+
+def _parse_eq_table(
+    fields: dict[str, str],
+) -> tuple[list[tuple[str, int]], dict[str, float]]:
+    names: dict[str, str] = {}
+    quantities: dict[str, int] = {}
+    raw_weights: dict[str, str] = {}
+    for field_name, value in fields.items():
+        named = _EQ_NAME_FIELD.match(field_name.strip())
+        if named:
+            cleaned = re.sub(r"\s+", " ", value).strip()
+            if cleaned:
+                names[named.group(1)] = cleaned
+            continue
+        counted = _EQ_QTY_FIELD.match(field_name.strip())
+        if counted:
+            quantities[counted.group(1)] = max(1, _parse_int(value, default=1))
+            continue
+        weighed = _EQ_WEIGHT_FIELD.match(field_name.strip())
+        if weighed:
+            raw_weights[weighed.group(1)] = value
+    entries = [
+        (names[index], quantities.get(index, 1))
+        for index in sorted(names, key=lambda key: int(key))
+    ]
+    weights: dict[str, float] = {}
+    for index, name in names.items():
+        parsed = parse_weight_lb(raw_weights.get(index, ""))
+        if parsed is not None:
+            weights[name.casefold()] = parsed
+    return entries, weights
+
+
+def _collect_eq_table_entries(fields: dict[str, str]) -> list[tuple[str, int]]:
+    entries, _weights = _parse_eq_table(fields)
+    return entries
+
+
+def collect_equipment_weights(fields: dict[str, str]) -> dict[str, float]:
+    _entries, weights = _parse_eq_table(fields)
+    return weights
+
+
 def collect_equipment_entries(fields: dict[str, str]) -> list[tuple[str, int]]:
+    entries = list(_collect_eq_table_entries(fields))
     blobs: list[str] = []
     for name, value in fields.items():
         if _is_equipment_field(name):
             blobs.append(value)
-    entries: list[tuple[str, int]] = []
     for blob in blobs:
         for piece in _split_item_blob(blob):
             parsed = parse_equipment_entry(piece)
@@ -407,6 +858,7 @@ async def fill_sheet_equipment(
     *,
     entries: list[tuple[str, int]],
     equipped_names: list[str],
+    weights: dict[str, float] | None = None,
 ) -> tuple[int, int]:
     from srd import fivetools
 
@@ -422,6 +874,7 @@ async def fill_sheet_equipment(
     )
     matched = 0
     custom = 0
+    item_weights = weights or {}
     for name, quantity in pending:
         try:
             entry = await fivetools.search_equipment(query=name)
@@ -431,6 +884,7 @@ async def fill_sheet_equipment(
                 name=name,
                 kind=ITEM_KIND_CUSTOM,
                 quantity=quantity,
+                weight_lb=item_weights.get(name.casefold()),
             )
             custom += 1
             continue
@@ -440,6 +894,7 @@ async def fill_sheet_equipment(
                 name=name,
                 kind=ITEM_KIND_CUSTOM,
                 quantity=quantity,
+                weight_lb=item_weights.get(name.casefold()),
             )
             custom += 1
             continue
@@ -473,7 +928,20 @@ async def fill_sheet_equipment(
         except ValueError:
             pass
 
-    from sheets.armor import apply_armor_ac
+    has_held_weapon = any(
+        item.kind == ITEM_KIND_WEAPON and item.equipped
+        for item in sheet.equipment.items
+    )
+    if not has_held_weapon:
+        for name, _quantity in entries:
+            item = sheet.equipment.find_item(name)
+            if item is None or item.kind != ITEM_KIND_WEAPON:
+                continue
+            try:
+                sheet.equipment.equip(item.name)
+            except ValueError:
+                continue
+            break
 
     apply_armor_ac(sheet)
     return matched, custom
@@ -491,7 +959,7 @@ def parse_ddb_pdf(pdf_bytes: bytes) -> DdbPdfImport:
             "This PDF does not look like a D&D Beyond character sheet export."
         )
 
-    name = fields.get("CharacterName", "Unknown").strip()
+    name = _character_name(fields)
     char_class, level, subclass = _parse_class_and_level(
         fields.get("CLASS  LEVEL", fields.get("CLASS  LEVEL2", "Adventurer 1"))
     )
@@ -501,8 +969,10 @@ def parse_ddb_pdf(pdf_bytes: bytes) -> DdbPdfImport:
         if ddb_key in fields:
             abilities[ability] = _parse_int(fields[ddb_key], default=10)
 
-    hp_max = _parse_int(fields.get("MaxHP", "0"))
-    hp_current = _parse_int(fields.get("CurrentHP", str(hp_max or 0)))
+    hp_max = _parse_int(_first_field(fields, "MaxHP", "HPMax", "HP Maximum") or "0")
+    hp_current = _parse_int(
+        _first_field(fields, "CurrentHP", "HPCurrent", "HP") or str(hp_max or 0)
+    )
     if hp_current <= 0 and hp_max > 0:
         hp_current = hp_max
 
@@ -524,28 +994,40 @@ def parse_ddb_pdf(pdf_bytes: bytes) -> DdbPdfImport:
         abilities=abilities,
         hp_max=hp_max,
         hp_current=hp_current,
-        ac=_parse_int(fields.get("AC", "10"), default=10),
-        speed=_parse_speed(fields.get("Speed", "30 ft.")),
+        ac=_parse_int(_first_field(fields, "AC") or "10", default=10),
+        speed=_parse_speed(_first_field(fields, "Speed") or "30 ft."),
         spells=[],
         currency=currency,
+        notes=_collect_notes(fields),
+        inspired=_parse_inspired(fields),
     )
+    _apply_class_spell_slots(sheet)
 
     sheet.save_proficiencies = _collect_save_proficiencies(fields, sheet)
     sheet.skill_proficiencies, sheet.skill_expertise = _collect_skill_proficiencies(
-        fields
+        fields, sheet
     )
 
     spell_names = _collect_spell_names(fields)
     equipment_entries = collect_equipment_entries(fields)
-    equipped_names = collect_equipped_names(fields)
-    if not name:
+    equipment_weights = collect_equipment_weights(fields)
+    spells_folded = {name.casefold() for name in spell_names}
+    equipped_names = [
+        name
+        for name in collect_equipped_names(fields)
+        if name.casefold() not in _ATTACK_ONLY and name.casefold() not in spells_folded
+    ]
+    if not name or name == "Unknown":
         warnings.append("Character name was missing; using 'Unknown'.")
+    if not equipment_entries and not equipped_names:
+        warnings.append("Aucun équipement lisible dans ce PDF.")
 
     return DdbPdfImport(
         sheet=sheet,
         spell_names=spell_names,
         equipment_entries=equipment_entries,
         equipped_names=equipped_names,
+        equipment_weights=equipment_weights,
         warnings=warnings,
     )
 

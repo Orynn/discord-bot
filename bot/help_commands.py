@@ -7,10 +7,11 @@ from discord.ext.commands import CheckFailure, Group, MinimalHelpCommand
 from discord.ext.commands.bot import Bot
 from discord.ext.commands.context import Context
 
-from bot.checks import is_admin
+from bot.checks import is_admin, is_staff
 from bot.command_helpers import command_reply, delete_command
 from bot.help_text import (
     HELP_COLOR,
+    build_ai_help_sections,
     build_combat_help_sections,
     build_command_help_embed,
     build_group_help_embed,
@@ -21,10 +22,13 @@ from bot.help_text import (
     build_sheet_help_sections,
     build_simple_help_embed,
     build_srd_help_sections,
+    build_tuto_help_sections,
     command_help,
     command_help_summary,
+    is_ai_help_topic,
     is_help_all_topic,
     is_roleplay_help_topic,
+    is_tuto_help_topic,
     pack_embed_batches,
 )
 from bot.help_view import HelpView
@@ -33,7 +37,7 @@ from config import PREFIX
 
 HELP_FLAGS = frozenset({"-h", "--help", "-help"})
 HELP_WORDS = frozenset({"help", "aide"})
-_SECTIONED_GROUPS = frozenset({"sheet", "combat", "srd", "hunger"})
+_SECTIONED_GROUPS = frozenset({"sheet", "combat", "srd", "hunger", "ai"})
 _HELP_ALL_PAUSE_SECONDS = 0.35
 _TEXT_KWARG_NAMES = frozenset(
     {
@@ -52,6 +56,7 @@ _TEXT_KWARG_NAMES = frozenset(
         "target",
         "mood",
         "note",
+        "brief",
     }
 )
 
@@ -332,6 +337,26 @@ async def send_srd_help(ctx: Context) -> None:
     )
 
 
+async def send_ai_help(ctx: Context) -> None:
+    if not is_staff(ctx):
+        await command_reply(ctx, "Tu n’as pas le droit d’utiliser cette commande.")
+        await delete_command(ctx)
+        return
+    await _send_sectioned_help(
+        ctx,
+        title="Gemini",
+        sections=build_ai_help_sections(prefix=PREFIX),
+    )
+
+
+async def send_tuto_help(ctx: Context) -> None:
+    await _send_sectioned_help(
+        ctx,
+        title="Tutoriel — bien débuter",
+        sections=build_tuto_help_sections(prefix=PREFIX),
+    )
+
+
 class ArkannHelpCommand(MinimalHelpCommand):
     async def command_callback(
         self, ctx: Context, /, *, command: str | None = None
@@ -345,6 +370,12 @@ class ArkannHelpCommand(MinimalHelpCommand):
                 title="Jeu de rôle",
                 sections=build_roleplay_help_sections(prefix=PREFIX),
             )
+            return
+        if is_ai_help_topic(command):
+            await send_ai_help(ctx)
+            return
+        if is_tuto_help_topic(command):
+            await send_tuto_help(ctx)
             return
         await super().command_callback(ctx, command=command)
 
@@ -393,6 +424,10 @@ class ArkannHelpCommand(MinimalHelpCommand):
                     is_admin=is_admin(ctx),
                 ),
             )
+            return
+
+        if group.qualified_name == "ai":
+            await send_ai_help(ctx)
             return
 
         subcommands = []
@@ -475,9 +510,20 @@ def setup_help(bot: Bot) -> None:
             sections=build_help_sections(prefix=PREFIX, is_admin=is_admin(ctx)),
         )
 
+    @bot.hybrid_command(
+        name="tuto",
+        aliases=["guide", "debut", "start"],
+        help=command_help(
+            "Tutoriel pour comprendre le jeu et les commandes essentielles.",
+            f"`{PREFIX}tuto` · `/tuto`",
+        ),
+    )
+    async def tuto_command(ctx: Context) -> None:
+        await send_tuto_help(ctx)
+
     @bot.tree.command(name="help", description="Show Arkann commands")
     @app_commands.describe(
-        topic="Sujet : all, sheet, combat, srd, hunger, roleplay, ou un nom de commande"
+        topic="Sujet : all, tuto, sheet, combat, srd, hunger, roleplay, ou un nom de commande"
     )
     async def slash_help(
         interaction: discord.Interaction, topic: str | None = None
@@ -531,5 +577,11 @@ def setup_help(bot: Bot) -> None:
                 title="Jeu de rôle",
                 sections=build_roleplay_help_sections(prefix=PREFIX),
             )
+            return
+        if is_ai_help_topic(query):
+            await send_ai_help(ctx)
+            return
+        if is_tuto_help_topic(query):
+            await send_tuto_help(ctx)
             return
         await ctx.send_help(query)

@@ -2,7 +2,7 @@ import discord
 from discord.ext.commands import Group
 from discord.ext.commands.context import Context
 
-from bot.command_helpers import command_reply, delete_command
+from bot.command_helpers import command_reply, defer_if_slash, delete_command
 from bot.help_text import command_help
 from config import PREFIX
 from sheets.context import (
@@ -11,9 +11,20 @@ from sheets.context import (
     save_owner_sheet,
     target_label,
 )
+from sheets.data import CharacterSheet
 from sheets.ddb_pdf import fill_sheet_equipment, format_import_summary, parse_ddb_pdf
 from sheets.storage import get_sheet, set_character_name
 from srd import fivetools
+
+
+def preserve_live_sheet_fields(sheet: CharacterSheet, existing: CharacterSheet) -> None:
+    sheet.hunger_days = existing.hunger_days
+    sheet.fed_today = existing.fed_today
+    sheet.hunger_meal_year = existing.hunger_meal_year
+    sheet.hunger_meal_day = existing.hunger_meal_day
+    sheet.hunger_meal_kind = existing.hunger_meal_kind
+    sheet.image_url = existing.image_url
+    sheet.currency = existing.currency
 
 
 def register_import_commands(sheet_group: Group) -> None:
@@ -30,6 +41,7 @@ def register_import_commands(sheet_group: Group) -> None:
         member: discord.Member | None = None,
         file: discord.Attachment | None = None,
     ) -> None:
+        await defer_if_slash(ctx)
         owner_id = await resolve_owner(ctx, member)
         if owner_id is None:
             return
@@ -39,16 +51,7 @@ def register_import_commands(sheet_group: Group) -> None:
             await command_reply(ctx, "Cette commande marche seulement sur le serveur.")
             return
 
-        if get_sheet(user_id=owner_id, guild_id=guild_id) is not None:
-            target = member.display_name if member else "You"
-            await command_reply(
-                ctx,
-                (
-                    f"{target} already have a character sheet. "
-                    f"Use `{PREFIX}sheet delete` first, then import again."
-                ),
-            )
-            return
+        existing = get_sheet(user_id=owner_id, guild_id=guild_id)
 
         attachment = file
         if attachment is None and ctx.message is not None and ctx.message.attachments:
@@ -94,7 +97,10 @@ def register_import_commands(sheet_group: Group) -> None:
             sheet,
             entries=imported.equipment_entries,
             equipped_names=imported.equipped_names,
+            weights=imported.equipment_weights,
         )
+        if existing is not None:
+            preserve_live_sheet_fields(sheet, existing)
 
         save_owner_sheet(ctx, owner_id, sheet)
         set_character_name(user_id=owner_id, guild_id=guild_id, name=sheet.name)

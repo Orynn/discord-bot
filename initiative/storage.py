@@ -23,6 +23,32 @@ class InitiativeState:
     order: list[InitiativeEntry]
 
 
+def already_listed(
+    state: InitiativeState, *, name: str | None = None, user_id: int | None = None
+) -> bool:
+    for entry in state.order:
+        if user_id is not None and entry.user_id == user_id:
+            return True
+        if name and entry.name.casefold() == name.casefold():
+            return True
+    return False
+
+
+def match_initiative_entries(
+    order: list[InitiativeEntry], query: str
+) -> list[InitiativeEntry]:
+    folded = query.casefold().strip()
+    if not folded:
+        return []
+    exact = [entry for entry in order if entry.name.casefold() == folded]
+    if exact:
+        return exact
+    prefixed = [entry for entry in order if entry.name.casefold().startswith(folded)]
+    if len(prefixed) == 1:
+        return prefixed
+    return []
+
+
 def preserve_active_index(
     state: InitiativeState,
     active_entry: InitiativeEntry | None,

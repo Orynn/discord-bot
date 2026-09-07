@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
   <title>Arkann · Combat</title>
   <style>
     :root {
@@ -395,8 +396,10 @@
       form: document.getElementById("cmd-form"),
     };
     const root = location.pathname.replace(/\/$/, "");
-    const stateUrl = root + "/state";
-    const actionUrl = root + "/action";
+    const token = new URLSearchParams(location.search).get("t") || "";
+    const auth = token ? "?t=" + encodeURIComponent(token) : "";
+    const stateUrl = root + "/state" + auth;
+    const actionUrl = root + "/action" + auth;
     let last = "";
     let data = null;
     let pendingCard = null;

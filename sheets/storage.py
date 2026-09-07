@@ -19,15 +19,28 @@ def get_sheet(*, user_id: int, guild_id: int) -> CharacterSheet | None:
     return CharacterSheet.from_dict(json.loads(row["data"]))
 
 
-def save_sheet(*, user_id: int, guild_id: int, sheet: CharacterSheet) -> None:
+def save_sheet(
+    *,
+    user_id: int,
+    guild_id: int,
+    sheet: CharacterSheet,
+    connection: object | None = None,
+) -> None:
     migrated, _ = migrate_spell_slugs(sheet.spells)
     sheet.spells = migrated
     payload = json.dumps(sheet.to_dict(), ensure_ascii=False)
-    with db_connection() as connection:
-        connection.execute(
+
+    def _write(conn) -> None:
+        conn.execute(
             "INSERT OR REPLACE INTO sheets (user_id, guild_id, data) VALUES (?, ?, ?)",
             (str(user_id), str(guild_id), payload),
         )
+
+    if connection is None:
+        with db_connection() as conn:
+            _write(conn)
+        return
+    _write(connection)
 
 
 def update_sheet(

@@ -14,6 +14,7 @@ from bot.help_text import (
     is_help_all_topic,
     pack_embed_batches,
 )
+from bot.purge_commands import setup_purge
 from bot.slash import setup_slash
 from bot.trash_commands import setup_trash
 from campaign.commands import setup_campaign
@@ -26,6 +27,7 @@ from npc.commands import setup_npc
 from party.commands import setup_party
 from pc.commands import setup_pc
 from players.commands import setup_player
+from ai.commands import setup_ai
 from roll.commands import setup_roll
 from scene.commands import setup_desc
 from scene.rp_commands import setup_rp
@@ -39,6 +41,7 @@ def _register_commands(bot: commands.Bot) -> None:
         setup_npc,
         setup_desc,
         setup_rp,
+        setup_ai,
         setup_fun,
         setup_image,
         setup_pc,
@@ -53,6 +56,7 @@ def _register_commands(bot: commands.Bot) -> None:
         setup_hunger,
         setup_combat,
         setup_trash,
+        setup_purge,
         setup_help,
         setup_slash,
     ):
@@ -84,6 +88,9 @@ class TestGuideDumpAndPacking(unittest.TestCase):
         self.assertIn("Combat", titles)
         self.assertIn("règles", titles)
         self.assertIn("Faim", titles)
+        self.assertNotIn("Gemini", titles)
+        admin_titles = " ".join(embed.title or "" for embed in admin)
+        self.assertIn("Gemini", admin_titles)
         self.assertGreater(len(admin), len(player))
         self.assertFalse(
             any(

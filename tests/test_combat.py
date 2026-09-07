@@ -166,6 +166,8 @@ class TestCombatEngine(unittest.IsolatedAsyncioTestCase):
         loaded = get_combat(guild_id=self.guild_id, scope_id=self.scope_id)
         assert loaded is not None
         self.assertEqual(loaded.board_message_id, 9001)
+        self.assertTrue(state.board_token)
+        self.assertEqual(loaded.board_token, state.board_token)
 
     @patch("combat.deck.fivetools.get_spell", new_callable=AsyncMock)
     async def test_start_combat_builds_sheet_deck(
@@ -267,6 +269,9 @@ class TestCombatEngine(unittest.IsolatedAsyncioTestCase):
                     "cha": 10,
                 },
                 spells=["cure-wounds"],
+                spell_slots=SpellSlots.from_dict(
+                    {"maximum": {"1": 4}, "current": {"1": 4}}
+                ),
             ),
         )
         state = await self._start()
@@ -325,6 +330,42 @@ class TestCombatEngine(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sheet.spell_slots.get_current(1), 3)
 
     @patch("combat.deck.fivetools.get_spell", new_callable=AsyncMock)
+    async def test_leveled_spell_without_slots_is_refused(
+        self, mock_get_spell: AsyncMock
+    ) -> None:
+        mock_get_spell.return_value = _mock_spell(
+            "magic-missile", level=1, damage_roll="1d4 + 1"
+        )
+        save_sheet(
+            user_id=1,
+            guild_id=self.guild_id,
+            sheet=CharacterSheet(
+                name="Hero",
+                char_class="Wizard",
+                level=3,
+                hp_current=20,
+                hp_max=20,
+                abilities={
+                    "str": 8,
+                    "dex": 14,
+                    "con": 12,
+                    "int": 16,
+                    "wis": 10,
+                    "cha": 10,
+                },
+                spells=["magic-missile"],
+            ),
+        )
+        state = await self._start()
+        hero = state.combatants["hero"]
+        card_id = spell_card_id("magic-missile")
+        hero.hand = [card_id]
+        with self.assertRaises(ValueError) as raised:
+            play_card(state, actor_name="Hero", card_id=card_id, target_name="Goblin")
+        self.assertIn("emplacements", str(raised.exception))
+        self.assertIn(card_id, hero.hand)
+
+    @patch("combat.deck.fivetools.get_spell", new_callable=AsyncMock)
     async def test_healing_spell_can_target_enemy(
         self, mock_get_spell: AsyncMock
     ) -> None:
@@ -349,6 +390,9 @@ class TestCombatEngine(unittest.IsolatedAsyncioTestCase):
                     "cha": 10,
                 },
                 spells=["cure-wounds"],
+                spell_slots=SpellSlots.from_dict(
+                    {"maximum": {"1": 4}, "current": {"1": 4}}
+                ),
             ),
         )
         state = await self._start()
@@ -495,9 +539,7 @@ class TestCombatEngine(unittest.IsolatedAsyncioTestCase):
         ally = state.combatants["ally"]
         hero.hand = [WEAPON_CARD_ID]
         targets = valid_targets(state, actor=hero, card_id=WEAPON_CARD_ID)
-        self.assertEqual(
-            {combatant.name for combatant in targets}, {"Ally", "Goblin"}
-        )
+        self.assertEqual({combatant.name for combatant in targets}, {"Ally", "Goblin"})
         ally_hp = ally.hp
         with patch("combat.engine.random.randint", return_value=6):
             play_card(
@@ -982,7 +1024,9 @@ class TestCombatEngine(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state.active_name, "Hero")
 
     @patch("combat.deck.fivetools.get_spell", new_callable=AsyncMock)
-    async def test_player_defeat_ends_combat(self, mock_get_spell: AsyncMock) -> None:
+    async def test_player_knocked_out_stays_dying(
+        self, mock_get_spell: AsyncMock
+    ) -> None:
         mock_get_spell.return_value = _mock_spell("fire-bolt")
         state = await self._start()
         hero = state.combatants["hero"]
@@ -997,10 +1041,10 @@ class TestCombatEngine(unittest.IsolatedAsyncioTestCase):
                 state, actor_name="Goblin", card_id=WEAPON_CARD_ID, target_name="Hero"
             )
         self.assertEqual(hero.hp, 0)
-        self.assertTrue(result.combat_over)
-        self.assertEqual(result.winner, "Goblin")
-        self.assertIn("remporte", result.message.lower())
-        self.assertIsNone(get_combat(guild_id=self.guild_id, scope_id=self.scope_id))
+        self.assertEqual(hero.death_save_failures, 0)
+        self.assertFalse(result.combat_over)
+        self.assertIn("mourant", "\n".join(state.log).lower())
+        self.assertIsNotNone(get_combat(guild_id=self.guild_id, scope_id=self.scope_id))
         sheet = get_sheet(user_id=1, guild_id=self.guild_id)
         assert sheet is not None
         self.assertEqual(sheet.hp_current, 0)
@@ -1047,13 +1091,26 @@ class TestCombatEngine(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sheet.death_save_failures, 0)
 
     @patch("combat.deck.fivetools.get_spell", new_callable=AsyncMock)
-    async def test_dying_player_action_ends_combat(
+    async def test_dying_player_action_does_not_end_combat(
         self, mock_get_spell: AsyncMock
     ) -> None:
         mock_get_spell.return_value = _mock_spell("fire-bolt")
         state = await self._start()
         hero = state.combatants["hero"]
         hero.hp = 0
+        hero.hand = [DODGE_CARD_ID]
+        with patch("combat.engine.random.randint", return_value=15):
+            result = play_card(state, actor_name="Hero", card_id=DODGE_CARD_ID)
+        self.assertFalse(result.combat_over)
+        self.assertIsNotNone(get_combat(guild_id=self.guild_id, scope_id=self.scope_id))
+
+    @patch("combat.deck.fivetools.get_spell", new_callable=AsyncMock)
+    async def test_dead_player_ends_combat(self, mock_get_spell: AsyncMock) -> None:
+        mock_get_spell.return_value = _mock_spell("fire-bolt")
+        state = await self._start()
+        hero = state.combatants["hero"]
+        hero.hp = 0
+        hero.death_save_failures = 3
         hero.hand = [DODGE_CARD_ID]
         result = play_card(state, actor_name="Hero", card_id=DODGE_CARD_ID)
         self.assertTrue(result.combat_over)

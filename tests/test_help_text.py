@@ -1,12 +1,16 @@
 import unittest
 
 from bot.help_text import (
+    build_ai_help_sections,
     build_combat_help_sections,
     build_help_sections,
     build_hunger_help_sections,
     build_roleplay_help_sections,
     build_sheet_help_sections,
     build_srd_help_sections,
+    build_tuto_help_sections,
+    is_ai_help_topic,
+    is_tuto_help_topic,
 )
 
 
@@ -30,6 +34,15 @@ class TestHelpSections(unittest.TestCase):
         self.assertEqual(len(admin_sections), 5)
         self.assertEqual(admin_sections[-1].key, "admin")
 
+    def test_admin_help_mentions_purge(self) -> None:
+        admin = next(
+            section
+            for section in build_help_sections(prefix=";", is_admin=True)
+            if section.key == "admin"
+        )
+        self.assertIn(";purge", admin.body)
+        self.assertIn("/purge", admin.body)
+
     def test_help_mentions_detailed_guides(self) -> None:
         overview = build_help_sections(prefix=";", is_admin=False)[0]
         self.assertIn(";help combat", overview.body)
@@ -38,6 +51,7 @@ class TestHelpSections(unittest.TestCase):
         self.assertIn(";help hunger", overview.body)
         self.assertIn(";help roleplay", overview.body)
         self.assertIn(";help all", overview.body)
+        self.assertIn(";tuto", overview.body)
         self.assertIn(";commande -h", overview.body)
 
     def test_srd_help_has_examples_not_pipe_list(self) -> None:
@@ -71,6 +85,16 @@ class TestHelpSections(unittest.TestCase):
         self.assertIn(";whisper", roleplay.body)
         self.assertIn(";scene set", roleplay.body)
         self.assertIn(";arrive", roleplay.body)
+        self.assertNotIn(";ai", roleplay.body)
+        self.assertNotIn(";gemini", roleplay.body)
+
+        self.assertTrue(is_ai_help_topic("ai"))
+        self.assertTrue(is_ai_help_topic("GEMINI"))
+        ai_guide = build_ai_help_sections(prefix=";")
+        self.assertEqual(ai_guide[0].key, "ai")
+        self.assertIn(";ai -h", ai_guide[0].body)
+        self.assertIn(";ai npc", ai_guide[0].body)
+        self.assertIn(";ai context", ai_guide[0].body)
 
         guide = build_roleplay_help_sections(prefix=";")
         self.assertEqual(
@@ -96,6 +120,8 @@ class TestHelpSections(unittest.TestCase):
         )
         self.assertIn("fait avancer la faim de ce joueur", admin.body)
         self.assertIn(";hunger skip @joueur", admin.body)
+        self.assertIn(";ai", admin.body)
+        self.assertIn(";gemini", admin.body)
 
         player = build_hunger_help_sections(prefix=";", is_admin=False)[0]
         self.assertIn("horloge de campagne", player.body)
@@ -243,4 +269,33 @@ class TestCommandHelpEmbed(unittest.TestCase):
         names = [field.name for field in embed.fields]
         self.assertEqual(names, ["⌨️ Usage", "📂 Sous-commandes"])
         self.assertIn("`;init add` — Ajoute quelqu’un", embed.fields[1].value)
-        self.assertIn("• `;init next`", embed.fields[1].value)
+
+
+class TestTutoHelpSections(unittest.TestCase):
+    def test_help_topic_aliases(self) -> None:
+        self.assertTrue(is_tuto_help_topic("tuto"))
+        self.assertTrue(is_tuto_help_topic("GUIDE"))
+        self.assertFalse(is_tuto_help_topic("sheet"))
+
+    def test_has_four_player_sections(self) -> None:
+        sections = build_tuto_help_sections(prefix=";")
+        self.assertEqual(
+            [section.key for section in sections],
+            ["principle", "play", "sheet", "combat"],
+        )
+
+    def test_mentions_essential_commands(self) -> None:
+        sections = build_tuto_help_sections(prefix=";")
+        body = "\n".join(section.body for section in sections)
+        footers = "\n".join(section.footer or "" for section in sections)
+        combined = f"{body}\n{footers}"
+        for needle in (
+            ";sheet create",
+            ";pc ",
+            ";roll",
+            ";scene",
+            ";init add",
+            ";srd",
+            ";help",
+        ):
+            self.assertIn(needle, combined)

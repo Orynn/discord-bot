@@ -7,9 +7,10 @@ from discord.ext.commands.bot import Bot
 from discord.ext.commands.context import Context
 
 from bot.checks import admin_only, guild_only
-from bot.command_helpers import command_reply, delete_command
+from bot.command_helpers import command_reply, defer_if_slash, delete_command
 from bot.help_text import command_help
-from bot.messaging import send_message
+from bot.messaging import send_interaction_message, send_message
+from bot.rate_limits import is_rate_limited, retry_on_rate_limit
 from combat.discord_sync import (
     BoardEditResult,
     bind_bot,
@@ -24,7 +25,7 @@ from combat.discord_sync import (
 from combat.display import board_attachments, build_combat_embed
 from combat.editor_server import (
     MAP_EDITOR_FILE,
-    combat_board_url,
+    board_url_for,
     editor_is_running,
     editor_public_url,
 )
@@ -32,6 +33,14 @@ from combat.engine import (
     add_combatant,
     conclude_if_over,
     start_combat,
+)
+from combat.history import (
+    finish_combat,
+    format_history_detail,
+    format_history_list,
+    get_combat_archive,
+    latest_combat_archive,
+    list_combat_history,
 )
 from combat.custom_maps import (
     DEFAULT_MAP_HEIGHT,
@@ -63,7 +72,6 @@ from combat.setup import advance_section_clock, ensure_section_fight, parse_star
 from players.discover import is_sandbox_channel
 from combat.storage import (
     CombatState,
-    clear_combat,
     get_combat,
     lock_for,
     save_combat,
@@ -137,7 +145,7 @@ async def edit_combat_board_message(
         clipped = clip_discord_content(content)
         if clipped is not None:
             kwargs["content"] = clipped
-        await message.edit(**kwargs)
+        await retry_on_rate_limit(lambda: message.edit(**kwargs))
         return BoardEditResult.UPDATED
     except discord.NotFound:
         await _forget_board_message(state, ended=ended)
@@ -146,11 +154,23 @@ async def edit_combat_board_message(
         if getattr(exc, "status", None) == 404:
             await _forget_board_message(state, ended=ended)
             return BoardEditResult.MISSING
-        if getattr(exc, "status", None) == 429:
+        if is_rate_limited(exc):
             logger.warning("Discord rate-limited combat message edit")
             return BoardEditResult.FAILED
         logger.exception("Failed to edit Discord combat message")
         return BoardEditResult.FAILED
+
+
+async def _slash_board_ack(ctx: Context, state: CombatState) -> None:
+    if ctx.interaction is None or ctx.interaction.response.is_done():
+        return
+    await send_interaction_message(
+        ctx.interaction,
+        content=play_in_browser(board_url_for(state)),
+        ephemeral=True,
+        linkify=False,
+        definition_menu=False,
+    )
 
 
 async def _send_board(
@@ -165,15 +185,11 @@ async def _send_board(
         victory = conclude_if_over(state)
         if victory is not None:
             ended = True
-            content = (
-                f"{content}\n{victory.message}" if content else victory.message
-            )
+            content = f"{content}\n{victory.message}" if content else victory.message
     clipped = clip_discord_content(content)
     async with discord_edit_lock(guild_id=state.guild_id, scope_id=state.scope_id):
         if not ended:
-            latest = get_combat(
-                guild_id=state.guild_id, scope_id=state.scope_id
-            )
+            latest = get_combat(guild_id=state.guild_id, scope_id=state.scope_id)
             if latest is not None:
                 state = latest
         if state.board_message_id:
@@ -189,10 +205,9 @@ async def _send_board(
                 await command_reply(ctx, discord_board_unavailable())
                 return
             if ended:
-                forget_stale_ended(
-                    guild_id=state.guild_id, scope_id=state.scope_id
-                )
+                forget_stale_ended(guild_id=state.guild_id, scope_id=state.scope_id)
             if result is BoardEditResult.UPDATED:
+                await _slash_board_ack(ctx, state)
                 return
         files = board_attachments(state)
         message = await send_message(
@@ -204,9 +219,7 @@ async def _send_board(
             **({"file": files[0]} if files else {}),
         )
         if ended:
-            forget_stale_ended(
-                guild_id=state.guild_id, scope_id=state.scope_id
-            )
+            forget_stale_ended(guild_id=state.guild_id, scope_id=state.scope_id)
             return
         state.board_message_id = message.id
         state.channel_id = message.channel.id
@@ -225,10 +238,12 @@ async def _redirect_play_to_browser(ctx: Context) -> None:
     assert ctx.guild is not None
     state = get_combat(guild_id=ctx.guild.id, scope_id=scope_id)
     if state is None:
-        await command_reply(ctx, "Aucun combat en cours. Lance `;combat start` d’abord.")
+        await command_reply(
+            ctx, "Aucun combat en cours. Lance `;combat start` d’abord."
+        )
         await delete_command(ctx)
         return
-    await command_reply(ctx, play_in_browser(combat_board_url(ctx.guild.id, scope_id)))
+    await command_reply(ctx, play_in_browser(board_url_for(state)))
     await delete_command(ctx)
 
 
@@ -276,30 +291,28 @@ def setup_combat(bot: Bot) -> None:
     @guild_only
     @admin_only
     async def combat_start(ctx: Context, *, args: str = "") -> None:
+        await defer_if_slash(ctx)
         scope_id = await _require_player_scope(ctx)
         if scope_id is None:
             return
-        monster_name, minutes, map_id = parse_start_args(
-            args, guild_id=ctx.guild.id
-        )
+        monster_name, minutes, map_id = parse_start_args(args, guild_id=ctx.guild.id)
         player_id = infer_player_id(ctx)
         clock_note = None
         try:
-            async with lock_for(guild_id=ctx.guild.id, scope_id=scope_id):
-                await ensure_section_fight(
-                    guild_id=ctx.guild.id,
-                    channel_id=ctx.channel.id,
-                    scope_id=scope_id,
-                    player_id=player_id,
-                    monster_name=monster_name,
-                )
-                state = await start_combat(
-                    guild_id=ctx.guild.id,
-                    channel_id=ctx.channel.id,
-                    scope_id=scope_id,
-                    map_id=map_id,
-                    restore_hp=is_sandbox_channel(ctx.channel),
-                )
+            await ensure_section_fight(
+                guild_id=ctx.guild.id,
+                channel_id=ctx.channel.id,
+                scope_id=scope_id,
+                player_id=player_id,
+                monster_name=monster_name,
+            )
+            state = await start_combat(
+                guild_id=ctx.guild.id,
+                channel_id=ctx.channel.id,
+                scope_id=scope_id,
+                map_id=map_id,
+                restore_hp=is_sandbox_channel(ctx.channel),
+            )
             if minutes and player_id is not None:
                 clock_note = advance_section_clock(
                     guild_id=ctx.guild.id,
@@ -337,9 +350,7 @@ def setup_combat(bot: Bot) -> None:
                 await delete_command(ctx)
                 return
             snapshot, note = stale
-            await _send_board(
-                ctx, snapshot, content=note, combat_over=True
-            )
+            await _send_board(ctx, snapshot, content=note, combat_over=True)
             await delete_command(ctx)
             return
 
@@ -430,7 +441,9 @@ def setup_combat(bot: Bot) -> None:
 
     @combat_group.command(
         name="end",
-        help=command_help("Arrête le combat de cette section.", f"`{PREFIX}combat end`"),
+        help=command_help(
+            "Arrête le combat de cette section.", f"`{PREFIX}combat end`"
+        ),
     )
     @guild_only
     @admin_only
@@ -438,8 +451,68 @@ def setup_combat(bot: Bot) -> None:
         scope_id = await _require_player_scope(ctx)
         if scope_id is None:
             return
-        clear_combat(guild_id=ctx.guild.id, scope_id=scope_id)
-        await command_reply(ctx, "Combat terminé.")
+        async with lock_for(guild_id=ctx.guild.id, scope_id=scope_id):
+            state = get_combat(guild_id=ctx.guild.id, scope_id=scope_id)
+            if state is not None:
+                finish_combat(state)
+        if state is not None:
+            await _send_board(ctx, state, content="Combat terminé.", combat_over=True)
+        else:
+            await command_reply(ctx, "Combat terminé.")
+        await delete_command(ctx)
+
+    @combat_group.command(
+        name="historique",
+        aliases=("history",),
+        help=command_help(
+            "Historique des combats archivés pour cette section.",
+            f"`{PREFIX}combat historique` — liste les derniers combats",
+            f"`{PREFIX}combat historique <id>` — détail d’un combat",
+            f"`{PREFIX}combat historique dernier` — dernier combat",
+        ),
+    )
+    @guild_only
+    async def combat_history(ctx: Context, *, query: str = "") -> None:
+        scope_id = await _require_player_scope(ctx)
+        if scope_id is None:
+            return
+        assert ctx.guild is not None
+        normalized = query.strip().lower()
+        if normalized in {"", "list", "liste"}:
+            entries = list_combat_history(guild_id=ctx.guild.id, scope_id=scope_id)
+            await command_reply(ctx, format_history_list(entries))
+            await delete_command(ctx)
+            return
+        if normalized in {"dernier", "last", "latest"}:
+            entry = latest_combat_archive(guild_id=ctx.guild.id, scope_id=scope_id)
+            if entry is None:
+                await command_reply(ctx, "Aucun combat archivé pour cette section.")
+            else:
+                await command_reply(ctx, format_history_detail(entry))
+            await delete_command(ctx)
+            return
+        try:
+            archive_id = int(normalized)
+        except ValueError:
+            await command_reply(
+                ctx,
+                (
+                    f"Usage : `{PREFIX}combat historique`, "
+                    f"`{PREFIX}combat historique <id>` "
+                    f"ou `{PREFIX}combat historique dernier`."
+                ),
+            )
+            await delete_command(ctx)
+            return
+        entry = get_combat_archive(
+            guild_id=ctx.guild.id, scope_id=scope_id, archive_id=archive_id
+        )
+        if entry is None:
+            await command_reply(
+                ctx, f"Aucun combat archivé `#{archive_id}` pour cette section."
+            )
+        else:
+            await command_reply(ctx, format_history_detail(entry))
         await delete_command(ctx)
 
     @combat_group.command(
@@ -462,66 +535,60 @@ def setup_combat(bot: Bot) -> None:
         scope_id = await _require_player_scope(ctx)
         if scope_id is None:
             return
+        if member is None:
+            member, args = parse_mention_and_text(ctx, args)
+        else:
+            _, args = parse_mention_and_text(ctx, args)
+
+        if member is None and not args.strip():
+            await command_reply(ctx, f"Usage : `{PREFIX}combat add <nom> [pv]`")
+            await delete_command(ctx)
+            return
         state = get_combat(guild_id=ctx.guild.id, scope_id=scope_id)
         if state is None:
             await command_reply(ctx, "Aucun combat en cours.")
             await delete_command(ctx)
             return
-
-        if member is None:
-            member, args = parse_mention_and_text(ctx, args)
-        else:
-            _, args = parse_mention_and_text(ctx, args)
-        if member is not None:
-            parts = (
-                args.replace(f"<@{member.id}>", "")
-                .replace(f"<@!{member.id}>", "")
-                .strip()
-                .rsplit(maxsplit=1)
-            )
-            hp = int(parts[-1]) if parts and parts[-1].isdigit() else None
-            try:
+        try:
+            if member is not None:
+                parts = (
+                    args.replace(f"<@{member.id}>", "")
+                    .replace(f"<@!{member.id}>", "")
+                    .strip()
+                    .rsplit(maxsplit=1)
+                )
+                hp = int(parts[-1]) if parts and parts[-1].isdigit() else None
                 combatant = await add_combatant(
                     state,
                     name=member.display_name,
                     hp=hp,
                     user_id=member.id,
                 )
-            except ValueError as exc:
-                await command_reply(ctx, str(exc))
-                await delete_command(ctx)
-                return
-        else:
-            cleaned = args.strip()
-            if not cleaned:
-                await command_reply(ctx, f"Usage : `{PREFIX}combat add <nom> [pv]`")
-                await delete_command(ctx)
-                return
-            parts = cleaned.rsplit(maxsplit=1)
-            if len(parts) == 2 and parts[1].isdigit():
-                monster_name, hp = parts[0], int(parts[1])
             else:
-                monster_name, hp = cleaned, None
-            try:
+                parts = args.strip().rsplit(maxsplit=1)
+                if len(parts) == 2 and parts[1].isdigit():
+                    monster_name, hp = parts[0], int(parts[1])
+                else:
+                    monster_name, hp = args.strip(), None
                 combatant = await add_combatant(state, name=monster_name, hp=hp)
-            except ValueError as exc:
-                await command_reply(ctx, str(exc))
-                await delete_command(ctx)
-                return
+        except ValueError as exc:
+            await command_reply(ctx, str(exc))
+            await delete_command(ctx)
+            return
+        latest = get_combat(guild_id=ctx.guild.id, scope_id=scope_id)
 
         if combatant.user_id is None:
             traits = f" · {', '.join(combatant.traits)}" if combatant.traits else ""
-            reply = (
-                f"**{combatant.name}** ajouté{traits} avec {len(combatant.hand)} cartes."
-            )
+            reply = f"**{combatant.name}** ajouté{traits} avec {len(combatant.hand)} cartes."
         else:
             reply = f"**{combatant.name}** ajouté ({combatant.hp} PV) avec {len(combatant.hand)} cartes."
-        await command_reply(ctx, reply)
+        if latest is not None:
+            await _send_board(ctx, latest, content=reply)
+        else:
+            await command_reply(ctx, reply)
         await delete_command(ctx)
 
-    @combat_group.command(
-        name="pass", help=_PLAY_ON_BOARD
-    )
+    @combat_group.command(name="pass", help=_PLAY_ON_BOARD)
     @guild_only
     async def combat_pass(ctx: Context) -> None:
         await _redirect_play_to_browser(ctx)

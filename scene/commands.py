@@ -1,11 +1,13 @@
+import logging
 import re
-from typing import FrozenSet
+from typing import FrozenSet, Literal
 
 import discord
 from discord.ext.commands.bot import Bot
 from discord.ext.commands.context import Context
 
 from bot.command_helpers import command_reply, delete_command
+from bot.help_commands import tokens_request_help
 from bot.help_text import command_help
 from bot.messaging import send_message
 from bot.names import get_known_character_names
@@ -13,9 +15,98 @@ from bot.speech import parenthetical_only_narration
 from config import PREFIX
 from sheets.context import resolve_guild_id
 
+logger = logging.getLogger(__name__)
+
 _ENDING_PUNCTUATION: FrozenSet[str] = frozenset(".!?,;:")
 _IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".gif", ".webp")
 _MAX_DESC_IMAGES = 10
+_TOPIC_LIMIT = 1024
+TopicClearStatus = Literal["cleared", "empty", "forbidden", "unsupported", "failed"]
+TopicWriteStatus = Literal[
+    "updated", "unchanged", "empty", "forbidden", "unsupported", "failed"
+]
+_TOPIC_ERROR_REPLIES: dict[str, str] = {
+    "forbidden": "Il me faut la permission de gérer les salons.",
+    "unsupported": "Je ne peux pas changer la description ici.",
+    "failed": "Je n’ai pas pu changer la description du salon.",
+}
+
+
+def format_channel_topic(text: str) -> str:
+    cleaned = " ".join(text.split())
+    if not cleaned:
+        return ""
+    if len(cleaned) <= _TOPIC_LIMIT:
+        return cleaned
+    return cleaned[: _TOPIC_LIMIT - 1].rstrip() + "…"
+
+
+async def clear_channel_topic(channel: discord.abc.Messageable) -> TopicClearStatus:
+    if not hasattr(channel, "topic"):
+        return "unsupported"
+    edit = getattr(channel, "edit", None)
+    if not callable(edit):
+        return "unsupported"
+    current = (getattr(channel, "topic", None) or "").strip()
+    if not current:
+        return "empty"
+    try:
+        await edit(topic="")
+    except TypeError:
+        return "unsupported"
+    except discord.Forbidden:
+        return "forbidden"
+    except discord.HTTPException as exc:
+        logger.info("Could not clear channel topic for %s: %s", channel, exc)
+        return "failed"
+    return "cleared"
+
+
+async def clear_scene_channel_topic(ctx: Context) -> None:
+    status = await clear_channel_topic(ctx.channel)
+    error = _TOPIC_ERROR_REPLIES.get(status)
+    if error:
+        await command_reply(ctx, error)
+    await delete_command(ctx)
+
+
+async def set_channel_topic(
+    channel: discord.abc.Messageable, text: str
+) -> TopicWriteStatus:
+    if not hasattr(channel, "topic"):
+        return "unsupported"
+    edit = getattr(channel, "edit", None)
+    if not callable(edit):
+        return "unsupported"
+    topic = format_channel_topic(text)
+    if not topic:
+        return "empty"
+    current = (getattr(channel, "topic", None) or "").strip()
+    if current == topic:
+        return "unchanged"
+    try:
+        await edit(topic=topic)
+    except TypeError:
+        return "unsupported"
+    except discord.Forbidden:
+        return "forbidden"
+    except discord.HTTPException as exc:
+        logger.info("Could not update channel topic for %s: %s", channel, exc)
+        return "failed"
+    return "updated"
+
+
+async def set_scene_channel_topic(ctx: Context, text: str) -> None:
+    cleaned = text.strip()
+    if not cleaned:
+        await command_reply(ctx, f"Usage : `{PREFIX}desc set <texte>`")
+        await delete_command(ctx)
+        return
+    status = await set_channel_topic(ctx.channel, cleaned)
+    error = _TOPIC_ERROR_REPLIES.get(status)
+    if error:
+        await command_reply(ctx, error)
+    await delete_command(ctx)
 
 
 def _is_already_bold(text: str, start: int, end: int) -> bool:
@@ -137,17 +228,48 @@ async def maybe_send_parenthetical_desc(ctx: Context, text: str) -> bool:
 
 
 def setup_desc(bot: Bot) -> None:
-    @bot.hybrid_command(
+    @bot.hybrid_group(
         name="desc",
+        invoke_without_command=True,
         help=command_help(
-            "Narre une scène en italique. Joins une image.",
+            "Narre une scène en italique. La description du salon ne change qu’avec `desc set`.",
             f"`{PREFIX}desc <texte>`",
+            f"`{PREFIX}desc set <texte>` — description du salon seulement",
+            f"`{PREFIX}desc clear` — efface la description du salon",
         ),
     )
-    async def desc_command(
+    async def desc_group(
         ctx: Context,
         *,
         text: str = "",
         file: discord.Attachment | None = None,
     ) -> None:
+        if tokens_request_help(text.split()):
+            await ctx.send_help(ctx.command)
+            return
         await send_scene_description(ctx, text, extra=file)
+
+    @desc_group.command(
+        name="set",
+        aliases=["topic", "update", "sujet"],
+        help=command_help(
+            "Met à jour la description de ce salon, sans poster de narration.",
+            f"`{PREFIX}desc set <texte>`",
+        ),
+    )
+    async def desc_set(ctx: Context, *, text: str = "") -> None:
+        if tokens_request_help(text.split()):
+            await ctx.send_help(ctx.command)
+            return
+        await set_scene_channel_topic(ctx, text)
+
+    @desc_group.command(
+        name="clear",
+        aliases=["reset", "vide", "efface"],
+        help=command_help(
+            "Efface la description de ce salon.",
+            f"`{PREFIX}desc clear`",
+        ),
+    )
+    async def desc_clear(ctx: Context) -> None:
+        await clear_scene_channel_topic(ctx)

@@ -261,6 +261,25 @@ def extract_query_terms(query: str) -> list[str]:
     return [token for token in tokens if len(token) >= 3 and token not in _STOPWORDS]
 
 
+def score_campaign_entry(entry: CampaignEntry, terms: list[str]) -> int:
+    if not terms:
+        return 0
+    title = entry.title.casefold()
+    section = entry.section.casefold()
+    haystack = entry.search_text.casefold()
+    score = 0
+    for term in terms:
+        if title == term or title.startswith(f"{term} ") or title.endswith(f" {term}"):
+            score += 8
+        elif term in title:
+            score += 5
+        elif term in section:
+            score += 2
+        elif term in haystack:
+            score += 1
+    return score
+
+
 def filter_campaign_entries(
     entries: list[CampaignEntry],
     query: str,
@@ -271,10 +290,24 @@ def filter_campaign_entries(
 
     matched: list[CampaignEntry] = []
     for entry in entries:
-        haystack = entry.search_text.casefold()
-        if any(term in haystack for term in terms):
+        if score_campaign_entry(entry, terms):
             matched.append(entry)
     return matched
+
+
+def select_campaign_entries(
+    entries: list[CampaignEntry],
+    query: str,
+    *,
+    limit: int = 3,
+) -> list[CampaignEntry]:
+    terms = extract_query_terms(query)
+    if not terms or limit <= 0:
+        return []
+    scored = [(score_campaign_entry(entry, terms), entry) for entry in entries]
+    scored = [(score, entry) for score, entry in scored if score > 0]
+    scored.sort(key=lambda item: (-item[0], item[1].section, item[1].title))
+    return [entry for _score, entry in scored[:limit]]
 
 
 def format_campaign_index(entries: list[CampaignEntry]) -> str:
