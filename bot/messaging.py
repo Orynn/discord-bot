@@ -146,12 +146,19 @@ async def send_interaction_message(
     embed_kwargs = _embed_kwargs(prepared_embed, prepared_embeds)
 
     if edit:
+        send_kwargs.pop("ephemeral", None)
+        if interaction.response.is_done():
+            return await interaction.edit_original_response(
+                content=prepared_content,
+                **embed_kwargs,
+                **send_kwargs,
+            )
         await interaction.response.edit_message(
             content=prepared_content,
             **embed_kwargs,
             **send_kwargs,
         )
-        return interaction.message
+        return await interaction.original_response()
 
     if interaction.response.is_done():
         return await interaction.followup.send(

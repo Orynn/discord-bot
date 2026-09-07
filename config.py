@@ -28,7 +28,7 @@ _DEFAULT_CONFIG: dict = {
     "player_category_emoji": "🐉",
     "player_channel_ooc": "📢blabla",
     "player_channel_rp": "🎲roleplay",
-    "staff_usernames": ["Orynn"],
+    "staff_user_ids": [],
     "image_provider": "auto",
     "image_local_url": "http://127.0.0.1:7860",
     "image_model": "flux",
@@ -37,9 +37,14 @@ _DEFAULT_CONFIG: dict = {
     "image_timeout_seconds": 180,
     "image_cooldown_seconds": 20,
     "image_history_limit": 1000,
-    "editor_host": "0.0.0.0",
+    "editor_host": "127.0.0.1",
     "editor_port": 8765,
     "editor_public_url": "",
+    "gemini_model": "gemini-3.5-flash",
+    "gemini_timeout_seconds": 45,
+    "gemini_max_output_tokens": 1600,
+    "gemini_history_limit": 20,
+    "gemini_cooldown_seconds": 8,
 }
 
 if _CONFIG_PATH.exists():
@@ -86,6 +91,8 @@ def is_home_guild(guild: object | None) -> bool:
     if HOME_GUILD_NAME and name:
         return str(name).casefold() == HOME_GUILD_NAME.casefold()
     return True
+
+
 CAMPAIGN_CACHE_TTL_SECONDS = int(
     config.get(
         "campaign_cache_ttl_seconds", _DEFAULT_CONFIG["campaign_cache_ttl_seconds"]
@@ -156,11 +163,6 @@ PLAYER_CHANNEL_OOC = str(
 PLAYER_CHANNEL_RP = str(
     config.get("player_channel_rp", _DEFAULT_CONFIG["player_channel_rp"])
 )
-STAFF_USERNAMES = [
-    str(name).casefold()
-    for name in config.get("staff_usernames", ["Orynn"])
-    if str(name).strip()
-]
 STAFF_USER_IDS = {
     int(user_id) for user_id in config.get("staff_user_ids", []) if str(user_id).strip()
 }
@@ -188,7 +190,26 @@ EDITOR_PORT = int(
     or config.get("editor_port", _DEFAULT_CONFIG["editor_port"])
 )
 EDITOR_PUBLIC_URL = str(
-    os.environ.get("ARKANN_EDITOR_URL")
-    or config.get("editor_public_url", "")
-    or ""
+    os.environ.get("ARKANN_EDITOR_URL") or config.get("editor_public_url", "") or ""
 ).strip()
+
+_raw_gemini = (
+    os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or ""
+).strip()
+GEMINI_API_KEY: str | None = _raw_gemini or None
+GEMINI_MODEL = str(
+    os.environ.get("GEMINI_MODEL")
+    or config.get("gemini_model", _DEFAULT_CONFIG["gemini_model"])
+).strip()
+GEMINI_TIMEOUT_SECONDS = int(
+    config.get("gemini_timeout_seconds", _DEFAULT_CONFIG["gemini_timeout_seconds"])
+)
+GEMINI_MAX_OUTPUT_TOKENS = int(
+    config.get("gemini_max_output_tokens", _DEFAULT_CONFIG["gemini_max_output_tokens"])
+)
+GEMINI_HISTORY_LIMIT = int(
+    config.get("gemini_history_limit", _DEFAULT_CONFIG["gemini_history_limit"])
+)
+GEMINI_COOLDOWN_SECONDS = int(
+    config.get("gemini_cooldown_seconds", _DEFAULT_CONFIG["gemini_cooldown_seconds"])
+)

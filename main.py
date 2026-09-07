@@ -9,9 +9,12 @@ VoiceClient.warn_nacl = False
 VoiceClient.warn_dave = False
 from discord.flags import Intents
 
+import bot.command_parser  # noqa: F401 — relax French apostrophes in command parsing
+from ai.commands import setup_ai
 from bot.events import register_events
 from bot.help_commands import maybe_send_command_help, setup_help
 from bot.logging_config import setup_logging
+from bot.purge_commands import setup_purge
 from bot.slash import setup_slash
 from bot.trash_commands import setup_trash
 from bot.tree_utils import clamp_app_command_descriptions
@@ -75,12 +78,15 @@ intents.message_content = True
 bot: ArkannBot = ArkannBot(
     command_prefix=commands.when_mentioned_or(PREFIX),
     intents=intents,
+    # Wait Retry-After instead of hard-coding Discord's global 50 rps quota.
+    max_ratelimit_timeout=None,
 )
 
 COMMAND_SETUPS = (
     setup_npc,
     setup_desc,
     setup_rp,
+    setup_ai,
     setup_fun,
     setup_image,
     setup_pc,
@@ -95,6 +101,7 @@ COMMAND_SETUPS = (
     setup_hunger,
     setup_combat,
     setup_trash,
+    setup_purge,
     setup_help,
     setup_slash,
 )

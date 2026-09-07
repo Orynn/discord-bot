@@ -421,6 +421,46 @@ class TestEquipment(unittest.TestCase):
         self.assertEqual(equipment.find_item("Bedroll").stored_in, "backpack")
         self.assertEqual(equipment.find_item("Herbalism Kit").stored_in, "backpack")
 
+    def test_put_all_skips_equipped_and_worn(self) -> None:
+        from sheets.containers import STORED_HANDS, STORED_LOOSE, STORED_WORN
+
+        equipment = Equipment()
+        equipment.add_item(slug="backpack", name="Backpack", kind="item")
+        equipment.add_item(
+            slug="longsword", name="Longsword", kind=ITEM_KIND_WEAPON, weight_lb=3
+        )
+        equipment.add_item(
+            slug="leather-armor",
+            name="Leather Armor",
+            kind=ITEM_KIND_ARMOR,
+            weight_lb=10,
+        )
+        equipment.add_item(
+            slug="torch",
+            name="Torch",
+            kind="item",
+            weight_lb=1,
+            stored_in=STORED_LOOSE,
+            auto_stow=False,
+        )
+        equipment.equip("Longsword")
+        equipment.equip("Leather Armor")
+
+        equipment.put_in("all", "backpack")
+        sword = equipment.find_item("Longsword")
+        armor = equipment.find_item("Leather Armor")
+        torch = equipment.find_item("Torch")
+        assert sword and armor and torch
+        self.assertEqual(sword.stored_in, STORED_HANDS)
+        self.assertTrue(sword.equipped)
+        self.assertEqual(armor.stored_in, STORED_WORN)
+        self.assertTrue(armor.equipped)
+        self.assertEqual(torch.stored_in, "backpack")
+
+        with self.assertRaises(ValueError) as raised:
+            equipment.put_in("Longsword", "backpack")
+        self.assertIn("equipped or worn", str(raised.exception))
+
     def test_put_on_belt(self) -> None:
         from sheets.containers import BELT_SLOTS, STORED_BELT, STORED_LOOSE, STORED_WORN
 

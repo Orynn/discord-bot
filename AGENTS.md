@@ -13,12 +13,14 @@ python main.py
 ```
 
 ```bash
-python -m unittest discover -s tests -v
+python -m unittest discover -s tests -q
 ruff check .
 ruff format --check .
 ```
 
 CI runs the same lint + unittest steps on push/PR.
+
+Agents: run the full suite in a **background** subagent (do not block the chat). If it fails, spawn a fixer agent (max two rounds). Targeted `tests.test_*` checks may stay in the main agent.
 
 ## Layout
 

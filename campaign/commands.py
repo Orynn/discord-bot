@@ -6,7 +6,7 @@ from discord.ext.commands.bot import Bot
 from discord.ext.commands.context import Context
 
 from bot.checks import admin_only, guild_only
-from bot.command_helpers import command_reply, delete_command
+from bot.command_helpers import command_reply, defer_if_slash, delete_command
 from bot.help_text import HELP_COLOR, HELP_LOOKUP_COLOR, command_help
 from bot.messaging import send_message
 from campaign.forums import (
@@ -132,6 +132,7 @@ async def _send_embeds(ctx: Context, embeds: list[discord.Embed]) -> None:
 
 async def _run_campaign_lookup(ctx: Context, query: str | None) -> None:
     assert ctx.guild is not None
+    await defer_if_slash(ctx)
 
     async with ctx.typing():
         entries = await fetch_campaign_entries(ctx.guild)

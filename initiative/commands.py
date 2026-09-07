@@ -10,13 +10,18 @@ from bot.help_text import command_help
 from bot.messaging import send_message
 from bot.privacy import reject_other_player
 from combat.scope import PLAYER_INIT_ONLY, scope_id_for_channel
+from combat.storage import lock_for
 from config import PREFIX
 from initiative.display import advance_turn, build_initiative_embed
 from initiative.storage import (
+    InitiativeEntry,
     InitiativeState,
     add_initiative_entry,
+    already_listed,
     clear_initiative,
     get_initiative,
+    match_initiative_entries,
+    preserve_active_index,
     save_initiative,
 )
 from players.discover import is_sandbox_owner_id
@@ -110,9 +115,7 @@ def setup_initiative(bot: Bot) -> None:
             return
         modifier = 0
         if sandbox_owner is not None:
-            sheet = ensure_sandbox_sheet(
-                guild_id=ctx.guild.id, user_id=sandbox_owner
-            )
+            sheet = ensure_sandbox_sheet(guild_id=ctx.guild.id, user_id=sandbox_owner)
             entry_name = sheet.name
             modifier = ability_modifier(sheet.abilities["dex"])
             user_id = sandbox_owner
@@ -131,14 +134,26 @@ def setup_initiative(bot: Bot) -> None:
             else:
                 entry_name = args.strip() or "Combatant"
 
-        state = get_initiative(guild_id=ctx.guild.id, scope_id=scope_id)
-        if state is None:
-            state = InitiativeState(channel_id=ctx.channel.id, active_index=0, order=[])
-
-        roll = random.randint(1, 20)
-        total = roll + modifier
-        add_initiative_entry(state, name=entry_name, total=total, user_id=user_id)
-        save_initiative(guild_id=ctx.guild.id, scope_id=scope_id, state=state)
+        async with lock_for(guild_id=ctx.guild.id, scope_id=scope_id):
+            state = get_initiative(guild_id=ctx.guild.id, scope_id=scope_id)
+            if state is None:
+                state = InitiativeState(
+                    channel_id=ctx.channel.id, active_index=0, order=[]
+                )
+            if already_listed(state, name=entry_name, user_id=user_id):
+                duplicate = True
+            else:
+                duplicate = False
+                roll = random.randint(1, 20)
+                total = roll + modifier
+                add_initiative_entry(
+                    state, name=entry_name, total=total, user_id=user_id
+                )
+                save_initiative(guild_id=ctx.guild.id, scope_id=scope_id, state=state)
+        if duplicate:
+            await command_reply(ctx, f"**{entry_name}** est déjà dans l’initiative.")
+            await delete_command(ctx)
+            return
         mod_label = f"+{modifier}" if modifier >= 0 else str(modifier)
         if roll == 20:
             notice = (
@@ -171,7 +186,8 @@ def setup_initiative(bot: Bot) -> None:
         scope_id = await _require_player_scope(ctx)
         if scope_id is None:
             return
-        result = advance_turn(guild_id=ctx.guild.id, scope_id=scope_id)
+        async with lock_for(guild_id=ctx.guild.id, scope_id=scope_id):
+            result = advance_turn(guild_id=ctx.guild.id, scope_id=scope_id)
         if result is None:
             await command_reply(ctx, "No initiative tracked.")
             return
@@ -203,7 +219,9 @@ def setup_initiative(bot: Bot) -> None:
 
     @init_group.command(
         name="clear",
-        help=command_help("Efface l’initiative de cette section.", f"`{PREFIX}init clear`"),
+        help=command_help(
+            "Efface l’initiative de cette section.", f"`{PREFIX}init clear`"
+        ),
     )
     @guild_only
     @admin_only
@@ -211,7 +229,8 @@ def setup_initiative(bot: Bot) -> None:
         scope_id = await _require_player_scope(ctx)
         if scope_id is None:
             return
-        clear_initiative(guild_id=ctx.guild.id, scope_id=scope_id)
+        async with lock_for(guild_id=ctx.guild.id, scope_id=scope_id):
+            clear_initiative(guild_id=ctx.guild.id, scope_id=scope_id)
         await command_reply(ctx, "Initiative cleared.")
         await delete_command(ctx)
 
@@ -228,33 +247,37 @@ def setup_initiative(bot: Bot) -> None:
         scope_id = await _require_player_scope(ctx)
         if scope_id is None:
             return
-        state = get_initiative(guild_id=ctx.guild.id, scope_id=scope_id)
-        if not state:
-            await command_reply(ctx, "No initiative tracked.")
-            return
-        query = name.lower()
-        active_entry = None
-        if state.order and 0 <= state.active_index < len(state.order):
-            active_entry = state.order[state.active_index]
-
-        state.order = [
-            entry for entry in state.order if query not in entry.name.lower()
-        ]
-        if not state.order:
-            clear_initiative(guild_id=ctx.guild.id, scope_id=scope_id)
-        else:
-            if active_entry is not None:
-                for index, entry in enumerate(state.order):
-                    if (
-                        entry.name == active_entry.name
-                        and entry.user_id == active_entry.user_id
-                    ):
-                        state.active_index = index
-                        break
-                else:
-                    state.active_index = min(state.active_index, len(state.order) - 1)
+        error = None
+        matches: list[InitiativeEntry] = []
+        async with lock_for(guild_id=ctx.guild.id, scope_id=scope_id):
+            state = get_initiative(guild_id=ctx.guild.id, scope_id=scope_id)
+            if not state:
+                error = "No initiative tracked."
             else:
-                state.active_index = min(state.active_index, len(state.order) - 1)
-            save_initiative(guild_id=ctx.guild.id, scope_id=scope_id, state=state)
-        await command_reply(ctx, f"Removed **{name}** from initiative.")
+                matches = match_initiative_entries(state.order, name)
+                if not matches:
+                    error = f"**{name}** n’est pas dans l’initiative."
+                else:
+                    active_entry = None
+                    if state.order and 0 <= state.active_index < len(state.order):
+                        active_entry = state.order[state.active_index]
+                    remove_keys = {(entry.name, entry.user_id) for entry in matches}
+                    state.order = [
+                        entry
+                        for entry in state.order
+                        if (entry.name, entry.user_id) not in remove_keys
+                    ]
+                    if not state.order:
+                        clear_initiative(guild_id=ctx.guild.id, scope_id=scope_id)
+                    else:
+                        preserve_active_index(state, active_entry)
+                        save_initiative(
+                            guild_id=ctx.guild.id, scope_id=scope_id, state=state
+                        )
+        if error is not None:
+            await command_reply(ctx, error)
+            await delete_command(ctx)
+            return
+        removed = ", ".join(f"**{entry.name}**" for entry in matches)
+        await command_reply(ctx, f"{removed} retiré de l’initiative.")
         await delete_command(ctx)

@@ -1,11 +1,18 @@
 import logging
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 import discord
 from discord.ext import commands
 from discord.ext.commands.bot import Bot
 from discord.utils import snowflake_time
 
+from bot.rate_limits import (
+    is_rate_limited,
+    retry_on_rate_limit,
+    should_retry_rate_limit,
+    sleep_discord_retry,
+)
 from config import (
     CATCHUP_ENABLED,
     CATCHUP_MAX_AGE_HOURS,
@@ -13,7 +20,7 @@ from config import (
     PREFIX,
     is_home_guild,
 )
-from data.db import mark_channel_message_processed
+from data.db import get_json, mark_channel_message_processed
 
 logger = logging.getLogger(__name__)
 
@@ -21,69 +28,22 @@ _processed_this_session: set[int] = set()
 _catchup_active = False
 _MAX_PAGES_PER_CHANNEL = 10
 
-# State-changing commands that must not replay after downtime.
-CATCHUP_BLOCKED_COMMANDS: frozenset[str] = frozenset(
+# Idempotent lookups only. Everything else is skipped after downtime.
+CATCHUP_ALLOWED_COMMANDS: frozenset[str] = frozenset(
     {
-        "sheet create",
-        "sheet delete",
-        "sheet import",
-        "sheet set",
-        "sheet hp",
-        "sheet money set",
-        "sheet money add",
-        "sheet money spend",
-        "sheet money pay",
-        "sheet prof save",
-        "sheet prof skill",
-        "sheet spells add",
-        "sheet spells remove",
-        "sheet slots use",
-        "sheet slots recover",
-        "sheet slots set",
-        "sheet slots auto",
-        "sheet slots clear",
-        "sheet condition",
-        "sheet inspire",
-        "sheet deathsave",
-        "sheet rest short",
-        "sheet rest long",
-        "sheet gear",
-        "combat",
-        "party money set",
-        "party money add",
-        "party money spend",
-        "init add",
-        "init next",
-        "init clear",
-        "init remove",
-        "pcname",
-        "npc",
-        "campaign",
-        "lore",
-        "camp",
-        "time",
-        "clock",
-        "calendar",
-        "date",
-        "temps",
-        "hunger",
-        "faim",
-        "food",
-        "status",
-        "sheet status",
-        "image",
-        "whisper",
-        "scene",
-        "arrive",
-        "leave",
-        "player setup",
-        "player add",
-        "player create",
-        "player sync",
-        "player remove",
-        "player delete",
+        "help",
+        "aide",
+        "srd",
+        "sheet show",
+        "sheet info",
+        "init show",
+        "combat historique",
     }
 )
+_CATCHUP_TIME_GROUPS: frozenset[str] = frozenset(
+    {"time", "clock", "calendar", "date", "temps"}
+)
+_CATCHUP_TIME_SHOW: frozenset[str] = frozenset({"", "now", "show"})
 
 
 def is_catchup_active() -> bool:
@@ -103,17 +63,71 @@ def reset_session_tracking() -> None:
     _processed_this_session.clear()
 
 
+def _catchup_command_rest(ctx: commands.Context, name: str) -> str:
+    content = str(getattr(ctx.message, "content", "") or "").strip()
+    if content.startswith(PREFIX):
+        content = content[len(PREFIX) :].strip()
+    elif content.startswith("/"):
+        content = content[1:].strip()
+    invoked = str(getattr(ctx, "invoked_with", "") or "").strip()
+    head = invoked or name.split()[0]
+    parts = content.split(maxsplit=1)
+    if parts and parts[0].casefold() == head.casefold():
+        return parts[1].strip() if len(parts) > 1 else ""
+    if not content:
+        kwargs = getattr(ctx, "kwargs", None) or {}
+        if isinstance(kwargs, dict):
+            return str(kwargs.get("spec") or "").strip()
+    return content
+
+
+def _is_time_show_rest(rest: str) -> bool:
+    tokens = rest.split()
+    if tokens and tokens[0].startswith("<@") and tokens[0].endswith(">"):
+        tokens = tokens[1:]
+    label = tokens[0].casefold() if tokens else ""
+    return label in _CATCHUP_TIME_SHOW
+
+
 def _is_catchup_allowed(ctx: commands.Context) -> bool:
     if ctx.command is None:
         return False
     if ctx.message.attachments:
         return False
     name = ctx.command.qualified_name
-    if name in CATCHUP_BLOCKED_COMMANDS:
-        return False
-    return not any(
-        name.startswith(f"{blocked} ") for blocked in CATCHUP_BLOCKED_COMMANDS
-    )
+    if name in _CATCHUP_TIME_GROUPS:
+        return _is_time_show_rest(_catchup_command_rest(ctx, name))
+    if name in CATCHUP_ALLOWED_COMMANDS:
+        return True
+    return any(name.startswith(f"{allowed} ") for allowed in CATCHUP_ALLOWED_COMMANDS)
+
+
+async def _history_page(
+    channel: discord.abc.Messageable,
+    *,
+    after: discord.Object | datetime,
+    page_size: int,
+) -> list[discord.Message]:
+    page: list[discord.Message] = []
+    async for message in channel.history(
+        after=after,
+        oldest_first=True,
+        limit=page_size,
+    ):
+        page.append(message)
+    return page
+
+
+async def _list_archived_threads(
+    text_channel: discord.TextChannel,
+) -> list[discord.Thread]:
+    async def collect() -> list[discord.Thread]:
+        return [thread async for thread in text_channel.archived_threads(limit=25)]
+
+    try:
+        return await retry_on_rate_limit(collect)
+    except (discord.Forbidden, discord.HTTPException, discord.ClientException):
+        return []
 
 
 def _catchup_after(
@@ -131,30 +145,35 @@ def _catchup_after(
     return discord.Object(id=last_id)
 
 
-async def _process_catchup_message(bot: Bot, message: discord.Message) -> bool:
+async def _process_catchup_message(
+    bot: Bot, message: discord.Message
+) -> Literal["replayed", "skipped", "failed"]:
     if message.id in _processed_this_session:
-        return False
+        return "skipped"
     if message.author.bot or not message.content.startswith(PREFIX):
-        return False
+        return "skipped"
     if message.guild is None:
-        return False
+        return "skipped"
 
     ctx = await bot.get_context(message)
     ctx._from_catchup = True
     if ctx.command is None:
-        return False
+        return "skipped"
 
     if not _is_catchup_allowed(ctx):
         mark_message_processed(channel_id=message.channel.id, message_id=message.id)
-        return False
+        return "skipped"
 
     try:
         await bot.invoke(ctx)
     except commands.CommandInvokeError:
-        return False
+        return "failed"
+
+    if getattr(ctx, "command_failed", False):
+        return "failed"
 
     mark_message_processed(channel_id=message.channel.id, message_id=message.id)
-    return True
+    return "replayed"
 
 
 async def _catch_up_channel(
@@ -190,23 +209,39 @@ async def _catch_up_channel(
 
     try:
         for _ in range(_MAX_PAGES_PER_CHANNEL):
-            page: list[discord.Message] = []
-            async for message in channel.history(
-                after=after,
-                oldest_first=True,
-                limit=page_size,
-            ):
-                page.append(message)
+            try:
+                page = await _history_page(channel, after=after, page_size=page_size)
+            except discord.Forbidden:
+                break
+            except discord.HTTPException as exc:
+                if should_retry_rate_limit(exc):
+                    await sleep_discord_retry(exc)
+                    continue
+                if is_rate_limited(exc):
+                    logger.warning(
+                        "Catch-up stopped on channel %s after Discord 429.",
+                        channel.id,
+                    )
+                break
+            except discord.ClientException:
+                break
             if not page:
                 break
+            failed = False
             for message in page:
+                result = await _process_catchup_message(bot=bot, message=message)
+                if result == "failed":
+                    failed = True
+                    break
                 last_seen_id = message.id
-                if await _process_catchup_message(bot=bot, message=message):
+                if result == "replayed":
                     processed += 1
+            if failed:
+                break
             after = discord.Object(id=page[-1].id)
             if len(page) < page_size:
                 break
-    except (discord.Forbidden, discord.HTTPException, discord.ClientException):
+    except discord.ClientException:
         pass
 
     if last_seen_id is not None:
@@ -219,11 +254,7 @@ async def _iter_catchup_channels(guild: discord.Guild) -> list[discord.abc.Messa
 
     for text_channel in guild.text_channels:
         channels.extend(text_channel.threads)
-        try:
-            async for thread in text_channel.archived_threads(limit=25):
-                channels.append(thread)
-        except (discord.Forbidden, discord.HTTPException):
-            pass
+        channels.extend(await _list_archived_threads(text_channel))
 
     return channels
 
@@ -237,9 +268,6 @@ async def catch_up_missed_commands(bot: Bot) -> int:
 
     processed = 0
     last_ids: dict[str, int] = {}
-
-    from data.db import get_json
-
     stored = get_json("last_message_ids")
     if isinstance(stored, dict):
         last_ids = {str(key): int(value) for key, value in stored.items()}

@@ -53,10 +53,16 @@ def _hero_state(*, board_message_id: int | None = 11) -> CombatState:
     )
 
 
-def _http_error(status: int, reason: str) -> discord.HTTPException:
+def _http_error(
+    status: int,
+    reason: str,
+    *,
+    headers: dict[str, str] | None = None,
+) -> discord.HTTPException:
     response = MagicMock()
     response.status = status
     response.reason = reason
+    response.headers = headers or {}
     return discord.HTTPException(response, {"message": reason})
 
 
@@ -189,9 +195,7 @@ class TestSyncCombatMessage(unittest.IsolatedAsyncioTestCase):
         sync_combat_message(_hero_state(), content="web", ended=False)
         await started.wait()
         self.assertTrue(discord_edit_lock(guild_id=1, scope_id=5).locked())
-        send_task = asyncio.create_task(
-            _send_board(ctx, _hero_state(), content="Maj")
-        )
+        send_task = asyncio.create_task(_send_board(ctx, _hero_state(), content="Maj"))
         for _ in range(20):
             if send_task.done():
                 break
@@ -328,6 +332,28 @@ class TestSyncCombatMessage(unittest.IsolatedAsyncioTestCase):
         assert loaded is not None
         self.assertEqual(loaded.board_message_id, 11)
 
+    async def test_edit_retries_after_retry_after(self) -> None:
+        channel, message = _mock_channel_with_message()
+        limited = _http_error(
+            429,
+            "Too Many Requests",
+            headers={"Via": "1.1 google", "Retry-After": "0.5"},
+        )
+        message.edit = AsyncMock(side_effect=[limited, None])
+        bot = MagicMock()
+        bot.get_channel.return_value = channel
+        bind_bot(bot)
+        state = _hero_state()
+        save_combat(state)
+
+        with patch("bot.rate_limits.asyncio.sleep", new_callable=AsyncMock):
+            result = await edit_combat_board_message(state, content="Hero avance.")
+        self.assertEqual(result, BoardEditResult.UPDATED)
+        self.assertEqual(message.edit.await_count, 2)
+        loaded = get_combat(guild_id=1, scope_id=5)
+        assert loaded is not None
+        self.assertEqual(loaded.board_message_id, 11)
+
     async def test_send_board_records_message_id(self) -> None:
         state = _hero_state(board_message_id=None)
         save_combat(state)
@@ -355,9 +381,7 @@ class TestSyncCombatMessage(unittest.IsolatedAsyncioTestCase):
         posted.id = 555
         posted.channel.id = 4
         ctx = MagicMock()
-        with patch(
-            "combat.commands.send_message", AsyncMock(return_value=posted)
-        ):
+        with patch("combat.commands.send_message", AsyncMock(return_value=posted)):
             await _send_board(ctx, state)
         loaded = get_combat(guild_id=1, scope_id=5)
         assert loaded is not None
@@ -386,9 +410,7 @@ class TestSyncCombatMessage(unittest.IsolatedAsyncioTestCase):
         bot.get_channel.return_value = channel
         bind_bot(bot)
         ctx = MagicMock()
-        with patch(
-            "combat.commands.send_message", AsyncMock()
-        ) as send:
+        with patch("combat.commands.send_message", AsyncMock()) as send:
             await _send_board(ctx, state, content="Maj")
         send.assert_not_called()
         message.edit.assert_awaited_once()
@@ -403,11 +425,10 @@ class TestSyncCombatMessage(unittest.IsolatedAsyncioTestCase):
         bot.get_channel.return_value = channel
         bind_bot(bot)
         ctx = MagicMock()
-        with patch(
-            "combat.commands.send_message", AsyncMock()
-        ) as send, patch(
-            "combat.commands.command_reply", AsyncMock()
-        ) as reply:
+        with (
+            patch("combat.commands.send_message", AsyncMock()) as send,
+            patch("combat.commands.command_reply", AsyncMock()) as reply,
+        ):
             await _send_board(ctx, state)
         send.assert_not_called()
         reply.assert_awaited_once()

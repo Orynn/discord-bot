@@ -301,15 +301,15 @@ def get_stash(*, guild_id: int, place: str) -> PlaceStash:
     return stash
 
 
-def save_stash(stash: PlaceStash) -> None:
-    with db_connection() as connection:
+def save_stash(stash: PlaceStash, *, connection: object | None = None) -> None:
+    def _write(conn) -> None:
         if not stash.entries:
-            connection.execute(
+            conn.execute(
                 "DELETE FROM stashed_gear WHERE guild_id = ? AND place_key = ?",
                 (str(stash.guild_id), stash.place_key),
             )
             return
-        connection.execute(
+        conn.execute(
             """
             INSERT OR REPLACE INTO stashed_gear (guild_id, place_key, place_name, items_json)
             VALUES (?, ?, ?, ?)
@@ -321,6 +321,12 @@ def save_stash(stash: PlaceStash) -> None:
                 json.dumps(stash.to_dict(), ensure_ascii=False),
             ),
         )
+
+    if connection is None:
+        with db_connection() as conn:
+            _write(conn)
+        return
+    _write(connection)
 
 
 def list_stashes(*, guild_id: int) -> list[PlaceStash]:

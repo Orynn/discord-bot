@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import logging
+import secrets
 import socket
 from pathlib import Path
 
 from aiohttp import web
 
 from combat.board import apply_web_action, board_snapshot
-from combat.storage import get_combat
+from combat.storage import CombatState, ensure_board_token, get_combat
 from config import EDITOR_HOST, EDITOR_PORT, EDITOR_PUBLIC_URL
 
 logger = logging.getLogger(__name__)
@@ -47,13 +48,56 @@ def editor_public_url() -> str | None:
     return f"http://{host}:{_bound_port}"
 
 
-def combat_board_url(guild_id: int, scope_id: int) -> str | None:
+def combat_board_url(
+    guild_id: int, scope_id: int, token: str | None = None
+) -> str | None:
     if not editor_is_running():
         return None
     base = editor_public_url()
     if not base:
         return None
-    return f"{base.rstrip('/')}/combat/{int(guild_id)}/{int(scope_id)}"
+    url = f"{base.rstrip('/')}/combat/{int(guild_id)}/{int(scope_id)}"
+    if token:
+        return f"{url}?t={token}"
+    return url
+
+
+def board_url_for(state: CombatState) -> str | None:
+    token = ensure_board_token(state, persist=True)
+    return combat_board_url(state.guild_id, state.scope_id, token)
+
+
+def _offered_token(request: web.Request) -> str:
+    query = str(request.query.get("t") or "").strip()
+    if query:
+        return query
+    header = str(request.headers.get("Authorization") or "")
+    prefix = "Bearer "
+    if header.startswith(prefix):
+        return header[len(prefix) :].strip()
+    return ""
+
+
+def _tokens_match(offered: str, expected: str) -> bool:
+    if not offered or not expected or len(offered) != len(expected):
+        return False
+    return secrets.compare_digest(offered, expected)
+
+
+def _require_board_state(request: web.Request) -> CombatState | web.Response:
+    try:
+        guild_id = int(request.match_info["guild_id"])
+        scope_id = int(request.match_info["scope_id"])
+    except ValueError:
+        return web.json_response({"ok": False}, status=400)
+    state = get_combat(guild_id=guild_id, scope_id=scope_id)
+    if state is None:
+        return web.json_response({"ok": False, "empty": True}, status=404)
+    if not state.board_token or not _tokens_match(
+        _offered_token(request), state.board_token
+    ):
+        return web.json_response({"ok": False, "error": "Jeton invalide."}, status=403)
+    return state
 
 
 @web.middleware
@@ -80,43 +124,54 @@ async def handle_health(_request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "service": "arkann-web"})
 
 
-async def handle_combat_board(_request: web.Request) -> web.StreamResponse:
+async def handle_combat_board(request: web.Request) -> web.StreamResponse:
     if not COMBAT_BOARD_FILE.is_file():
         return web.Response(status=404, text="Plateau introuvable.")
-    return web.FileResponse(
-        COMBAT_BOARD_FILE,
-        headers={"Cache-Control": "no-store"},
-    )
-
-
-async def handle_combat_state(request: web.Request) -> web.Response:
     try:
         guild_id = int(request.match_info["guild_id"])
         scope_id = int(request.match_info["scope_id"])
     except ValueError:
-        return web.json_response({"ok": False}, status=400)
+        return web.Response(status=400, text="Lien invalide.")
     state = get_combat(guild_id=guild_id, scope_id=scope_id)
     if state is None:
-        return web.json_response({"ok": False, "empty": True}, status=404)
-    payload = board_snapshot(state)
+        return web.Response(status=404, text="Aucun combat en cours.")
+    if not state.board_token or not _tokens_match(
+        _offered_token(request), state.board_token
+    ):
+        return web.Response(status=403, text="Lien du plateau invalide.")
+    return web.FileResponse(
+        COMBAT_BOARD_FILE,
+        headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+    )
+
+
+async def handle_combat_state(request: web.Request) -> web.Response:
+    authorized = _require_board_state(request)
+    if isinstance(authorized, web.Response):
+        return authorized
+    payload = board_snapshot(authorized)
     payload["ok"] = True
     return web.json_response(payload)
 
 
-def _ids(request: web.Request) -> tuple[int, int]:
-    return int(request.match_info["guild_id"]), int(request.match_info["scope_id"])
-
-
 async def handle_combat_action(request: web.Request) -> web.Response:
+    authorized = _require_board_state(request)
+    if isinstance(authorized, web.Response):
+        return authorized
     try:
-        guild_id, scope_id = _ids(request)
         payload = await request.json()
     except (ValueError, TypeError):
-        return web.json_response({"ok": False, "error": "Requête invalide."}, status=400)
+        return web.json_response(
+            {"ok": False, "error": "Requête invalide."}, status=400
+        )
     if not isinstance(payload, dict):
-        return web.json_response({"ok": False, "error": "Requête invalide."}, status=400)
+        return web.json_response(
+            {"ok": False, "error": "Requête invalide."}, status=400
+        )
     try:
-        result = await apply_web_action(guild_id, scope_id, payload)
+        result = await apply_web_action(
+            authorized.guild_id, authorized.scope_id, payload
+        )
     except ValueError as exc:
         return web.json_response(
             {"ok": False, "error": str(exc).replace("**", "")}, status=400
@@ -149,9 +204,7 @@ async def start_editor_server() -> str | None:
         await site.start()
     except OSError:
         await runner.cleanup()
-        logger.exception(
-            "Could not bind map editor on %s:%s", EDITOR_HOST, EDITOR_PORT
-        )
+        logger.exception("Could not bind map editor on %s:%s", EDITOR_HOST, EDITOR_PORT)
         return None
     sockets = getattr(getattr(site, "_server", None), "sockets", None) or []
     port = EDITOR_PORT

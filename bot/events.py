@@ -12,7 +12,7 @@ from bot.catchup import (
     reset_session_tracking,
 )
 from bot.command_helpers import SERVER_ONLY, command_reply, delete_command
-from bot.command_log import log_command
+from bot.command_log import inspect_log_channel, log_app_command, log_command
 from bot.errors import (
     collect_command_names,
     format_command_suggestions,
@@ -87,6 +87,8 @@ def register_events(bot: Bot) -> None:
                     logger.exception(
                         "Could not create campaign forums in %s", guild.name
                     )
+                if is_home_guild(guild):
+                    inspect_log_channel(guild)
 
             if not is_available():
                 logger.error(
@@ -167,14 +169,25 @@ def register_events(bot: Bot) -> None:
             return
 
         if is_catchup_invoke(ctx):
+            ctx.command_failed = True
             return
 
         if isinstance(error, commands.CommandOnCooldown):
             wait = max(1, int(error.retry_after + 0.999))
-            await _error_reply(ctx, f"Cette commande est en pause. Réessaie dans {wait}s.")
+            await _error_reply(
+                ctx, f"Cette commande est en pause. Réessaie dans {wait}s."
+            )
             return
 
         if isinstance(error, commands.UserInputError):
+            logger.info("User input error in %s: %s", ctx.command, error)
+            if isinstance(error, commands.UnexpectedQuoteError):
+                await _error_reply(
+                    ctx,
+                    "Je n’ai pas pu lire la commande (apostrophe ou guillemet). "
+                    "Réessaie, ou mets `--no-context` au début.",
+                )
+                return
             if ctx.command is not None:
                 await ctx.send_help(ctx.command)
                 return
@@ -187,7 +200,9 @@ def register_events(bot: Bot) -> None:
             if ctx.guild is None:
                 await _error_reply(ctx, SERVER_ONLY)
             else:
-                await _error_reply(ctx, "Tu n’as pas le droit d’utiliser cette commande.")
+                await _error_reply(
+                    ctx, "Tu n’as pas le droit d’utiliser cette commande."
+                )
             return
 
         logger.exception("Unhandled command error in %s", ctx.command, exc_info=error)
@@ -203,3 +218,39 @@ def register_events(bot: Bot) -> None:
         if ctx.guild is not None and ctx.message is not None:
             mark_message_processed(channel_id=ctx.channel.id, message_id=ctx.message.id)
         await log_command(ctx)
+
+    @bot.event
+    async def on_app_command_completion(
+        interaction: discord.Interaction,
+        command: discord.app_commands.Command | discord.app_commands.ContextMenu,
+    ) -> None:
+        await log_app_command(interaction, command)
+
+    @bot.tree.error
+    async def on_app_command_error(
+        interaction: discord.Interaction,
+        error: discord.app_commands.AppCommandError,
+    ) -> None:
+        if isinstance(error, discord.app_commands.CommandOnCooldown):
+            wait = max(1, int(error.retry_after + 0.999))
+            message = f"Cette commande est en pause. Réessaie dans {wait}s."
+        elif isinstance(error, discord.app_commands.CheckFailure):
+            message = (
+                SERVER_ONLY
+                if interaction.guild is None
+                else "Tu n’as pas le droit d’utiliser cette commande."
+            )
+        else:
+            logger.exception(
+                "Unhandled app command error in %s",
+                interaction.command,
+                exc_info=error,
+            )
+            message = "Quelque chose s’est mal passé. Réessaie, ou `;help`."
+        try:
+            if interaction.response.is_done():
+                await interaction.followup.send(message, ephemeral=True)
+            else:
+                await interaction.response.send_message(message, ephemeral=True)
+        except discord.HTTPException:
+            logger.warning("Could not send app command error: %s", message)

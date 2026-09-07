@@ -18,6 +18,7 @@ from npc.commands import setup_npc
 from party.commands import setup_party
 from pc.commands import setup_pc
 from players.commands import setup_player
+from ai.commands import setup_ai
 from roll.commands import setup_roll
 from scene.commands import setup_desc
 from scene.rp_commands import setup_rp
@@ -30,6 +31,7 @@ def _register_commands(bot: commands.Bot) -> None:
         setup_npc,
         setup_desc,
         setup_rp,
+        setup_ai,
         setup_fun,
         setup_image,
         setup_pc,
@@ -83,11 +85,13 @@ class TestSlashRegistration(unittest.TestCase):
                 "whisper",
                 "scene",
                 "look",
+                "ai",
                 "campaign",
                 "time",
                 "get",
                 "image",
                 "status",
+                "tuto",
             }.issubset(names)
         )
         campaign = next(
@@ -141,9 +145,14 @@ class TestSlashRegistration(unittest.TestCase):
 
 
 class TestDeleteCommandSlash(unittest.IsolatedAsyncioTestCase):
-    async def test_skips_slash_interactions(self) -> None:
+    async def test_defers_silent_slash_interactions(self) -> None:
         ctx = MagicMock()
         ctx.interaction = MagicMock()
+        ctx.interaction.response.is_done.return_value = False
+        ctx.defer = AsyncMock()
+        ctx.interaction.delete_original_response = AsyncMock()
         ctx.message.delete = AsyncMock()
         await delete_command(ctx)
+        ctx.defer.assert_awaited_once_with(ephemeral=True)
+        ctx.interaction.delete_original_response.assert_awaited_once()
         ctx.message.delete.assert_not_called()

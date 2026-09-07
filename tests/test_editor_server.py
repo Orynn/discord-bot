@@ -9,6 +9,7 @@ import data.db as db_module
 from combat.board import board_snapshot
 from combat.discord_sync import bind_pusher, flush_discord_sync
 from combat.editor_server import (
+    board_url_for,
     combat_board_url,
     create_app,
     editor_is_running,
@@ -16,10 +17,18 @@ from combat.editor_server import (
     start_editor_server,
     stop_editor_server,
 )
-from combat.storage import CombatState, CombatantState, save_combat
-from combat.web_commands import parse_web_command
+from combat.storage import CombatState, CombatantState, get_combat, save_combat
+from combat.web_commands import parse_web_command, run_web_command
 from config import PREFIX
 from data.db import init_db
+from initiative.storage import (
+    InitiativeEntry,
+    InitiativeState,
+    get_initiative,
+    save_initiative,
+)
+
+BOARD_TOKEN = "board-token-for-tests"
 
 
 class TestEditorApp(unittest.IsolatedAsyncioTestCase):
@@ -39,10 +48,7 @@ class TestEditorApp(unittest.IsolatedAsyncioTestCase):
             missing = await client.get("/secret")
             self.assertEqual(missing.status, 404)
             board = await client.get("/combat/1/2")
-            self.assertEqual(board.status, 200)
-            board_html = await board.text()
-            self.assertIn("Plateau", board_html)
-            self.assertIn('id="cmd"', board_html)
+            self.assertEqual(board.status, 404)
             empty = await client.get("/combat/1/2/state")
             self.assertEqual(empty.status, 404)
 
@@ -69,9 +75,7 @@ class TestEditorLifecycle(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(editor_public_url())
 
     def test_public_url_override(self) -> None:
-        with patch(
-            "combat.editor_server.EDITOR_PUBLIC_URL", "https://maps.example/"
-        ):
+        with patch("combat.editor_server.EDITOR_PUBLIC_URL", "https://maps.example/"):
             self.assertEqual(editor_public_url(), "https://maps.example")
 
     def test_combat_board_url_requires_server(self) -> None:
@@ -86,8 +90,8 @@ class TestEditorLifecycle(unittest.IsolatedAsyncioTestCase):
             ),
         ):
             self.assertEqual(
-                combat_board_url(1, 2),
-                "http://172.16.7.89:8765/combat/1/2",
+                combat_board_url(1, 2, BOARD_TOKEN),
+                f"http://172.16.7.89:8765/combat/1/2?t={BOARD_TOKEN}",
             )
 
 
@@ -195,6 +199,7 @@ class TestCombatStateHttp(unittest.IsolatedAsyncioTestCase):
         save_combat(
             CombatState(
                 guild_id=3,
+                board_token=BOARD_TOKEN,
                 channel_id=4,
                 scope_id=5,
                 turn_order=["Hero"],
@@ -214,17 +219,127 @@ class TestCombatStateHttp(unittest.IsolatedAsyncioTestCase):
             )
         )
         async with TestClient(TestServer(create_app())) as client:
-            response = await client.get("/combat/3/5/state")
+            response = await client.get(f"/combat/3/5/state?t={BOARD_TOKEN}")
             self.assertEqual(response.status, 200)
             payload = await response.json()
             self.assertTrue(payload["ok"])
             self.assertEqual(payload["active"], "Hero")
             self.assertEqual(payload["combatants"][0]["cell"], "B2")
+            denied = await client.get("/combat/3/5/state")
+            self.assertEqual(denied.status, 403)
+            wrong = await client.get("/combat/3/5/state?t=wrong-token-for-tests")
+            self.assertEqual(wrong.status, 403)
+            board = await client.get(f"/combat/3/5?t={BOARD_TOKEN}")
+            self.assertEqual(board.status, 200)
+            self.assertIn("Plateau", await board.text())
+            self.assertIn("no-referrer", board.headers.get("Referrer-Policy", ""))
+
+    async def test_tokenless_board_does_not_mint(self) -> None:
+        save_combat(
+            CombatState(
+                guild_id=3,
+                channel_id=4,
+                scope_id=15,
+                turn_order=["Hero"],
+                active_index=0,
+                combatants={
+                    "hero": CombatantState(
+                        name="Hero",
+                        user_id=1,
+                        hp=8,
+                        max_hp=8,
+                        hand=[],
+                        deck=[],
+                    )
+                },
+            )
+        )
+        async with TestClient(TestServer(create_app())) as client:
+            board = await client.get("/combat/3/15")
+            self.assertEqual(board.status, 403)
+            state = await client.get("/combat/3/15/state")
+            self.assertEqual(state.status, 403)
+        loaded = get_combat(guild_id=3, scope_id=15)
+        assert loaded is not None
+        self.assertEqual(loaded.board_token, "")
+
+    async def test_board_url_for_does_not_clobber_hp(self) -> None:
+        save_combat(
+            CombatState(
+                guild_id=3,
+                channel_id=4,
+                scope_id=16,
+                turn_order=["Hero"],
+                active_index=0,
+                combatants={
+                    "hero": CombatantState(
+                        name="Hero",
+                        user_id=1,
+                        hp=3,
+                        max_hp=8,
+                        hand=[],
+                        deck=[],
+                    )
+                },
+            )
+        )
+        stale = CombatState(
+            guild_id=3,
+            channel_id=4,
+            scope_id=16,
+            turn_order=["Hero"],
+            active_index=0,
+            combatants={
+                "hero": CombatantState(
+                    name="Hero",
+                    user_id=1,
+                    hp=8,
+                    max_hp=8,
+                    hand=[],
+                    deck=[],
+                )
+            },
+        )
+        with (
+            patch("combat.editor_server.editor_is_running", return_value=True),
+            patch(
+                "combat.editor_server.editor_public_url",
+                return_value="http://127.0.0.1:8765",
+            ),
+        ):
+            url = board_url_for(stale)
+        loaded = get_combat(guild_id=3, scope_id=16)
+        assert loaded is not None
+        self.assertEqual(loaded.combatants["hero"].hp, 3)
+        self.assertTrue(loaded.board_token)
+        self.assertIsNotNone(url)
+        assert url is not None
+        self.assertIn(loaded.board_token, url)
+
+    async def test_web_init_remove_ignores_mid_name_substring(self) -> None:
+        save_initiative(
+            guild_id=3,
+            scope_id=17,
+            state=InitiativeState(
+                channel_id=4,
+                active_index=0,
+                order=[
+                    InitiativeEntry(name="Martin", total=12),
+                    InitiativeEntry(name="Art", total=10),
+                ],
+            ),
+        )
+        outcome = await run_web_command(3, 17, f"{PREFIX}init remove art")
+        self.assertIn("Art", outcome.message)
+        initiative = get_initiative(guild_id=3, scope_id=17)
+        assert initiative is not None
+        self.assertEqual([entry.name for entry in initiative.order], ["Martin"])
 
     async def test_web_move_action(self) -> None:
         save_combat(
             CombatState(
                 guild_id=3,
+                board_token=BOARD_TOKEN,
                 channel_id=4,
                 scope_id=6,
                 turn_order=["Hero"],
@@ -246,7 +361,7 @@ class TestCombatStateHttp(unittest.IsolatedAsyncioTestCase):
         )
         async with TestClient(TestServer(create_app())) as client:
             response = await client.post(
-                "/combat/3/6/action",
+                f"/combat/3/6/action?t={BOARD_TOKEN}",
                 json={"type": "move", "dest": [2, 1]},
             )
             self.assertEqual(response.status, 200)
@@ -258,6 +373,7 @@ class TestCombatStateHttp(unittest.IsolatedAsyncioTestCase):
         save_combat(
             CombatState(
                 guild_id=3,
+                board_token=BOARD_TOKEN,
                 channel_id=4,
                 scope_id=7,
                 turn_order=["Hero"],
@@ -279,7 +395,7 @@ class TestCombatStateHttp(unittest.IsolatedAsyncioTestCase):
         )
         async with TestClient(TestServer(create_app())) as client:
             response = await client.post(
-                "/combat/3/7/action",
+                f"/combat/3/7/action?t={BOARD_TOKEN}",
                 json={"type": "command", "text": f"{PREFIX}combat move C2"},
             )
             self.assertEqual(response.status, 200)
@@ -294,16 +410,13 @@ class TestCombatStateHttp(unittest.IsolatedAsyncioTestCase):
                 "/combat/3/8/action",
                 json={"type": "command", "text": "help combat"},
             )
-            self.assertEqual(response.status, 200)
-            payload = await response.json()
-            self.assertTrue(payload["ok"])
-            self.assertIn("combat move", payload["message"].lower())
-            self.assertIsNone(payload["snapshot"])
+            self.assertEqual(response.status, 404)
 
     async def test_web_move_syncs_discord_message(self) -> None:
         save_combat(
             CombatState(
                 guild_id=3,
+                board_token=BOARD_TOKEN,
                 channel_id=4,
                 scope_id=9,
                 board_message_id=99,
@@ -334,7 +447,7 @@ class TestCombatStateHttp(unittest.IsolatedAsyncioTestCase):
         bind_pusher(fake_push)
         async with TestClient(TestServer(create_app())) as client:
             response = await client.post(
-                "/combat/3/9/action",
+                f"/combat/3/9/action?t={BOARD_TOKEN}",
                 json={"type": "move", "dest": [2, 1]},
             )
         await flush_discord_sync()
@@ -348,6 +461,7 @@ class TestCombatStateHttp(unittest.IsolatedAsyncioTestCase):
         save_combat(
             CombatState(
                 guild_id=3,
+                board_token=BOARD_TOKEN,
                 channel_id=4,
                 scope_id=12,
                 board_message_id=88,
@@ -377,7 +491,7 @@ class TestCombatStateHttp(unittest.IsolatedAsyncioTestCase):
         bind_pusher(fake_push)
         async with TestClient(TestServer(create_app())) as client:
             response = await client.post(
-                "/combat/3/12/action",
+                f"/combat/3/12/action?t={BOARD_TOKEN}",
                 json={"type": "command", "text": f"{PREFIX}combat move C2"},
             )
             self.assertEqual(response.status, 200)
@@ -388,6 +502,7 @@ class TestCombatStateHttp(unittest.IsolatedAsyncioTestCase):
         save_combat(
             CombatState(
                 guild_id=3,
+                board_token=BOARD_TOKEN,
                 channel_id=4,
                 scope_id=10,
                 board_message_id=99,
@@ -416,7 +531,7 @@ class TestCombatStateHttp(unittest.IsolatedAsyncioTestCase):
         bind_pusher(fake_push)
         async with TestClient(TestServer(create_app())) as client:
             response = await client.post(
-                "/combat/3/10/action",
+                f"/combat/3/10/action?t={BOARD_TOKEN}",
                 json={"type": "command", "text": "help combat"},
             )
         await flush_discord_sync()
@@ -427,6 +542,7 @@ class TestCombatStateHttp(unittest.IsolatedAsyncioTestCase):
         save_combat(
             CombatState(
                 guild_id=3,
+                board_token=BOARD_TOKEN,
                 channel_id=4,
                 scope_id=11,
                 board_message_id=77,
@@ -455,7 +571,7 @@ class TestCombatStateHttp(unittest.IsolatedAsyncioTestCase):
         bind_pusher(fake_push)
         async with TestClient(TestServer(create_app())) as client:
             response = await client.post(
-                "/combat/3/11/action",
+                f"/combat/3/11/action?t={BOARD_TOKEN}",
                 json={"type": "command", "text": f"{PREFIX}combat end"},
             )
             self.assertEqual(response.status, 200)
@@ -467,9 +583,15 @@ class TestCombatStateHttp(unittest.IsolatedAsyncioTestCase):
 
 class TestParseWebCommand(unittest.TestCase):
     def test_prefix_and_bare_verbs(self) -> None:
-        self.assertEqual(parse_web_command(f"{PREFIX}combat move C4"), ("combat", "move", ["C4"]))
-        self.assertEqual(parse_web_command("attack Goblin"), ("combat", "attack", ["Goblin"]))
-        self.assertEqual(parse_web_command(f"{PREFIX}r 1d20 str"), ("roll", "roll", ["1d20", "str"]))
+        self.assertEqual(
+            parse_web_command(f"{PREFIX}combat move C4"), ("combat", "move", ["C4"])
+        )
+        self.assertEqual(
+            parse_web_command("attack Goblin"), ("combat", "attack", ["Goblin"])
+        )
+        self.assertEqual(
+            parse_web_command(f"{PREFIX}r 1d20 str"), ("roll", "roll", ["1d20", "str"])
+        )
         self.assertEqual(parse_web_command("/init show"), ("init", "show", []))
         self.assertEqual(
             parse_web_command(f"{PREFIX}combat play fire-bolt Goblin"),

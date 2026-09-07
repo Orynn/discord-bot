@@ -34,8 +34,9 @@ from combat.map import (
     parse_destination,
     toggle_walls,
 )
+from combat.history import finish_combat
 from combat.setup import ensure_section_fight, parse_start_args
-from combat.storage import CombatState, clear_combat, get_combat, lock_for, save_combat
+from combat.storage import CombatState, get_combat, lock_for, save_combat
 from combat.templates import TEMPLATES, lookup_template
 from config import PREFIX
 from initiative.display import advance_turn
@@ -44,6 +45,8 @@ from initiative.storage import (
     add_initiative_entry,
     clear_initiative,
     get_initiative,
+    match_initiative_entries,
+    preserve_active_index,
     save_initiative,
 )
 from sheets.dice import (
@@ -137,9 +140,7 @@ def command_help() -> str:
     )
 
 
-async def run_web_command(
-    guild_id: int, scope_id: int, text: str
-) -> WebCommandOutcome:
+async def run_web_command(guild_id: int, scope_id: int, text: str) -> WebCommandOutcome:
     group, verb, args = parse_web_command(text)
     if group == "help":
         return WebCommandOutcome(
@@ -149,13 +150,12 @@ async def run_web_command(
     if group == "roll":
         return _run_roll(guild_id, scope_id, args)
     if group == "init":
-        return _run_init(guild_id, scope_id, verb, args)
+        async with lock_for(guild_id=guild_id, scope_id=scope_id):
+            return _run_init(guild_id, scope_id, verb, args)
     return await _run_combat(guild_id, scope_id, verb, args)
 
 
-def _run_roll(
-    guild_id: int, scope_id: int, args: list[str]
-) -> WebCommandOutcome:
+def _run_roll(guild_id: int, scope_id: int, args: list[str]) -> WebCommandOutcome:
     if not args:
         raise ValueError(
             f"Usage : `{PREFIX}r 1d20` · `{PREFIX}r athletics` · `{PREFIX}r adv dex save`."
@@ -221,18 +221,27 @@ def _run_init(
         initiative = get_initiative(guild_id=guild_id, scope_id=scope_id)
         if initiative is None or not initiative.order:
             raise ValueError("Pas d’initiative.")
-        query = name.lower()
+        matches = match_initiative_entries(initiative.order, name)
+        if not matches:
+            raise ValueError(f"{name} n’est pas dans l’initiative.")
+        active_entry = None
+        if initiative.order and 0 <= initiative.active_index < len(initiative.order):
+            active_entry = initiative.order[initiative.active_index]
+        remove_keys = {(entry.name, entry.user_id) for entry in matches}
         initiative.order = [
-            entry for entry in initiative.order if query not in entry.name.lower()
+            entry
+            for entry in initiative.order
+            if (entry.name, entry.user_id) not in remove_keys
         ]
         if not initiative.order:
             clear_initiative(guild_id=guild_id, scope_id=scope_id)
         else:
-            initiative.active_index = min(
-                initiative.active_index, len(initiative.order) - 1
-            )
+            preserve_active_index(initiative, active_entry)
             save_initiative(guild_id=guild_id, scope_id=scope_id, state=initiative)
-        return WebCommandOutcome(message=f"{name} retiré de l’initiative.", state=state)
+        removed = ", ".join(entry.name for entry in matches)
+        return WebCommandOutcome(
+            message=f"{removed} retiré de l’initiative.", state=state
+        )
     if verb == "add":
         return _init_add(guild_id, scope_id, args, state)
     raise ValueError(_unknown(verb))
@@ -255,14 +264,10 @@ def _init_add(
     initiative = get_initiative(guild_id=guild_id, scope_id=scope_id)
     if initiative is None:
         channel_id = combat.channel_id if combat is not None else scope_id
-        initiative = InitiativeState(
-            channel_id=channel_id, active_index=0, order=[]
-        )
+        initiative = InitiativeState(channel_id=channel_id, active_index=0, order=[])
     roll = random.randint(1, 20)
     total = roll + modifier
-    add_initiative_entry(
-        initiative, name=entry_name, total=total, user_id=None
-    )
+    add_initiative_entry(initiative, name=entry_name, total=total, user_id=None)
     save_initiative(guild_id=guild_id, scope_id=scope_id, state=initiative)
     sign = f"+{modifier}" if modifier >= 0 else str(modifier)
     return WebCommandOutcome(
@@ -289,12 +294,17 @@ async def _run_combat(
         )
     if verb == "start":
         return await _combat_start(guild_id, scope_id, args)
+    if verb == "add":
+        state = get_combat(guild_id=guild_id, scope_id=scope_id)
+        if state is None:
+            raise ValueError("Aucun combat en cours. Lance `;combat start` d’abord.")
+        return await _combat_add(state, args)
 
     async with lock_for(guild_id=guild_id, scope_id=scope_id):
         state = get_combat(guild_id=guild_id, scope_id=scope_id)
         if verb == "end":
             if state is not None:
-                clear_combat(guild_id=guild_id, scope_id=scope_id)
+                finish_combat(state)
             return WebCommandOutcome(
                 message="Combat terminé.",
                 state=state,
@@ -309,8 +319,6 @@ async def _run_combat(
             return WebCommandOutcome(message=_hand_text(state), state=state)
         if verb == "map":
             return _combat_map(guild_id, state, args)
-        if verb == "add":
-            return await _combat_add(state, args)
         active = state.active_combatant()
         if active is None:
             raise ValueError("Aucun combattant actif.")
@@ -359,9 +367,7 @@ async def _run_combat(
                         f"`{PREFIX}combat attack <nom>`"
                     )
                 target_name = nearby[0].name
-            result = map_attack(
-                state, actor_name=active.name, target_name=target_name
-            )
+            result = map_attack(state, actor_name=active.name, target_name=target_name)
             return WebCommandOutcome(
                 message=result.message,
                 state=state,
@@ -370,9 +376,7 @@ async def _run_combat(
             )
         if verb == "play":
             if not args:
-                raise ValueError(
-                    f"Usage : `{PREFIX}combat play <carte> [cible]`."
-                )
+                raise ValueError(f"Usage : `{PREFIX}combat play <carte> [cible]`.")
             card_id = resolve_card_id(args[0], active.card_catalog)
             if card_id is None:
                 labels = ", ".join(
@@ -398,25 +402,22 @@ async def _run_combat(
 async def _combat_start(
     guild_id: int, scope_id: int, args: list[str]
 ) -> WebCommandOutcome:
-    monster_name, _minutes, map_id = parse_start_args(
-        " ".join(args), guild_id=guild_id
-    )
+    monster_name, _minutes, map_id = parse_start_args(" ".join(args), guild_id=guild_id)
     existing = get_combat(guild_id=guild_id, scope_id=scope_id)
     channel_id = existing.channel_id if existing is not None else scope_id
-    async with lock_for(guild_id=guild_id, scope_id=scope_id):
-        await ensure_section_fight(
-            guild_id=guild_id,
-            channel_id=channel_id,
-            scope_id=scope_id,
-            player_id=None,
-            monster_name=monster_name,
-        )
-        state = await start_combat(
-            guild_id=guild_id,
-            channel_id=channel_id,
-            scope_id=scope_id,
-            map_id=map_id,
-        )
+    await ensure_section_fight(
+        guild_id=guild_id,
+        channel_id=channel_id,
+        scope_id=scope_id,
+        player_id=None,
+        monster_name=monster_name,
+    )
+    state = await start_combat(
+        guild_id=guild_id,
+        channel_id=channel_id,
+        scope_id=scope_id,
+        map_id=map_id,
+    )
     return WebCommandOutcome(
         message=state.log[-1] if state.log else "Combat lancé.",
         state=state,

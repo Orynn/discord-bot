@@ -120,6 +120,7 @@ def setup_rp(bot: Bot) -> None:
         thought = text.strip()
         if not thought:
             await command_reply(ctx, f"Usage : `{PREFIX}think <texte>`")
+            await delete_command(ctx)
             return
         _maybe_mark_present(ctx, guild_id, owner_id, name)
         await send_ic_line(ctx, format_thought(name, thought))
@@ -141,6 +142,7 @@ def setup_rp(bot: Bot) -> None:
         cleaned = action.strip()
         if not cleaned:
             await command_reply(ctx, f"Usage : `{PREFIX}do <action>`")
+            await delete_command(ctx)
             return
         _maybe_mark_present(ctx, guild_id, owner_id, name)
         await send_ic_line(ctx, format_emote(name, cleaned))
@@ -157,6 +159,7 @@ def setup_rp(bot: Bot) -> None:
         cleaned = text.strip()
         if not cleaned:
             await command_reply(ctx, f"Usage : `{PREFIX}ooc <texte>`")
+            await delete_command(ctx)
             return
         await send_message(
             ctx,
@@ -193,10 +196,12 @@ def setup_rp(bot: Bot) -> None:
         )
         if target is None:
             await command_reply(ctx, WHISPER_USAGE)
+            await delete_command(ctx)
             return
         listener_id, listener, secret = target
         if listener_id == owner_id:
             await command_reply(ctx, "Tu ne peux pas te chuchoter à toi-même.")
+            await delete_command(ctx)
             return
         _maybe_mark_present(ctx, guild_id, owner_id, speaker)
         await send_message(
@@ -324,6 +329,7 @@ def setup_rp(bot: Bot) -> None:
                 ctx,
                 f"Usage : `{PREFIX}scene set <titre> -- <ambiance>`",
             )
+            await delete_command(ctx)
             return
         guild_id, channel_id = scope
         scene = get_scene(guild_id=guild_id, channel_id=channel_id)
@@ -348,6 +354,7 @@ def setup_rp(bot: Bot) -> None:
         cleaned = mood.strip()
         if not cleaned:
             await command_reply(ctx, f"Usage : `{PREFIX}scene mood <ambiance>`")
+            await delete_command(ctx)
             return
         guild_id, channel_id = scope
         scene = get_scene(guild_id=guild_id, channel_id=channel_id)

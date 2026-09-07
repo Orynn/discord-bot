@@ -4,17 +4,35 @@ from discord.errors import Forbidden, HTTPException, NotFound
 from discord.ext.commands.context import Context
 
 from bot.messaging import send_reply
+from bot.rate_limits import retry_on_rate_limit
 
 logger = logging.getLogger(__name__)
 
 SERVER_ONLY = "Cette commande marche seulement sur le serveur."
 
 
+async def defer_if_slash(ctx: Context, *, ephemeral: bool = False) -> None:
+    if ctx.interaction is not None and not ctx.interaction.response.is_done():
+        await ctx.defer(ephemeral=ephemeral)
+
+
 async def delete_command(ctx: Context) -> None:
     if ctx.interaction is not None:
+        deferred_here = False
+        if not ctx.interaction.response.is_done():
+            try:
+                await ctx.defer(ephemeral=True)
+                deferred_here = True
+            except (HTTPException, NotFound):
+                pass
+        if deferred_here:
+            try:
+                await ctx.interaction.delete_original_response()
+            except (HTTPException, NotFound):
+                pass
         return
     try:
-        await ctx.message.delete()
+        await retry_on_rate_limit(ctx.message.delete)
     except (Forbidden, NotFound):
         pass
     except TimeoutError:

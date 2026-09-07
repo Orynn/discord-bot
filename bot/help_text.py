@@ -239,6 +239,7 @@ def build_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
                 ),
                 (
                     "📚 Guides",
+                    f"`{prefix}tuto` · `/tuto` — tutoriel pour débuter\n"
                     f"`{prefix}help sheet` · `{prefix}help combat` · `{prefix}help srd` · `{prefix}help hunger` · `{prefix}help roleplay` · `/help`\n"
                     f"`{prefix}help all` — tout envoyer en MP\n"
                     f"`{prefix}commande -h` · `{prefix}commande --help` · `{prefix}commande help`",
@@ -273,7 +274,9 @@ def build_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
                 ),
                 (
                     "🎬 Narration",
-                    f"`{prefix}desc <texte>` — narrer une scène (italique) · joindre une image\n"
+                    f"`{prefix}desc <texte>` — italique · joindre une image\n"
+                    f"`{prefix}desc set <texte>` — description du salon seulement\n"
+                    f"`{prefix}desc clear` — efface la description du salon\n"
                     f"`{prefix}image [prompt]` · `{prefix}dessine` — illustrer le RP de ce salon\n"
                     f"`{prefix}image` — modèle local CPU s’il est prêt, sinon Pollinations\n"
                     f"`{prefix}get naked` — un gif de consternation\n"
@@ -400,6 +403,8 @@ def build_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
                 fields=(
                     (
                         "🎭 Roleplay & lore",
+                        f"`{prefix}ai [consigne]` · `{prefix}gemini` · `{prefix}mj` — Gemini narre la scène\n"
+                        f"`{prefix}ai context <texte>` · `{prefix}ai npc <nom>` — contexte MJ / PNJ\n"
                         f"`{prefix}npc <nom> <texte>` · `{prefix}say` — faire parler un PNJ\n"
                         f"`{prefix}campaign [recherche]` · `{prefix}lore` — parcourir les forums CAMPAGNE\n"
                         f"`{prefix}campaign post lieux <titre> -- <texte>` — nouveau post *(joindre une image)*\n"
@@ -429,6 +434,7 @@ def build_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
                         f"`{prefix}party money set|add|spend <montant>`\n"
                         f"`{prefix}player setup @membre [nom]` — catégorie + fiche + bienvenue\n"
                         f"`{prefix}player list` · `{prefix}player sync` · `{prefix}player remove @membre`\n"
+                        f"`{prefix}purge` · `/purge` — vider le salon (confirmation)\n"
                         f"`{prefix}trash` · `{prefix}trash reset` — mock isolé dans `#🚯trash`",
                     ),
                     (
@@ -539,7 +545,8 @@ def build_combat_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSecti
                 ),
                 (
                     "🏁 Victoire",
-                    "Joueurs contre monstres. Le combat s’arrête quand un camp est à terre. Les attaques visent l’autre camp.",
+                    "Joueurs contre monstres. Le combat s’arrête quand un camp est à terre. Les attaques visent l’autre camp.\n"
+                    f"`{prefix}combat historique` — journal archivé par section · `{prefix}combat historique dernier`",
                 ),
                 (
                     "❤️ PV",
@@ -857,6 +864,57 @@ def is_roleplay_help_topic(query: str | None) -> bool:
     return (query or "").strip().casefold() in ROLEPLAY_HELP_TOPICS
 
 
+AI_HELP_TOPICS = frozenset({"ai", "gemini", "mj"})
+TUTO_HELP_TOPICS = frozenset({"tuto", "tutoriel", "guide", "debut", "début", "start"})
+
+
+def is_ai_help_topic(query: str | None) -> bool:
+    return (query or "").strip().casefold() in AI_HELP_TOPICS
+
+
+def is_tuto_help_topic(query: str | None) -> bool:
+    return (query or "").strip().casefold() in TUTO_HELP_TOPICS
+
+
+def build_ai_help_sections(*, prefix: str) -> list[HelpSection]:
+    return [
+        _section(
+            key="ai",
+            emoji="✨",
+            label="Gemini",
+            button="IA",
+            fields=(
+                (
+                    "📖 Narrer",
+                    f"`{prefix}ai` · `{prefix}ai continue` — un souffle (carte + 20 derniers messages)\n"
+                    f"`{prefix}ai un orage éclate` — même chose, avec ta consigne\n"
+                    f"`{prefix}ai un orage -- Ils ont volé le sceau` — consigne + contexte de cette fois\n"
+                    f"`{prefix}ai --no-context <consigne>` — description du salon + consigne, sans le fil\n"
+                    f"`{prefix}gemini` · `{prefix}mj` — mêmes commandes",
+                ),
+                (
+                    "📝 Contexte MJ",
+                    f"`{prefix}ai context <texte>` · `{prefix}ai contexte` — à retenir pour ce salon\n"
+                    f"`{prefix}ai context` — afficher · `{prefix}ai context clear` — effacer",
+                ),
+                (
+                    "🗣️ PNJ",
+                    f"`{prefix}ai npc <nom> [consigne]` — réplique au format `{prefix}npc`\n"
+                    f"`{prefix}ai npc Garret un tavernier méfiant`",
+                ),
+                (
+                    "⌨️ Aide",
+                    f"`{prefix}ai -h` · `{prefix}ai --help` · `{prefix}ai help` · `{prefix}help ai`\n"
+                    "Gemini voit le lieu, l’ambiance, le canon CAMPAIGN, le contexte MJ, "
+                    "les présents et l’horloge. Il n’invente pas de jet et ne touche pas aux fiches.",
+                ),
+            ),
+            footer="Staff seulement · clé : GEMINI_API_KEY · modèle : gemini-3.5-flash",
+            color=HELP_ROLEPLAY_COLOR,
+        )
+    ]
+
+
 def build_roleplay_help_sections(*, prefix: str) -> list[HelpSection]:
     return [
         _section(
@@ -914,7 +972,9 @@ def build_roleplay_help_sections(*, prefix: str) -> list[HelpSection]:
             fields=(
                 (
                     "🖼️ Décrire",
-                    f"`{prefix}desc <texte>` — narration en italique · joindre une image\n"
+                    f"`{prefix}desc <texte>` — italique · joindre une image\n"
+                    f"`{prefix}desc set <texte>` — description du salon seulement\n"
+                    f"`{prefix}desc clear` — efface la description du salon\n"
                     f"`{prefix}image` · `{prefix}dessine` — illustrer le fil de ce salon\n"
                     f"`{prefix}get naked` — consternation",
                 ),
@@ -922,11 +982,130 @@ def build_roleplay_help_sections(*, prefix: str) -> list[HelpSection]:
                     "⏳ Monde",
                     f"`{prefix}time` — date de Harptos de ce joueur\n"
                     f"`{prefix}hunger` · `{prefix}faim` — la faim suit cette horloge\n"
-                    f"`{prefix}npc <nom> <texte>` — faire parler un PNJ *(staff)*",
+                    f"`{prefix}npc <nom> <texte>` — faire parler un PNJ *(staff)*\n"
+                    f"`{prefix}ai [consigne]` · `{prefix}ai context` · `{prefix}ai npc <nom>` — Gemini *(staff)*",
                 ),
             ),
             footer=f"Guide court : {prefix}help · tout en MP : {prefix}help all",
             color=HELP_ROLEPLAY_COLOR,
+        ),
+    ]
+
+
+def build_tuto_help_sections(*, prefix: str) -> list[HelpSection]:
+    return [
+        _section(
+            key="principle",
+            emoji="🎲",
+            label="Le principe",
+            button="Principe",
+            intro=(
+                "D&D, c’est une histoire improvisée à plusieurs : le MJ pose le décor, "
+                "tu incarnes ton personnage et tu dis ce qu’il fait ou dit. "
+                "Arkann t’aide sur Discord — fiche, dés, combat, narration."
+            ),
+            fields=(
+                (
+                    "🏠 Les salons",
+                    "Chaque salon RP a sa **scène** : lieu, ambiance, qui est présent. "
+                    f"Regarde avec `{prefix}scene` ou `/scene`.\n"
+                    "Les commandes commencent par `;` ou `/`. "
+                    "Souvent, ta commande disparaît après usage pour garder le fil lisible.",
+                ),
+                (
+                    "🎭 Deux registres",
+                    f"**En jeu** — `{prefix}pc`, `{prefix}do`, `{prefix}desc` : tu joues ton personnage.\n"
+                    f"**Hors jeu** — `{prefix}ooc` : question ou remarque entre joueurs, hors narration.",
+                ),
+            ),
+            footer=f"Suite : bouton **Jouer** · aide complète : `{prefix}help` ou `/help`",
+            color=HELP_ROLEPLAY_COLOR,
+        ),
+        _section(
+            key="play",
+            emoji="🗣️",
+            label="Jouer en personnage",
+            button="Jouer",
+            intro="Crée ton personnage une fois, puis parle et agis dans le salon RP.",
+            fields=(
+                (
+                    "👤 Ton personnage",
+                    f"`{prefix}sheet create <nom>` ou `/sheet create` — créer la fiche\n"
+                    f"`{prefix}sheet import` — PDF D&D Beyond *(joindre le fichier)*\n"
+                    f"`{prefix}pcname <nom>` — nom affiché si tu n’as pas encore de fiche",
+                ),
+                (
+                    "💬 Parler & agir",
+                    f"`{prefix}pc <texte>` ou `/pc` — dialogue en personnage\n"
+                    f"`{prefix}pc (sourire) Bonjour.` — action + réplique\n"
+                    f"`{prefix}pc (ouvre la porte)` — action seule *(comme `{prefix}desc`)*\n"
+                    f"`{prefix}do <action>` · `{prefix}me` — *Nom fait ceci.*\n"
+                    f"`{prefix}think <texte>` — pensée en spoilers\n"
+                    f"`{prefix}whisper @joueur <texte>` — chuchoter *(MP)*",
+                ),
+                (
+                    "📍 Scène",
+                    f"`{prefix}arrive` — annoncer ta présence\n"
+                    f"`{prefix}scene` · `{prefix}look` — carte du salon\n"
+                    f"`{prefix}desc <texte>` — décrire l’ambiance *(MJ ou table)*",
+                ),
+            ),
+            footer=f"Guide RP : `{prefix}help roleplay`",
+            color=HELP_ROLEPLAY_COLOR,
+        ),
+        _section(
+            key="sheet",
+            emoji="📋",
+            label="Fiche & dés",
+            button="Fiche",
+            intro="Ta fiche suit tes PV, ton équipement et tes bonus de jets.",
+            fields=(
+                (
+                    "📖 Consulter",
+                    f"`{prefix}sheet show` ou `/sheet show` — afficher la fiche\n"
+                    f"`{prefix}status` — récap PV, faim, repos, conditions",
+                ),
+                (
+                    "🎲 Lancer les dés",
+                    f"`{prefix}roll 1d20` ou `/roll` — jet simple\n"
+                    f"`{prefix}roll athletics` · `{prefix}roll discrétion` — compétence *(bonus auto)*\n"
+                    f"`{prefix}roll adv perception` — avec avantage\n"
+                    f"`{prefix}roll dex save` — sauvegarde",
+                ),
+                (
+                    "❤️ En jeu",
+                    f"`{prefix}sheet hp <actuel> [max]` — mettre à jour les PV\n"
+                    f"`{prefix}sheet rest short` · `{prefix}sheet rest long` — repos",
+                ),
+            ),
+            footer=f"Guide fiche : `{prefix}help sheet`",
+            color=HELP_SHEET_COLOR,
+        ),
+        _section(
+            key="combat",
+            emoji="⚔️",
+            label="Combat & suite",
+            button="Combat",
+            intro="Quand le MJ lance un combat, l’initiative et la carte aident à suivre les tours.",
+            fields=(
+                (
+                    "⚡ Initiative",
+                    f"`{prefix}init add @toi` ou `/init add` — entrer dans l’ordre *(d20 + DEX)*\n"
+                    f"`{prefix}init show` — voir l’ordre · `{prefix}init next` — tour suivant",
+                ),
+                (
+                    "🗺️ Carte",
+                    f"`{prefix}combat board` ou `/combat board` — plateau *(après le start du MJ)*\n"
+                    "Clique sur une case pour te déplacer.",
+                ),
+                (
+                    "📚 Règles & faim",
+                    f"`{prefix}srd spell fireball` ou `/srd` — chercher une règle\n"
+                    f"`{prefix}time` — date de campagne · `{prefix}hunger` — la faim suit l’horloge",
+                ),
+            ),
+            footer=f"Guides : `{prefix}help combat` · `{prefix}help srd` · `{prefix}help all` en MP",
+            color=HELP_COMBAT_COLOR,
         ),
     ]
 
@@ -988,6 +1167,11 @@ def build_guide_help_embeds(*, prefix: str, is_admin: bool) -> list[discord.Embe
         ("Faim", build_hunger_help_sections(prefix=prefix, is_admin=is_admin)),
         ("Jeu de rôle", build_roleplay_help_sections(prefix=prefix)),
     )
+    if is_admin:
+        catalogs = (
+            *catalogs,
+            ("Gemini", build_ai_help_sections(prefix=prefix)),
+        )
     embeds: list[discord.Embed] = []
     for title, sections in catalogs:
         for index in range(len(sections)):

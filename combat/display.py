@@ -6,7 +6,7 @@ from combat.cards import (
     is_spellbook_card,
     lookup_card,
 )
-from combat.editor_server import combat_board_url
+from combat.editor_server import board_url_for
 from combat.map import cell_label, ensure_positions, remaining_squares, speed_squares
 from combat.render import MAP_FILENAME, render_combat_map
 from combat.storage import CombatState
@@ -100,7 +100,7 @@ def build_combat_map_file(state: CombatState) -> discord.File:
 
 
 def board_attachments(state: CombatState) -> list[discord.File]:
-    if combat_board_url(state.guild_id, state.scope_id):
+    if board_url_for(state):
         return []
     return [build_combat_map_file(state)]
 
@@ -118,7 +118,7 @@ def build_combat_embed(state: CombatState, *, ended: bool = False) -> discord.Em
     details: list[str] = []
     if state.map_id and state.map_id != "arena":
         details.append(f"Carte : **{template_for_state(state).label}**")
-    board_url = combat_board_url(state.guild_id, state.scope_id)
+    board_url = board_url_for(state)
     if board_url:
         details.append(f"[Ouvrir le plateau]({board_url})")
     if details:
@@ -131,7 +131,6 @@ def build_combat_embed(state: CombatState, *, ended: bool = False) -> discord.Em
     elif active is not None:
         left = remaining_squares(active)
         total = speed_squares(active.speed)
-        action = "faite" if active.acted else "prête"
         cell = cell_label(active.x, active.y, state)
         embed.set_footer(
             text=f"{active.name} · {cell} · {left}/{total} cases · joue dans le navigateur"

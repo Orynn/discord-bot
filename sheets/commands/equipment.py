@@ -7,6 +7,7 @@ from bot.command_helpers import command_reply, delete_command
 from bot.help_text import HELP_COLOR, HELP_SHEET_COLOR, command_help
 from bot.messaging import send_message
 from config import PREFIX
+from data.db import db_connection
 from sheets.armor import apply_armor_ac, has_ac_gear
 from sheets.context import (
     get_sheet_for_owner,
@@ -40,6 +41,7 @@ from sheets.stashes import (
     resolve_place_name,
     save_stash,
 )
+from sheets.storage import save_sheet
 from srd import fivetools
 from srd.embeds import equipment_embed, truncate
 
@@ -136,9 +138,29 @@ async def _gear_reply(ctx: Context, message: str) -> None:
     await delete_command(ctx)
 
 
-def _persist_gear(ctx: Context, owner_id: int, sheet, *, ac_gear_before: bool) -> None:
+def _persist_gear(
+    ctx: Context,
+    owner_id: int,
+    sheet,
+    *,
+    ac_gear_before: bool,
+    stash=None,
+) -> None:
     apply_armor_ac(sheet, force=ac_gear_before and not has_ac_gear(sheet))
-    save_owner_sheet(ctx, owner_id, sheet)
+    if stash is None:
+        save_owner_sheet(ctx, owner_id, sheet)
+        return
+    guild_id = resolve_guild_id(ctx)
+    if guild_id is None:
+        raise ValueError("Cette commande marche seulement sur le serveur.")
+    with db_connection() as connection:
+        save_stash(stash, connection=connection)
+        save_sheet(
+            user_id=owner_id,
+            guild_id=guild_id,
+            sheet=sheet,
+            connection=connection,
+        )
 
 
 def _ac_note(sheet) -> str:
@@ -626,7 +648,9 @@ def register_equipment_commands(sheet_group: Group) -> None:
             ac_before = has_ac_gear(sheet)
             detached = sheet.equipment.detach_all_for_stash()
             if not detached:
-                await _gear_reply(ctx, f"{target_label(member, sheet)}: nothing to leave.")
+                await _gear_reply(
+                    ctx, f"{target_label(member, sheet)}: nothing to leave."
+                )
                 return
             stash = get_stash(guild_id=guild_id, place=place)
             if not stash.entries:
@@ -637,8 +661,7 @@ def register_equipment_commands(sheet_group: Group) -> None:
                 left_by=sheet.name,
                 left_by_user_id=owner_id,
             )
-            save_stash(stash)
-            _persist_gear(ctx, owner_id, sheet, ac_gear_before=ac_before)
+            _persist_gear(ctx, owner_id, sheet, ac_gear_before=ac_before, stash=stash)
             roots = [
                 item
                 for item in detached
@@ -700,8 +723,7 @@ def register_equipment_commands(sheet_group: Group) -> None:
             left_by=sheet.name,
             left_by_user_id=owner_id,
         )
-        save_stash(stash)
-        _persist_gear(ctx, owner_id, sheet, ac_gear_before=ac_before)
+        _persist_gear(ctx, owner_id, sheet, ac_gear_before=ac_before, stash=stash)
 
         label = target_label(member, sheet)
         left = detached[0]
@@ -769,8 +791,9 @@ def register_equipment_commands(sheet_group: Group) -> None:
             return
 
         sheet.equipment.restore_stash_items(taken)
-        save_stash(stash)
-        _persist_gear(ctx, owner_id, sheet, ac_gear_before=has_ac_gear(sheet))
+        _persist_gear(
+            ctx, owner_id, sheet, ac_gear_before=has_ac_gear(sheet), stash=stash
+        )
 
         label = target_label(member, sheet)
         picked = taken[0]

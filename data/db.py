@@ -109,6 +109,18 @@ def init_db() -> None:
                 items_json TEXT NOT NULL,
                 PRIMARY KEY (guild_id, place_key)
             );
+            CREATE TABLE IF NOT EXISTS combat_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                guild_id TEXT NOT NULL,
+                scope_id TEXT NOT NULL,
+                ended_at TEXT NOT NULL,
+                map_id TEXT NOT NULL DEFAULT 'arena',
+                winner TEXT,
+                combatants_json TEXT NOT NULL,
+                log_json TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_combat_history_scope
+                ON combat_history (guild_id, scope_id, ended_at DESC);
             """
         )
     _migrate_guild_scoped_tables()

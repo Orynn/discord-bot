@@ -3,7 +3,7 @@ from discord.abc import User
 from discord.ext.commands import check
 from discord.ext.commands.context import Context
 
-from config import STAFF_USER_IDS, STAFF_USERNAMES
+from config import STAFF_USER_IDS
 
 
 async def _admin_only_predicate(ctx: Context) -> bool:
@@ -11,6 +11,13 @@ async def _admin_only_predicate(ctx: Context) -> bool:
 
 
 admin_only = check(_admin_only_predicate)
+
+
+async def _staff_only_predicate(ctx: Context) -> bool:
+    return is_staff(ctx)
+
+
+staff_only = check(_staff_only_predicate)
 
 
 def _as_member(
@@ -51,15 +58,7 @@ def is_staff_member(
     if is_staff_user_id(user.id):
         return True
     member = _as_member(guild, user)
-    if is_admin_member(guild, member or user):
-        return True
-    names = [
-        getattr(user, "name", None),
-        getattr(user, "display_name", None),
-        getattr(user, "global_name", None),
-        getattr(user, "nick", None),
-    ]
-    return any(str(name).casefold() in STAFF_USERNAMES for name in names if name)
+    return is_admin_member(guild, member or user)
 
 
 def is_staff(ctx: Context) -> bool:

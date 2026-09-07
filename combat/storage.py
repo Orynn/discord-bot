@@ -1,5 +1,6 @@
 import asyncio
 import json
+import secrets
 from dataclasses import dataclass, field
 
 from combat.cards import CardSnapshot
@@ -121,6 +122,7 @@ class CombatState:
     map_height: int = 8
     blocked: list[list[int]] = field(default_factory=list)
     board_message_id: int | None = None
+    board_token: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -138,6 +140,7 @@ class CombatState:
             "map_height": self.map_height,
             "blocked": self.blocked,
             "board_message_id": self.board_message_id,
+            "board_token": self.board_token,
         }
 
     @classmethod
@@ -159,6 +162,7 @@ class CombatState:
             map_height=int(data.get("map_height") or 8),
             blocked=_blocked_cells(data.get("blocked")),
             board_message_id=_optional_int(data.get("board_message_id")),
+            board_token=str(data.get("board_token") or ""),
         )
 
     @property
@@ -195,6 +199,84 @@ class CombatState:
         return None
 
 
+def new_board_token() -> str:
+    return secrets.token_urlsafe(18)
+
+
+def _token_from_state_json(raw: object) -> str:
+    if not isinstance(raw, str) or not raw:
+        return ""
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    return str(data.get("board_token") or "")
+
+
+def read_board_token(*, guild_id: int, scope_id: int) -> str:
+    with db_connection() as connection:
+        row = connection.execute(
+            "SELECT state_json FROM combat WHERE guild_id = ? AND scope_id = ?",
+            (str(guild_id), str(scope_id)),
+        ).fetchone()
+    if row is None:
+        return ""
+    return _token_from_state_json(row["state_json"])
+
+
+def persist_board_token(*, guild_id: int, scope_id: int, token: str) -> str:
+    """Write only ``board_token`` when the live row has none. Never resurrects."""
+    cleaned = token.strip()
+    if not cleaned:
+        return ""
+    with db_connection() as connection:
+        row = connection.execute(
+            "SELECT state_json FROM combat WHERE guild_id = ? AND scope_id = ?",
+            (str(guild_id), str(scope_id)),
+        ).fetchone()
+        if row is None:
+            return cleaned
+        try:
+            data = json.loads(row["state_json"])
+        except json.JSONDecodeError:
+            return cleaned
+        if not isinstance(data, dict):
+            return cleaned
+        existing = str(data.get("board_token") or "")
+        if existing:
+            return existing
+        data["board_token"] = cleaned
+        connection.execute(
+            """
+            UPDATE combat
+            SET state_json = ?
+            WHERE guild_id = ? AND scope_id = ?
+            """,
+            (json.dumps(data, ensure_ascii=False), str(guild_id), str(scope_id)),
+        )
+    return cleaned
+
+
+def ensure_board_token(state: CombatState, *, persist: bool = True) -> str:
+    live_token = read_board_token(guild_id=state.guild_id, scope_id=state.scope_id)
+    if live_token:
+        state.board_token = live_token
+        return live_token
+    if not state.board_token:
+        state.board_token = new_board_token()
+    if persist:
+        persisted = persist_board_token(
+            guild_id=state.guild_id,
+            scope_id=state.scope_id,
+            token=state.board_token,
+        )
+        if persisted:
+            state.board_token = persisted
+    return state.board_token
+
+
 def get_combat(*, guild_id: int, scope_id: int) -> CombatState | None:
     with db_connection() as connection:
         row = connection.execute(
@@ -207,6 +289,10 @@ def get_combat(*, guild_id: int, scope_id: int) -> CombatState | None:
 
 
 def save_combat(state: CombatState) -> None:
+    if not state.board_token:
+        existing = read_board_token(guild_id=state.guild_id, scope_id=state.scope_id)
+        if existing:
+            state.board_token = existing
     payload = json.dumps(state.to_dict(), ensure_ascii=False)
     with db_connection() as connection:
         connection.execute(

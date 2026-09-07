@@ -1,10 +1,10 @@
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import discord
 
-from bot.catchup import CATCHUP_BLOCKED_COMMANDS, _is_catchup_allowed
-from bot.checks import is_admin, is_admin_member
+from bot.catchup import CATCHUP_ALLOWED_COMMANDS, _is_catchup_allowed
+from bot.checks import is_admin, is_admin_member, is_staff_member
 from sheets.data import CharacterSheet, hit_die_sides
 from sheets.dice import parse_roll_args, validate_roll_request
 
@@ -60,6 +60,32 @@ class TestIsAdmin(unittest.TestCase):
         guild.get_member.assert_called_with(7)
 
 
+class TestIsStaff(unittest.TestCase):
+    def test_nick_does_not_grant_staff(self) -> None:
+        guild = MagicMock()
+        guild.owner_id = 1
+        member = MagicMock(spec=discord.Member)
+        member.id = 99
+        member.name = "Orynn"
+        member.display_name = "Orynn"
+        member.global_name = "Orynn"
+        member.nick = "Orynn"
+        member.guild_permissions.administrator = False
+        member.guild_permissions.manage_guild = False
+        guild.get_member.return_value = member
+        self.assertFalse(is_staff_member(guild, member))
+
+    def test_staff_user_id_grants_staff(self) -> None:
+        guild = MagicMock()
+        guild.owner_id = 1
+        member = MagicMock(spec=discord.Member)
+        member.id = 42
+        member.guild_permissions.administrator = False
+        member.guild_permissions.manage_guild = False
+        with patch("bot.checks.STAFF_USER_IDS", {42}):
+            self.assertTrue(is_staff_member(guild, member))
+
+
 class TestCatchupAllowlist(unittest.TestCase):
     def test_blocks_destructive_commands(self) -> None:
         ctx = MagicMock()
@@ -75,12 +101,14 @@ class TestCatchupAllowlist(unittest.TestCase):
         ctx.command.qualified_name = "roll"
         self.assertFalse(_is_catchup_allowed(ctx))
 
-    def test_allows_roll(self) -> None:
+    def test_blocks_roll(self) -> None:
         ctx = MagicMock()
         ctx.message.attachments = []
         ctx.command = MagicMock()
         ctx.command.qualified_name = "roll"
-        self.assertTrue(_is_catchup_allowed(ctx))
+        self.assertFalse(_is_catchup_allowed(ctx))
+        ctx.command.qualified_name = "r"
+        self.assertFalse(_is_catchup_allowed(ctx))
 
     def test_blocks_sheet_status(self) -> None:
         ctx = MagicMock()
@@ -90,8 +118,8 @@ class TestCatchupAllowlist(unittest.TestCase):
         self.assertFalse(_is_catchup_allowed(ctx))
         ctx.command.qualified_name = "status"
         self.assertFalse(_is_catchup_allowed(ctx))
-        self.assertIn("status", CATCHUP_BLOCKED_COMMANDS)
-        self.assertIn("sheet status", CATCHUP_BLOCKED_COMMANDS)
+        self.assertNotIn("status", CATCHUP_ALLOWED_COMMANDS)
+        self.assertNotIn("sheet status", CATCHUP_ALLOWED_COMMANDS)
 
     def test_blocks_campaign_subcommands(self) -> None:
         ctx = MagicMock()
@@ -129,7 +157,7 @@ class TestCatchupAllowlist(unittest.TestCase):
         self.assertFalse(_is_catchup_allowed(ctx))
 
     def test_blocks_sheet_create(self) -> None:
-        self.assertIn("sheet create", CATCHUP_BLOCKED_COMMANDS)
+        self.assertNotIn("sheet create", CATCHUP_ALLOWED_COMMANDS)
 
     def test_blocks_image_generation(self) -> None:
         ctx = MagicMock()
@@ -137,7 +165,7 @@ class TestCatchupAllowlist(unittest.TestCase):
         ctx.command = MagicMock()
         ctx.command.qualified_name = "image"
         self.assertFalse(_is_catchup_allowed(ctx))
-        self.assertIn("image", CATCHUP_BLOCKED_COMMANDS)
+        self.assertNotIn("image", CATCHUP_ALLOWED_COMMANDS)
 
     def test_blocks_scene_and_whisper(self) -> None:
         ctx = MagicMock()
@@ -149,8 +177,56 @@ class TestCatchupAllowlist(unittest.TestCase):
         self.assertFalse(_is_catchup_allowed(ctx))
         ctx.command.qualified_name = "arrive"
         self.assertFalse(_is_catchup_allowed(ctx))
-        self.assertIn("whisper", CATCHUP_BLOCKED_COMMANDS)
-        self.assertIn("scene", CATCHUP_BLOCKED_COMMANDS)
+        self.assertNotIn("whisper", CATCHUP_ALLOWED_COMMANDS)
+        self.assertNotIn("scene", CATCHUP_ALLOWED_COMMANDS)
+        self.assertNotIn("ai", CATCHUP_ALLOWED_COMMANDS)
+        self.assertNotIn("desc", CATCHUP_ALLOWED_COMMANDS)
+
+    def test_allows_idempotent_lookups(self) -> None:
+        ctx = MagicMock()
+        ctx.message.attachments = []
+        ctx.command = MagicMock()
+        ctx.message.content = ""
+        ctx.invoked_with = ""
+        for name in (
+            "help",
+            "srd",
+            "srd spell",
+            "sheet show",
+            "init show",
+            "combat historique",
+        ):
+            ctx.command.qualified_name = name
+            self.assertTrue(_is_catchup_allowed(ctx), msg=name)
+
+    def test_blocks_combat_board(self) -> None:
+        ctx = MagicMock()
+        ctx.message.attachments = []
+        ctx.message.content = ";combat board"
+        ctx.command = MagicMock()
+        ctx.command.qualified_name = "combat board"
+        self.assertFalse(_is_catchup_allowed(ctx))
+        self.assertNotIn("combat board", CATCHUP_ALLOWED_COMMANDS)
+
+    def test_allows_time_show_not_advance(self) -> None:
+        ctx = MagicMock()
+        ctx.message.attachments = []
+        ctx.command = MagicMock()
+        ctx.command.qualified_name = "time"
+        ctx.invoked_with = "time"
+        ctx.message.content = ";time"
+        self.assertTrue(_is_catchup_allowed(ctx))
+        ctx.message.content = ";time show"
+        self.assertTrue(_is_catchup_allowed(ctx))
+        ctx.invoked_with = "clock"
+        ctx.message.content = ";clock"
+        self.assertTrue(_is_catchup_allowed(ctx))
+        ctx.invoked_with = "time"
+        ctx.message.content = ";time 2h"
+        self.assertFalse(_is_catchup_allowed(ctx))
+        ctx.command.qualified_name = "time advance"
+        ctx.message.content = ";time advance 2h"
+        self.assertFalse(_is_catchup_allowed(ctx))
 
 
 class TestRollValidation(unittest.TestCase):

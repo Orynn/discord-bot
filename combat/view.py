@@ -16,7 +16,7 @@ from combat.display import (
     build_combat_embed,
     build_hand_embed,
 )
-from combat.editor_server import combat_board_url
+from combat.editor_server import board_url_for
 from combat.engine import (
     can_control_combatant,
     conclude_if_over,
@@ -128,11 +128,12 @@ def _can_play(
 async def _reply_play_in_browser(interaction: discord.Interaction) -> None:
     guild_id = _guild_id(interaction)
     scope_id = _scope_id(interaction)
-    url = (
-        combat_board_url(guild_id, scope_id)
+    state = (
+        get_combat(guild_id=guild_id, scope_id=scope_id)
         if guild_id is not None and scope_id is not None
         else None
     )
+    url = board_url_for(state) if state is not None else None
     await send_interaction_message(
         interaction,
         content=play_in_browser(url),
@@ -153,9 +154,7 @@ async def _edit_board(
         victory = conclude_if_over(state)
         if victory is not None:
             ended = True
-            content = (
-                f"{content}\n{victory.message}" if content else victory.message
-            )
+            content = f"{content}\n{victory.message}" if content else victory.message
     await send_interaction_message(
         interaction,
         content=content,
@@ -368,7 +367,9 @@ class CombatTargetSelect(discord.ui.Select):
             actor = state.find_combatant(self.actor_name)
             if actor is None or not _can_play(interaction, actor, scope_id=scope_id):
                 await send_interaction_message(
-                    interaction, content="Tu ne peux pas jouer cette carte.", ephemeral=True
+                    interaction,
+                    content="Tu ne peux pas jouer cette carte.",
+                    ephemeral=True,
                 )
                 await _reset_target_select(interaction, self)
                 return
@@ -408,11 +409,7 @@ class CombatTargetSelect(discord.ui.Select):
             if board_message is not None:
                 await board_message.edit(
                     embed=build_combat_embed(state, ended=result.combat_over),
-                    view=(
-                        None
-                        if result.combat_over
-                        else build_combat_view(state)
-                    ),
+                    view=(None if result.combat_over else build_combat_view(state)),
                     attachments=board_attachments(state),
                 )
         await interaction.followup.send(result.message, ephemeral=True)
@@ -759,7 +756,9 @@ class CombatMapTargetSelect(discord.ui.Select):
         scope_id = _scope_id(interaction)
         if guild_id is None or scope_id is None:
             await send_interaction_message(
-                interaction, content="Le combat n’est pas disponible ici.", ephemeral=True
+                interaction,
+                content="Le combat n’est pas disponible ici.",
+                ephemeral=True,
             )
             return
 
@@ -773,7 +772,9 @@ class CombatMapTargetSelect(discord.ui.Select):
             actor = state.find_combatant(self.actor_name)
             if actor is None or not _can_play(interaction, actor, scope_id=scope_id):
                 await send_interaction_message(
-                    interaction, content="Tu ne peux pas attaquer maintenant.", ephemeral=True
+                    interaction,
+                    content="Tu ne peux pas attaquer maintenant.",
+                    ephemeral=True,
                 )
                 return
             target = state.combatants.get(target_key)
@@ -805,14 +806,8 @@ class CombatMapTargetSelect(discord.ui.Select):
                             break
                 if board_message is not None:
                     await board_message.edit(
-                        embed=build_combat_embed(
-                            state, ended=result.combat_over
-                        ),
-                        view=(
-                            None
-                            if result.combat_over
-                            else build_combat_view(state)
-                        ),
+                        embed=build_combat_embed(state, ended=result.combat_over),
+                        view=(None if result.combat_over else build_combat_view(state)),
                         attachments=board_attachments(state),
                     )
         await interaction.followup.send(result.message, ephemeral=True)
@@ -1000,7 +995,7 @@ class CombatBoardView(discord.ui.View):
         super().__init__(timeout=None)
         self.spell_page = spell_page
         if state is not None:
-            board_url = combat_board_url(state.guild_id, state.scope_id)
+            board_url = board_url_for(state)
             if board_url:
                 self.add_item(
                     discord.ui.Button(

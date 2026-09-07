@@ -65,6 +65,8 @@ class SrdMatchSelect(discord.ui.Select):
             )
             return
         getter, embed_fn = presenter
+        if not interaction.response.is_done():
+            await interaction.response.defer()
         try:
             item = await getter(self.values[0])
         except fivetools.FiveToolsError as exc:

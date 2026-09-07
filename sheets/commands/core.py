@@ -2,11 +2,12 @@ import discord
 from discord.ext.commands import Group
 from discord.ext.commands.context import Context
 
-from bot.command_helpers import command_reply, delete_command
+from bot.command_helpers import command_reply, defer_if_slash, delete_command
 from bot.help_text import command_help
 from bot.messaging import send_message
 from combat.engine import apply_hp_to_live_combat
 from combat.scope import scope_id_for_channel
+from combat.storage import lock_for
 from config import PREFIX
 from sheets.context import (
     get_sheet_for_owner,
@@ -288,13 +289,14 @@ def register_core_commands(sheet_group: Group) -> None:
         if ctx.guild is not None:
             scope_id = scope_id_for_channel(guild=ctx.guild, channel=ctx.channel)
             if scope_id is not None:
-                fighter = apply_hp_to_live_combat(
-                    guild_id=ctx.guild.id,
-                    scope_id=scope_id,
-                    user_id=owner_id,
-                    hp=sheet.hp_current,
-                    max_hp=sheet.hp_max,
-                )
+                async with lock_for(guild_id=ctx.guild.id, scope_id=scope_id):
+                    fighter = apply_hp_to_live_combat(
+                        guild_id=ctx.guild.id,
+                        scope_id=scope_id,
+                        user_id=owner_id,
+                        hp=sheet.hp_current,
+                        max_hp=sheet.hp_max,
+                    )
                 if fighter is not None and sheet.hp_current > 0:
                     combat_note = f" **{fighter}** is up in combat."
         await command_reply(
@@ -311,6 +313,7 @@ def register_core_commands(sheet_group: Group) -> None:
         ),
     )
     async def sheet_info(ctx: Context, member: discord.Member | None = None) -> None:
+        await defer_if_slash(ctx)
         result = await get_sheet_for_owner(ctx, member)
         if result is None:
             return

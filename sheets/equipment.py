@@ -287,9 +287,7 @@ class Equipment:
                 ),
                 self.items[0],
             )
-            chunk = self.detach_for_stash(top.slug) or self.detach_for_stash(
-                top.name
-            )
+            chunk = self.detach_for_stash(top.slug) or self.detach_for_stash(top.name)
             if not chunk:
                 self.items.remove(top)
                 top.equipped = False
@@ -459,6 +457,9 @@ class Equipment:
         if self.is_shield(item):
             return False
         return item.kind == ITEM_KIND_ARMOR
+
+    def is_equipped_or_worn(self, item: InventoryItem) -> bool:
+        return bool(item.equipped or item.stored_in == STORED_WORN)
 
     def required_hands(self, item: InventoryItem) -> int:
         if self.is_two_handed(item):
@@ -880,6 +881,8 @@ class Equipment:
                     continue
                 if destination is not None and item.stored_in == destination.slug:
                     continue
+                if destination is not None and self.is_equipped_or_worn(item):
+                    continue
                 if self.is_container(item) and item.stored_in == STORED_WORN:
                     continue
                 if item.equipped and self.is_worn_when_equipped(item):
@@ -894,7 +897,12 @@ class Equipment:
         if skip_location:
             matches = [item for item in matches if item.stored_in != skip_location]
         if destination is not None:
-            matches = [item for item in matches if item.stored_in != destination.slug]
+            matches = [
+                item
+                for item in matches
+                if item.stored_in != destination.slug
+                and not self.is_equipped_or_worn(item)
+            ]
         return matches
 
     def put_in(self, query: str, container_query: str) -> InventoryItem:
@@ -930,6 +938,16 @@ class Equipment:
             ]
             if already and not all_gear:
                 return already[0]
+            blocked = [
+                item
+                for item in self.find_items(cleaned)
+                if self.is_equipped_or_worn(item)
+            ]
+            if blocked and not all_gear:
+                raise ValueError(
+                    f"**{blocked[0].name}** is equipped or worn. "
+                    "Unequip it before storing it."
+                )
             raise ValueError("Nothing to store there.")
 
         moved: InventoryItem | None = None

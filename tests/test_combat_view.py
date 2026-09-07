@@ -46,9 +46,6 @@ class TestHandSelectOptions(unittest.TestCase):
         self.assertIn("×3", options[0][1])
 
     def test_combat_embed_uses_emoji_title(self) -> None:
-        from combat.display import build_combat_embed
-        from combat.storage import CombatState, CombatantState
-
         state = CombatState(
             guild_id=1,
             channel_id=2,
@@ -71,7 +68,7 @@ class TestHandSelectOptions(unittest.TestCase):
         self.assertNotIn("❤️", embed.fields[0].value)
         self.assertTrue(embed.image.url.endswith("combat-map.png"))
         with patch(
-            "combat.display.combat_board_url",
+            "combat.display.board_url_for",
             return_value="http://127.0.0.1:8765/combat/1/0",
         ):
             html = build_combat_embed(state)

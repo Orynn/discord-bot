@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 from discord.utils import time_snowflake
@@ -13,6 +13,19 @@ from bot.catchup import (
     is_catchup_invoke,
     reset_session_tracking,
 )
+
+
+def _http_error(
+    status: int,
+    reason: str,
+    *,
+    headers: dict[str, str] | None = None,
+) -> discord.HTTPException:
+    response = MagicMock()
+    response.status = status
+    response.reason = reason
+    response.headers = headers or {}
+    return discord.HTTPException(response, {"message": reason})
 
 
 def _message(
@@ -137,6 +150,73 @@ class TestCatchupCursor(unittest.IsolatedAsyncioTestCase):
             processed = await _catch_up_channel(MagicMock(), channel, last_ids={})
         self.assertEqual(processed, 0)
         mark.assert_called_with(channel_id=42, message_id=3)
+
+    async def test_failed_command_does_not_advance_cursor(self) -> None:
+        reset_session_tracking()
+        chat = _message(message_id=10, content="chat")
+        failed = _message(message_id=11, content=";help")
+        later = _message(message_id=12, content="chat")
+        channel = _text_channel(messages=[chat, failed, later])
+
+        bot = MagicMock()
+
+        async def get_context(message):
+            ctx = MagicMock()
+            ctx.command = MagicMock()
+            ctx.command.qualified_name = "help"
+            ctx.message = message
+            ctx.command_failed = message.id == 11
+            return ctx
+
+        bot.get_context = get_context
+        bot.invoke = AsyncMock()
+
+        with patch("bot.catchup.mark_channel_message_processed") as mark:
+            processed = await _catch_up_channel(bot, channel, last_ids={})
+        self.assertEqual(processed, 0)
+        mark.assert_called_with(channel_id=42, message_id=10)
+
+    async def test_retries_history_after_rate_limit(self) -> None:
+        messages = [_message(message_id=1, content="chat")]
+        channel = _text_channel(messages=messages)
+        original = channel.history
+        calls = {"n": 0}
+        limited = _http_error(
+            429,
+            "Too Many Requests",
+            headers={"Via": "1.1 google", "Retry-After": "0.2"},
+        )
+
+        async def history(**kwargs):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise limited
+            async for item in original(**kwargs):
+                yield item
+
+        channel.history = history
+        with (
+            patch("bot.rate_limits.asyncio.sleep", new_callable=AsyncMock),
+            patch("bot.catchup.mark_channel_message_processed") as mark,
+        ):
+            processed = await _catch_up_channel(MagicMock(), channel, last_ids={})
+        self.assertEqual(processed, 0)
+        self.assertEqual(calls["n"], 2)
+        mark.assert_called_with(channel_id=42, message_id=1)
+
+    async def test_stops_on_cloudflare_rate_limit(self) -> None:
+        channel = _text_channel(messages=[_message(message_id=1, content="chat")])
+
+        async def history(**kwargs):
+            raise _http_error(429, "Too Many Requests")
+            if False:
+                yield None
+
+        channel.history = history
+        with patch("bot.catchup.mark_channel_message_processed") as mark:
+            processed = await _catch_up_channel(MagicMock(), channel, last_ids={})
+        self.assertEqual(processed, 0)
+        mark.assert_not_called()
 
 
 class TestCatchupChannelIter(unittest.IsolatedAsyncioTestCase):
