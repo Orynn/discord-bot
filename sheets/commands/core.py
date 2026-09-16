@@ -5,9 +5,6 @@ from discord.ext.commands.context import Context
 from bot.command_helpers import command_reply, defer_if_slash, delete_command
 from bot.help_text import command_help
 from bot.messaging import send_message
-from combat.engine import apply_hp_to_live_combat
-from combat.scope import scope_id_for_channel
-from combat.storage import lock_for
 from config import PREFIX
 from sheets.context import (
     get_sheet_for_owner,
@@ -285,23 +282,9 @@ def register_core_commands(sheet_group: Group) -> None:
 
         save_owner_sheet(ctx, owner_id, sheet)
         label = target_label(member, sheet)
-        combat_note = ""
-        if ctx.guild is not None:
-            scope_id = scope_id_for_channel(guild=ctx.guild, channel=ctx.channel)
-            if scope_id is not None:
-                async with lock_for(guild_id=ctx.guild.id, scope_id=scope_id):
-                    fighter = apply_hp_to_live_combat(
-                        guild_id=ctx.guild.id,
-                        scope_id=scope_id,
-                        user_id=owner_id,
-                        hp=sheet.hp_current,
-                        max_hp=sheet.hp_max,
-                    )
-                if fighter is not None and sheet.hp_current > 0:
-                    combat_note = f" **{fighter}** is up in combat."
         await command_reply(
             ctx,
-            f"{label}: HP set to **{sheet.hp_current}/{sheet.hp_max}**.{combat_note}",
+            f"{label}: HP set to **{sheet.hp_current}/{sheet.hp_max}**.",
         )
         await delete_command(ctx)
 

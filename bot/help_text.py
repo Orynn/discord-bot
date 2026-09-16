@@ -6,7 +6,6 @@ import discord
 HELP_COLOR = 0xC9A227
 HELP_ROLEPLAY_COLOR = 0x9B59B6
 HELP_SHEET_COLOR = 0x8B0000
-HELP_COMBAT_COLOR = 0xC0392B
 HELP_INIT_COLOR = 0xF1C40F
 HELP_DICE_COLOR = 0xD4A017
 HELP_LOOKUP_COLOR = 0x4A6741
@@ -235,12 +234,12 @@ def build_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
                     "🚀 Première session",
                     f"**1.** `{prefix}sheet create <nom>` ou `/sheet create`\n"
                     f"**2.** `{prefix}init add @toi` ou `/init add`\n"
-                    f"**3.** `{prefix}combat board` ou `/combat board` *(après le start)*",
+                    f"**3.** `{prefix}init add @toi` ou `/init add`",
                 ),
                 (
                     "📚 Guides",
                     f"`{prefix}tuto` · `/tuto` — tutoriel pour débuter\n"
-                    f"`{prefix}help sheet` · `{prefix}help combat` · `{prefix}help srd` · `{prefix}help hunger` · `{prefix}help roleplay` · `/help`\n"
+                    f"`{prefix}help sheet` · `{prefix}help srd` · `{prefix}help hunger` · `{prefix}help roleplay` · `/help`\n"
                     f"`{prefix}help all` — tout envoyer en MP\n"
                     f"`{prefix}commande -h` · `{prefix}commande --help` · `{prefix}commande help`",
                 ),
@@ -311,27 +310,6 @@ def build_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
             color=HELP_SHEET_COLOR,
         ),
         _section(
-            key="combat",
-            emoji="⚔️",
-            label="Combat",
-            button="Combat",
-            intro=f"Guide complet : `{prefix}help combat`",
-            fields=(
-                (
-                    "▶️ Déroulement",
-                    f"`{prefix}init add` → `{prefix}combat start [tavern]` → `{prefix}combat board`\n"
-                    "Carte 8×8 de base, jusqu’à 16×16 en perso (arena, tavern, dungeon, camp). Les monstres jouent tout seuls.",
-                ),
-                (
-                    "🎯 À ton tour",
-                    f"`{prefix}combat board` — ouvre le plateau navigateur\n"
-                    "Déplacement, attaques, cartes et fin de tour se jouent **uniquement** dans le navigateur.",
-                ),
-            ),
-            footer=f"Astuce : {prefix}combat board",
-            color=HELP_COMBAT_COLOR,
-        ),
-        _section(
             key="initiative",
             emoji="⚡",
             label="Initiative & groupe",
@@ -369,7 +347,7 @@ def build_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
                 (
                     "💻 Commandes slash",
                     "`/` ouvre les mêmes commandes : `/help` · `/roll` · `/sheet show` · "
-                    "`/combat board` · `/init next` · `/srd`",
+                    "`/init next` · `/srd`",
                 ),
             ),
             footer=f"Astuce : {prefix}roll adv perception",
@@ -424,10 +402,9 @@ def build_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
                         f"`{prefix}sheet money set|add @joueur <montant>`",
                     ),
                     (
-                        "⚔️ Initiative & combat",
+                        "⚡ Initiative",
                         f"`{prefix}init remove <nom>` · `{prefix}init clear`\n"
-                        f"`{prefix}combat start [monstre] [2h]` · `{prefix}combat end` · `{prefix}combat add <nom> <pv>`\n"
-                        f"Voir `{prefix}help combat` pour le guide complet.",
+                        f"`{prefix}init add @joueur` · `{prefix}init next` · `{prefix}init show`",
                     ),
                     (
                         "💰 Groupe & joueurs",
@@ -459,161 +436,6 @@ def build_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
     return sections
 
 
-def build_combat_help_sections(*, prefix: str, is_admin: bool) -> list[HelpSection]:
-    sections = [
-        _section(
-            key="start",
-            emoji="🎯",
-            label="Pour commencer",
-            button="Début",
-            fields=(
-                (
-                    "🧰 Préparer les persos",
-                    f"`{prefix}sheet create <nom>` · `{prefix}sheet set class fighter`\n"
-                    f"`{prefix}sheet spells add fire-bolt` — sorts de l’export 5etools\n"
-                    f"`{prefix}sheet slots auto` — suivre les emplacements *(optionnel)*",
-                ),
-                (
-                    "⚔️ Lancer le combat",
-                    "Dans le salon OOC ou roleplay du joueur — chaque section a son propre combat.\n"
-                    "Ou dans `#🚯trash` : fiche **Mock** isolée "
-                    f"(`{prefix}trash` · `{prefix}trash reset`).\n"
-                    f"`{prefix}init add @joueur` · `{prefix}init add Gobelin 2`\n"
-                    f"`{prefix}combat start [monstre] [tavern] [2h]` — section + monstre + carte *(staff)*\n"
-                    f"`{prefix}combat board` — lien du plateau navigateur (c’est là qu’on joue)",
-                ),
-            ),
-            footer=f"Astuce : {prefix}init show pour voir l’ordre",
-            color=HELP_COLOR,
-        ),
-        _section(
-            key="play",
-            emoji="⚔️",
-            label="Jouer son tour",
-            button="Jouer",
-            fields=(
-                (
-                    "🖥️ Table",
-                    f"`{prefix}combat board` — s’affiche dès le start · cases bleues, toi en vert, alliés bleus, ennemis rouges\n"
-                    "Tout le tour se joue **dans le navigateur** : clic, flèches, barre `move C4` / `attack` / `play` / `pass`.\n"
-                    f"Pions : portrait du PJ, token 5e.tools des monstres.\n"
-                    "📖 **Fiche** — statblock + image du monstre *(tout le monde)*",
-                ),
-                (
-                    "⌨️ Sur le plateau",
-                    "`move C4` — à tout moment (`2e`, `nord`…) · quitter une mêlée provoque une OA\n"
-                    "`attack [cible]` — action : attaque d’arme\n"
-                    "`play <carte> [cible|C4]` — action : une carte, le tour continue\n"
-                    "`play fireball C4` — zone · `hand` · `pass` — finir le tour",
-                ),
-                (
-                    "📌 Exemples",
-                    "`move C4` · `attack Gobelin`\n"
-                    "`play weapon Gobelin`\n"
-                    "`play fireball C4`",
-                ),
-            ),
-            footer="Astuce : les noms de cartes suivent les sorts de l’export, ou weapon/dodge",
-            color=HELP_COMBAT_COLOR,
-        ),
-        _section(
-            key="deck",
-            emoji="📚",
-            label="Dans le deck",
-            button="Deck",
-            fields=(
-                (
-                    "⚔️ Toujours là",
-                    "• **Attaque d’arme** — dés de l’arme équipée + caractéristique + maîtrise\n"
-                    "• **Esquive** — moitié des dégâts jusqu’à ton prochain tour",
-                ),
-                (
-                    "✨ Depuis la fiche",
-                    f"• Sorts listés dans `{prefix}sheet spells`\n"
-                    "• Chaque sort connu est toujours dans le menu — choisis une cible en le lançant\n"
-                    "• Une seule cible légale saute le menu · les sorts en trop paginent au-delà de 25 options Discord\n"
-                    "• Arme et sorts d’attaque : d20 vs CA, seulement si la cible est à portée\n"
-                    "• Sorts à jet de sauvegarde : DD de la fiche (demi-dégâts ou état selon le sort)\n"
-                    "• Bouclier annule le prochain coup · Armure du mage −1d4 · Bénédiction +1d4 dégâts\n"
-                    "• Les tours de magie apparaissent aussi à la pioche · les sorts de niveau consomment des emplacements\n"
-                    "• Attaques, soins, Esquive, et buffs (Bouclier, Armure du mage, Bénédiction…)\n"
-                    "• Les sorts homebrew ont une carte d’attaque générique",
-                ),
-                (
-                    "♻️ Défausse",
-                    "Les cartes jouées vont à la défausse. Deck vide : on mélange et on recommence.",
-                ),
-                (
-                    "🏁 Victoire",
-                    "Joueurs contre monstres. Le combat s’arrête quand un camp est à terre. Les attaques visent l’autre camp.\n"
-                    f"`{prefix}combat historique` — journal archivé par section · `{prefix}combat historique dernier`",
-                ),
-                (
-                    "❤️ PV",
-                    "Les PV des joueurs s’affichent. Ceux des monstres restent cachés. "
-                    "Un PJ à 0 PV reste dans le combat et fait des jets de mort (déjà sur la fiche). "
-                    f"`{prefix}combat add Loup` charge le profil SRD (attaque, CA, 1–2 traits). "
-                    f"Dégâts et soins mettent à jour `{prefix}sheet hp` pour les joueurs.",
-                ),
-            ),
-            footer=f"Astuce : {prefix}srd spell fireball pour voir un sort",
-            color=HELP_MAGIC_COLOR,
-        ),
-        _section(
-            key="init",
-            emoji="⚡",
-            label="Initiative",
-            button="Init",
-            intro=f"Le combat utilise le même ordre que `{prefix}init`. Un tracker par section joueur.",
-            fields=(
-                (
-                    "⚡ Commandes",
-                    f"`{prefix}init add @joueur` — d20 + DEX de la fiche\n"
-                    f"`{prefix}init add Nom 2` — PNJ avec un bonus fixe\n"
-                    f"`{prefix}init next` — passer le tour à la main\n"
-                    f"`{prefix}init show` — afficher l’ordre\n"
-                    f"`{prefix}init clear` — cette section joueur seulement",
-                ),
-            ),
-            footer=f"Astuce : {prefix}init next marche aussi hors combat",
-            color=HELP_INIT_COLOR,
-        ),
-    ]
-
-    if is_admin:
-        sections.append(
-            _section(
-                key="admin",
-                emoji="🛡️",
-                label="Admin",
-                button="Admin",
-                fields=(
-                    (
-                        "⚔️ Combat",
-                        f"Dans un salon OOC/roleplay du joueur — FOX et MAX peuvent se battre en même temps.\n"
-                        f"Ou `#🚯trash` : mock isolé (`{prefix}trash reset`), "
-                        "sans toucher aux fiches / combats des joueurs.\n"
-                        f"`{prefix}combat start [monstre] [tavern] [2h]` — section + monstre + carte\n"
-                        f"`{prefix}combat map tavern` — arena · tavern · dungeon · camp · perso\n"
-                        f"`{prefix}combat map editor` — lien de l’éditeur (bot allumé), puis `{prefix}combat map import`\n"
-                        f"`{prefix}combat map new crypt 12x12` · `{prefix}combat map wall C3` — carte perso (4×4–16×16)\n"
-                        f"`{prefix}combat end` — arrêter le combat de cette section\n"
-                        f"`{prefix}combat add Gobelin` — ajouter un monstre SRD (PV cachés)\n"
-                        f"`{prefix}combat add Nom 30` — PV perso · `{prefix}combat add @joueur` — joueur lié",
-                    ),
-                    (
-                        "⚡ Initiative",
-                        f"`{prefix}init remove <nom>` · `{prefix}init clear`",
-                    ),
-                ),
-                footer="Visible seulement pour le staff",
-                color=HELP_ADMIN_COLOR,
-            )
-        )
-
-    return sections
-
-
 def build_srd_help_sections(*, prefix: str) -> list[HelpSection]:
     return [
         _section(
@@ -629,7 +451,7 @@ def build_srd_help_sections(*, prefix: str) -> list[HelpSection]:
                 ),
                 (
                     "✨ Magie & persos",
-                    "`spell` · `class` · `species` · `background` · `feat`",
+                    "`spell` · `class` · `subclass` · `species` · `background` · `feat`",
                 ),
                 (
                     "⚔️ Combat & matériel",
@@ -652,7 +474,8 @@ def build_srd_help_sections(*, prefix: str) -> list[HelpSection]:
                 (
                     "🏷️ Raccourcis",
                     f"`{prefix}srd race` → species · `{prefix}srd cond` → condition\n"
-                    f"`{prefix}srd creature` → monster · `{prefix}srd gear` → item",
+                    f"`{prefix}srd creature` → monster · `{prefix}srd gear` → item\n"
+                    f"`{prefix}srd archetype` → subclass",
                 ),
                 (
                     "🔎 Approximatif",
@@ -1002,7 +825,7 @@ def build_tuto_help_sections(*, prefix: str) -> list[HelpSection]:
             intro=(
                 "D&D, c’est une histoire improvisée à plusieurs : le MJ pose le décor, "
                 "tu incarnes ton personnage et tu dis ce qu’il fait ou dit. "
-                "Arkann t’aide sur Discord — fiche, dés, combat, narration."
+                "Arkann t’aide sur Discord — fiche, dés, initiative, narration."
             ),
             fields=(
                 (
@@ -1082,11 +905,11 @@ def build_tuto_help_sections(*, prefix: str) -> list[HelpSection]:
             color=HELP_SHEET_COLOR,
         ),
         _section(
-            key="combat",
-            emoji="⚔️",
-            label="Combat & suite",
-            button="Combat",
-            intro="Quand le MJ lance un combat, l’initiative et la carte aident à suivre les tours.",
+            key="init",
+            emoji="⚡",
+            label="Initiative & suite",
+            button="Init",
+            intro="L’initiative suit l’ordre des tours dans ta section joueur.",
             fields=(
                 (
                     "⚡ Initiative",
@@ -1094,18 +917,13 @@ def build_tuto_help_sections(*, prefix: str) -> list[HelpSection]:
                     f"`{prefix}init show` — voir l’ordre · `{prefix}init next` — tour suivant",
                 ),
                 (
-                    "🗺️ Carte",
-                    f"`{prefix}combat board` ou `/combat board` — plateau *(après le start du MJ)*\n"
-                    "Clique sur une case pour te déplacer.",
-                ),
-                (
                     "📚 Règles & faim",
                     f"`{prefix}srd spell fireball` ou `/srd` — chercher une règle\n"
                     f"`{prefix}time` — date de campagne · `{prefix}hunger` — la faim suit l’horloge",
                 ),
             ),
-            footer=f"Guides : `{prefix}help combat` · `{prefix}help srd` · `{prefix}help all` en MP",
-            color=HELP_COMBAT_COLOR,
+            footer=f"Guides : `{prefix}help srd` · `{prefix}help all` en MP",
+            color=HELP_INIT_COLOR,
         ),
     ]
 
@@ -1162,7 +980,6 @@ def build_guide_help_embeds(*, prefix: str, is_admin: bool) -> list[discord.Embe
             "Fiche de personnage",
             build_sheet_help_sections(prefix=prefix, is_admin=is_admin),
         ),
-        ("Combat", build_combat_help_sections(prefix=prefix, is_admin=is_admin)),
         ("Recherche de règles", build_srd_help_sections(prefix=prefix)),
         ("Faim", build_hunger_help_sections(prefix=prefix, is_admin=is_admin)),
         ("Jeu de rôle", build_roleplay_help_sections(prefix=prefix)),
@@ -1211,19 +1028,6 @@ def build_help_embeds(*, prefix: str, is_admin: bool) -> list[discord.Embed]:
 def build_sheet_help_embeds(*, prefix: str, is_admin: bool) -> list[discord.Embed]:
     sections = build_sheet_help_sections(prefix=prefix, is_admin=is_admin)
     return [build_help_embed(title="Fiche de personnage", sections=sections, index=0)]
-
-
-def build_combat_help_embeds(*, prefix: str, is_admin: bool) -> list[discord.Embed]:
-    sections = build_combat_help_sections(prefix=prefix, is_admin=is_admin)
-    return [build_help_embed(title="Combat", sections=sections, index=0)]
-
-
-def build_combat_help_message(*, prefix: str, is_admin: bool) -> str:
-    sections = build_combat_help_sections(prefix=prefix, is_admin=is_admin)
-    parts = ["**Combat**"]
-    for section in sections:
-        parts.append(f"\n{section.emoji} **{section.label}**\n{section.body}")
-    return "\n".join(parts)
 
 
 def build_help_message(*, prefix: str, is_admin: bool) -> str:

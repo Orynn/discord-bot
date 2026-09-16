@@ -4,10 +4,19 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import data.db as db_module
-from combat.storage import CombatState, CombatantState, get_combat, save_combat
-from initiative.storage import InitiativeEntry, InitiativeState, get_initiative, save_initiative
+from initiative.storage import (
+    InitiativeEntry,
+    InitiativeState,
+    get_initiative,
+    save_initiative,
+)
 from players.discover import sandbox_player_id
-from sheets.sandbox import MOCK_NAME, build_mock_sheet, ensure_sandbox_sheet, reset_sandbox
+from sheets.sandbox import (
+    MOCK_NAME,
+    build_mock_sheet,
+    ensure_sandbox_sheet,
+    reset_sandbox,
+)
 from sheets.storage import get_sheet, save_sheet
 from sheets.data import CharacterSheet
 
@@ -43,7 +52,7 @@ class TestSandboxMock(unittest.TestCase):
         self.assertEqual(sheet.name, "Edited")
         self.assertEqual(sheet.hp_current, 3)
 
-    def test_reset_reseeds_sheet_and_clears_fight(self) -> None:
+    def test_reset_reseeds_sheet_and_clears_initiative(self) -> None:
         trash = MagicMock()
         trash.id = 404
         trash.name = "🚯trash"
@@ -52,25 +61,6 @@ class TestSandboxMock(unittest.TestCase):
             user_id=-404,
             guild_id=7,
             sheet=CharacterSheet(name="Broken", hp_current=0, hp_max=10),
-        )
-        save_combat(
-            CombatState(
-                guild_id=7,
-                channel_id=404,
-                turn_order=["Mock"],
-                active_index=0,
-                scope_id=404,
-                combatants={
-                    "mock": CombatantState(
-                        name="Mock",
-                        user_id=-404,
-                        hp=0,
-                        max_hp=10,
-                        hand=[],
-                        deck=[],
-                    )
-                },
-            )
         )
         save_initiative(
             guild_id=7,
@@ -87,7 +77,6 @@ class TestSandboxMock(unittest.TestCase):
         loaded = get_sheet(user_id=-404, guild_id=7)
         assert loaded is not None
         self.assertEqual(loaded.hp_current, 44)
-        self.assertIsNone(get_combat(guild_id=7, scope_id=404))
         self.assertIsNone(get_initiative(guild_id=7, scope_id=404))
         real = get_sheet(user_id=1, guild_id=7)
         self.assertIsNone(real)

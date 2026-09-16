@@ -20,8 +20,6 @@ from bot.trash_commands import setup_trash
 from bot.tree_utils import clamp_app_command_descriptions
 from campaign.commands import setup_campaign
 from campaign.time_commands import setup_time
-from combat.commands import setup_combat
-from combat.editor_server import start_editor_server, stop_editor_server
 from config import CAMPAIGN_GUILD_ID, PREFIX, require_token
 from data.db import init_db
 from fun.commands import setup_fun
@@ -51,7 +49,6 @@ class ArkannBot(commands.Bot):
         await super().invoke(ctx)
 
     async def setup_hook(self) -> None:
-        await start_editor_server()
         try:
             clamp_app_command_descriptions(self.tree)
             if CAMPAIGN_GUILD_ID is not None:
@@ -67,7 +64,6 @@ class ArkannBot(commands.Bot):
     async def close(self) -> None:
         from campaign.wiki import close_session as close_wiki_session
 
-        await stop_editor_server()
         await close_wiki_session()
         await super().close()
 
@@ -99,7 +95,6 @@ COMMAND_SETUPS = (
     setup_campaign,
     setup_time,
     setup_hunger,
-    setup_combat,
     setup_trash,
     setup_purge,
     setup_help,

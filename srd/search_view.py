@@ -7,6 +7,7 @@ import discord
 
 from bot.messaging import send_interaction_message
 from srd import fivetools
+from srd.class_view import class_lookup_message
 from srd.embeds import (
     armor_embed,
     item_embed,
@@ -32,6 +33,9 @@ _KIND_PRESENTERS: dict[
 
 def _option_label(item: dict[str, Any]) -> str:
     name = str(item.get("name") or "Unknown")
+    class_name = str(item.get("class_name") or "")
+    if class_name:
+        return f"{name} ({class_name})"[:100]
     source = str(item.get("source") or "")
     if source and len(name) < 80:
         return f"{name} ({source})"[:100]
@@ -45,7 +49,9 @@ class SrdMatchSelect(discord.ui.Select):
             discord.SelectOption(
                 label=_option_label(item),
                 value=str(item.get("slug") or item.get("name") or "")[:100],
-                description=str(item.get("source") or kind)[:100],
+                description=str(item.get("class_name") or item.get("source") or kind)[
+                    :100
+                ],
             )
             for item in matches[:25]
             if item.get("slug") or item.get("name")
@@ -58,6 +64,25 @@ class SrdMatchSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction) -> None:
+        if self._kind == "subclass":
+            if not interaction.response.is_done():
+                await interaction.response.defer()
+            try:
+                char_class, subclass = await fivetools.get_subclass(self.values[0])
+            except fivetools.FiveToolsError as exc:
+                await send_interaction_message(
+                    interaction, content=str(exc), ephemeral=True
+                )
+                return
+            embed, view = class_lookup_message(char_class, subclass=subclass)
+            await send_interaction_message(
+                interaction,
+                embed=embed,
+                view=view,
+                edit=True,
+                definition_menu=False,
+            )
+            return
         presenter = _KIND_PRESENTERS.get(self._kind)
         if presenter is None:
             await send_interaction_message(
@@ -93,7 +118,7 @@ def build_match_prompt(*, query: str, matches: list[dict[str, Any]]) -> discord.
     lines: list[str] = []
     for item in matches[:12]:
         name = str(item.get("name") or "?")
-        source = str(item.get("source") or "")
+        source = str(item.get("class_name") or item.get("source") or "")
         extra = f" · {source}" if source else ""
         lines.append(f"• **{name}**{extra}")
     extra_count = len(matches) - 12

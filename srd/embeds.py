@@ -334,9 +334,15 @@ def class_embed(char_class: dict, subclass: dict | None = None) -> discord.Embed
                 inline=False,
             )
 
-    description = subclass.get("desc") if subclass else char_class.get("desc", "")
+    description = char_class.get("desc", "")
     if description:
         embed.description = truncate(clean_markdown(description), 2000)
+    if subclass and subclass.get("desc"):
+        embed.add_field(
+            name=f"📚 {subclass['name']}",
+            value=truncate(clean_markdown(subclass["desc"]), 1024),
+            inline=False,
+        )
 
     embed.set_footer(text=char_class.get("document__title", "5etools"))
     return embed

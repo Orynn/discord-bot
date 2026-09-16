@@ -12,7 +12,6 @@ from bot.command_helpers import command_reply, delete_command
 from bot.help_text import (
     HELP_COLOR,
     build_ai_help_sections,
-    build_combat_help_sections,
     build_command_help_embed,
     build_group_help_embed,
     build_guide_help_embeds,
@@ -37,7 +36,7 @@ from config import PREFIX
 
 HELP_FLAGS = frozenset({"-h", "--help", "-help"})
 HELP_WORDS = frozenset({"help", "aide"})
-_SECTIONED_GROUPS = frozenset({"sheet", "combat", "srd", "hunger", "ai"})
+_SECTIONED_GROUPS = frozenset({"sheet", "srd", "hunger", "ai"})
 _HELP_ALL_PAUSE_SECONDS = 0.35
 _TEXT_KWARG_NAMES = frozenset(
     {
@@ -400,17 +399,6 @@ class ArkannHelpCommand(MinimalHelpCommand):
             )
             return
 
-        if group.qualified_name == "combat":
-            await _send_sectioned_help(
-                ctx,
-                title="Combat",
-                sections=build_combat_help_sections(
-                    prefix=PREFIX,
-                    is_admin=is_admin(ctx),
-                ),
-            )
-            return
-
         if group.qualified_name == "srd":
             await send_srd_help(ctx)
             return
@@ -523,7 +511,7 @@ def setup_help(bot: Bot) -> None:
 
     @bot.tree.command(name="help", description="Show Arkann commands")
     @app_commands.describe(
-        topic="Sujet : all, tuto, sheet, combat, srd, hunger, roleplay, ou un nom de commande"
+        topic="Sujet : all, tuto, sheet, srd, hunger, roleplay, ou un nom de commande"
     )
     async def slash_help(
         interaction: discord.Interaction, topic: str | None = None
@@ -545,15 +533,6 @@ def setup_help(bot: Bot) -> None:
                 ctx,
                 title="Fiche de personnage",
                 sections=build_sheet_help_sections(
-                    prefix=PREFIX, is_admin=is_admin(ctx)
-                ),
-            )
-            return
-        if query in {"combat", "cards"}:
-            await _send_sectioned_help(
-                ctx,
-                title="Combat",
-                sections=build_combat_help_sections(
                     prefix=PREFIX, is_admin=is_admin(ctx)
                 ),
             )

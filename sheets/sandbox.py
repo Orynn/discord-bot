@@ -2,12 +2,16 @@ from __future__ import annotations
 
 from typing import Any
 
-from combat.storage import clear_combat
 from initiative.storage import clear_initiative
 from players.discover import sandbox_player_id, sandbox_scope_id
 from sheets.currency import Currency
 from sheets.data import CharacterSheet
-from sheets.equipment import ITEM_KIND_ARMOR, ITEM_KIND_ITEM, ITEM_KIND_WEAPON, Equipment
+from sheets.equipment import (
+    ITEM_KIND_ARMOR,
+    ITEM_KIND_ITEM,
+    ITEM_KIND_WEAPON,
+    Equipment,
+)
 from sheets.spell_slots import SpellSlots
 from sheets.storage import get_sheet, save_sheet
 
@@ -23,9 +27,7 @@ def build_mock_sheet() -> CharacterSheet:
     equipment.add_item(
         slug="chain-mail", name="Chain Mail", kind=ITEM_KIND_ARMOR, quantity=1
     )
-    equipment.add_item(
-        slug="shield", name="Shield", kind=ITEM_KIND_ARMOR, quantity=1
-    )
+    equipment.add_item(slug="shield", name="Shield", kind=ITEM_KIND_ARMOR, quantity=1)
     equipment.add_item(
         slug="explorers-pack",
         name="Explorer's Pack",
@@ -54,9 +56,7 @@ def build_mock_sheet() -> CharacterSheet:
         save_proficiencies=["str", "con"],
         skill_proficiencies=["athletics", "perception", "intimidation"],
         spells=["fire-bolt", "shield", "cure-wounds", "magic-missile"],
-        spell_slots=SpellSlots.from_dict(
-            {"maximum": {"1": 3}, "current": {"1": 3}}
-        ),
+        spell_slots=SpellSlots.from_dict({"maximum": {"1": 3}, "current": {"1": 3}}),
         currency=Currency(gp=50, sp=20),
         equipment=equipment,
         hit_dice_remaining=5,
@@ -80,6 +80,5 @@ def reset_sandbox(*, guild_id: int, channel: Any) -> CharacterSheet:
         raise ValueError("Sandbox reset only works in #🚯trash.")
     sheet = build_mock_sheet()
     save_sheet(user_id=user_id, guild_id=guild_id, sheet=sheet)
-    clear_combat(guild_id=guild_id, scope_id=scope_id)
     clear_initiative(guild_id=guild_id, scope_id=scope_id)
     return sheet

@@ -142,13 +142,6 @@ class TestCatchupAllowlist(unittest.TestCase):
         ctx.command.qualified_name = "init add"
         self.assertFalse(_is_catchup_allowed(ctx))
 
-    def test_blocks_combat_play(self) -> None:
-        ctx = MagicMock()
-        ctx.message.attachments = []
-        ctx.command = MagicMock()
-        ctx.command.qualified_name = "combat play"
-        self.assertFalse(_is_catchup_allowed(ctx))
-
     def test_blocks_sheet_gear_add(self) -> None:
         ctx = MagicMock()
         ctx.message.attachments = []
@@ -194,19 +187,9 @@ class TestCatchupAllowlist(unittest.TestCase):
             "srd spell",
             "sheet show",
             "init show",
-            "combat historique",
         ):
             ctx.command.qualified_name = name
             self.assertTrue(_is_catchup_allowed(ctx), msg=name)
-
-    def test_blocks_combat_board(self) -> None:
-        ctx = MagicMock()
-        ctx.message.attachments = []
-        ctx.message.content = ";combat board"
-        ctx.command = MagicMock()
-        ctx.command.qualified_name = "combat board"
-        self.assertFalse(_is_catchup_allowed(ctx))
-        self.assertNotIn("combat board", CATCHUP_ALLOWED_COMMANDS)
 
     def test_allows_time_show_not_advance(self) -> None:
         ctx = MagicMock()

@@ -150,3 +150,37 @@ def setup_srd(bot: Bot) -> None:
                 await _send_lookup(ctx, embed=_embed(item))
             except fivetools.Open5eError as exc:
                 await _handle_lookup_error(ctx, exc)
+
+    @srd_group.command(
+        name="subclass",
+        aliases=("archetype", "sousclasse"),
+        help=command_help(
+            "Cherche une sous-classe.",
+            f"`{PREFIX}srd subclass <nom>`",
+            f"`{PREFIX}srd subclass champion`",
+            f"`{PREFIX}srd subclass fighter battle master`",
+        ),
+    )
+    async def srd_subclass(ctx: Context, *, query: str) -> None:
+        try:
+            text, force_fuzzy = parse_search_query(query)
+            if not text:
+                await _handle_lookup_error(
+                    ctx, fivetools.FiveToolsNotFoundError("Missing search text.")
+                )
+                return
+            result = await fivetools.resolve_subclass(text, force_list=force_fuzzy)
+            if isinstance(result, list):
+                await send_message(
+                    ctx,
+                    embed=build_match_prompt(query=text, matches=result),
+                    view=SrdMatchView(kind="subclass", matches=result),
+                    definition_menu=False,
+                )
+                await delete_command(ctx)
+                return
+            char_class, subclass = result
+            embed, view = class_lookup_message(char_class, subclass=subclass)
+            await _send_lookup(ctx, embed, view=view)
+        except fivetools.Open5eError as exc:
+            await _handle_lookup_error(ctx, exc)

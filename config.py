@@ -37,9 +37,6 @@ _DEFAULT_CONFIG: dict = {
     "image_timeout_seconds": 180,
     "image_cooldown_seconds": 20,
     "image_history_limit": 1000,
-    "editor_host": "127.0.0.1",
-    "editor_port": 8765,
-    "editor_public_url": "",
     "gemini_model": "gemini-3.5-flash",
     "gemini_timeout_seconds": 45,
     "gemini_max_output_tokens": 1600,
@@ -181,17 +178,6 @@ IMAGE_COOLDOWN_SECONDS = int(
 IMAGE_HISTORY_LIMIT = int(
     config.get("image_history_limit", _DEFAULT_CONFIG["image_history_limit"])
 )
-EDITOR_HOST = str(
-    os.environ.get("ARKANN_EDITOR_HOST")
-    or config.get("editor_host", _DEFAULT_CONFIG["editor_host"])
-)
-EDITOR_PORT = int(
-    os.environ.get("ARKANN_EDITOR_PORT")
-    or config.get("editor_port", _DEFAULT_CONFIG["editor_port"])
-)
-EDITOR_PUBLIC_URL = str(
-    os.environ.get("ARKANN_EDITOR_URL") or config.get("editor_public_url", "") or ""
-).strip()
 
 _raw_gemini = (
     os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or ""

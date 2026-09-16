@@ -9,8 +9,6 @@ from bot.command_helpers import command_reply, delete_command
 from bot.help_text import command_help
 from bot.messaging import send_message
 from bot.privacy import reject_other_player
-from combat.scope import PLAYER_INIT_ONLY, scope_id_for_channel
-from combat.storage import lock_for
 from config import PREFIX
 from initiative.display import advance_turn, build_initiative_embed
 from initiative.storage import (
@@ -20,11 +18,13 @@ from initiative.storage import (
     already_listed,
     clear_initiative,
     get_initiative,
+    lock_for,
     match_initiative_entries,
     preserve_active_index,
     save_initiative,
 )
 from players.discover import is_sandbox_owner_id
+from players.scope import PLAYER_INIT_ONLY, scope_id_for_channel
 from sheets.context import infer_player_id, parse_mention_and_text
 from sheets.data import ability_modifier
 from sheets.dice import (

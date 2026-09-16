@@ -39,6 +39,7 @@ SRD_TYPE_CHOICES = [
         ("Spell", "spell"),
         ("Species", "species"),
         ("Class", "class"),
+        ("Subclass", "subclass"),
         ("Background", "background"),
         ("Feat", "feat"),
         ("Condition", "condition"),
@@ -67,10 +68,26 @@ def setup_slash(bot: Bot) -> None:
         await interaction.response.defer(ephemeral=True)
         text, force_fuzzy = parse_search_query(name)
         kind = content_type.value
-        search, embed_fn = SRD_LOOKUPS[kind]
         try:
             if not text:
                 raise fivetools.FiveToolsNotFoundError("Missing search text.")
+            if kind == "subclass":
+                result = await fivetools.resolve_subclass(text, force_list=force_fuzzy)
+                if isinstance(result, list):
+                    await send_interaction_message(
+                        interaction,
+                        embed=build_match_prompt(query=text, matches=result),
+                        view=SrdMatchView(kind="subclass", matches=result),
+                        ephemeral=True,
+                    )
+                    return
+                char_class, subclass = result
+                embed, view = class_lookup_message(char_class, subclass=subclass)
+                await send_interaction_message(
+                    interaction, embed=embed, view=view, ephemeral=True
+                )
+                return
+            search, embed_fn = SRD_LOOKUPS[kind]
             candidates = lookup_candidates(kind, text, force_list=force_fuzzy)
             if candidates is not None:
                 if not candidates:

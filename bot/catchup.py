@@ -37,7 +37,6 @@ CATCHUP_ALLOWED_COMMANDS: frozenset[str] = frozenset(
         "sheet show",
         "sheet info",
         "init show",
-        "combat historique",
     }
 )
 _CATCHUP_TIME_GROUPS: frozenset[str] = frozenset(

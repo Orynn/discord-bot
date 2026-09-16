@@ -84,24 +84,6 @@ def init_db() -> None:
                 order_json TEXT NOT NULL,
                 PRIMARY KEY (guild_id, scope_id)
             );
-            CREATE TABLE IF NOT EXISTS combat (
-                guild_id TEXT NOT NULL,
-                scope_id TEXT NOT NULL,
-                state_json TEXT NOT NULL,
-                PRIMARY KEY (guild_id, scope_id)
-            );
-            CREATE TABLE IF NOT EXISTS combat_maps (
-                guild_id TEXT NOT NULL,
-                map_id TEXT NOT NULL,
-                label TEXT NOT NULL,
-                theme TEXT NOT NULL,
-                blocked_json TEXT NOT NULL,
-                pc_column INTEGER NOT NULL DEFAULT 1,
-                npc_column INTEGER NOT NULL DEFAULT 6,
-                width INTEGER NOT NULL DEFAULT 8,
-                height INTEGER NOT NULL DEFAULT 8,
-                PRIMARY KEY (guild_id, map_id)
-            );
             CREATE TABLE IF NOT EXISTS stashed_gear (
                 guild_id TEXT NOT NULL,
                 place_key TEXT NOT NULL,
@@ -109,43 +91,15 @@ def init_db() -> None:
                 items_json TEXT NOT NULL,
                 PRIMARY KEY (guild_id, place_key)
             );
-            CREATE TABLE IF NOT EXISTS combat_history (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                guild_id TEXT NOT NULL,
-                scope_id TEXT NOT NULL,
-                ended_at TEXT NOT NULL,
-                map_id TEXT NOT NULL DEFAULT 'arena',
-                winner TEXT,
-                combatants_json TEXT NOT NULL,
-                log_json TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_combat_history_scope
-                ON combat_history (guild_id, scope_id, ended_at DESC);
             """
         )
     _migrate_guild_scoped_tables()
-    _migrate_combat_maps_size()
     _migrate_json_files()
 
 
 def _table_columns(connection: sqlite3.Connection, table: str) -> set[str]:
     rows = connection.execute(f"PRAGMA table_info({table})").fetchall()
     return {str(row[1]) for row in rows}
-
-
-def _migrate_combat_maps_size() -> None:
-    with db_connection() as connection:
-        columns = _table_columns(connection, "combat_maps")
-        if not columns:
-            return
-        if "width" not in columns:
-            connection.execute(
-                "ALTER TABLE combat_maps ADD COLUMN width INTEGER NOT NULL DEFAULT 8"
-            )
-        if "height" not in columns:
-            connection.execute(
-                "ALTER TABLE combat_maps ADD COLUMN height INTEGER NOT NULL DEFAULT 8"
-            )
 
 
 def _legacy_guild_id() -> str:
@@ -158,7 +112,8 @@ def _migrate_guild_scoped_tables() -> None:
     with db_connection() as connection:
         _migrate_sheets_guild(connection)
         _migrate_npc_names_guild(connection)
-        _migrate_player_scoped_combat(connection)
+        _drop_retired_combat_tables(connection)
+        _migrate_player_scoped_initiative(connection)
 
 
 def _migrate_sheets_guild(connection: sqlite3.Connection) -> None:
@@ -206,20 +161,13 @@ def _migrate_npc_names_guild(connection: sqlite3.Connection) -> None:
     connection.execute("ALTER TABLE npc_names_v2 RENAME TO npc_names")
 
 
-def _migrate_player_scoped_combat(connection: sqlite3.Connection) -> None:
-    combat_cols = _table_columns(connection, "combat")
-    if combat_cols and "scope_id" not in combat_cols:
-        connection.execute("DROP TABLE combat")
-        connection.execute(
-            """
-            CREATE TABLE combat (
-                guild_id TEXT NOT NULL,
-                scope_id TEXT NOT NULL,
-                state_json TEXT NOT NULL,
-                PRIMARY KEY (guild_id, scope_id)
-            )
-            """
-        )
+def _drop_retired_combat_tables(connection: sqlite3.Connection) -> None:
+    connection.execute("DROP TABLE IF EXISTS combat")
+    connection.execute("DROP TABLE IF EXISTS combat_maps")
+    connection.execute("DROP TABLE IF EXISTS combat_history")
+
+
+def _migrate_player_scoped_initiative(connection: sqlite3.Connection) -> None:
     initiative_cols = _table_columns(connection, "initiative")
     if initiative_cols and "scope_id" not in initiative_cols:
         connection.execute("DROP TABLE initiative")

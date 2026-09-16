@@ -2,7 +2,6 @@ import unittest
 
 from bot.help_text import (
     build_ai_help_sections,
-    build_combat_help_sections,
     build_help_sections,
     build_hunger_help_sections,
     build_roleplay_help_sections,
@@ -15,24 +14,12 @@ from bot.help_text import (
 
 
 class TestHelpSections(unittest.TestCase):
-    def test_main_help_includes_overview_and_combat(self) -> None:
+    def test_main_help_includes_overview_and_initiative(self) -> None:
         sections = build_help_sections(prefix=";", is_admin=False)
         keys = [section.key for section in sections]
         self.assertEqual(keys[0], "overview")
-        self.assertIn("combat", keys)
+        self.assertNotIn("combat", keys)
         self.assertIn("initiative", keys)
-
-    def test_combat_help_has_play_section(self) -> None:
-        sections = build_combat_help_sections(prefix=";", is_admin=False)
-        keys = [section.key for section in sections]
-        self.assertEqual(keys[:4], ["start", "play", "deck", "init"])
-
-    def test_combat_help_admin_section_only_for_admins(self) -> None:
-        player_sections = build_combat_help_sections(prefix=";", is_admin=False)
-        admin_sections = build_combat_help_sections(prefix=";", is_admin=True)
-        self.assertEqual(len(player_sections), 4)
-        self.assertEqual(len(admin_sections), 5)
-        self.assertEqual(admin_sections[-1].key, "admin")
 
     def test_admin_help_mentions_purge(self) -> None:
         admin = next(
@@ -45,7 +32,6 @@ class TestHelpSections(unittest.TestCase):
 
     def test_help_mentions_detailed_guides(self) -> None:
         overview = build_help_sections(prefix=";", is_admin=False)[0]
-        self.assertIn(";help combat", overview.body)
         self.assertIn(";help sheet", overview.body)
         self.assertIn(";help srd", overview.body)
         self.assertIn(";help hunger", overview.body)
@@ -68,6 +54,7 @@ class TestHelpSections(unittest.TestCase):
         self.assertEqual([section.key for section in sections], ["lookup", "search"])
         self.assertIn(";srd <type> <name>", sections[0].body)
         self.assertIn("`monster`", sections[0].body)
+        self.assertIn("`subclass`", sections[0].body)
         self.assertIn(";srd spell fireball", sections[0].footer or "")
         self.assertNotIn("spell|species", sections[0].body)
 
@@ -145,20 +132,6 @@ class TestHelpSections(unittest.TestCase):
         self.assertIn("créer un sac perso", resources.body)
         self.assertIn("met à jour la CA", resources.body)
 
-    def test_combat_help_requires_player_section(self) -> None:
-        start = next(
-            section
-            for section in build_combat_help_sections(prefix=";", is_admin=False)
-            if section.key == "start"
-        )
-        self.assertIn("salon OOC ou roleplay du joueur", start.body)
-        admin = next(
-            section
-            for section in build_combat_help_sections(prefix=";", is_admin=True)
-            if section.key == "admin"
-        )
-        self.assertIn("salon OOC/roleplay du joueur", admin.body)
-
     def test_help_embed_uses_section_color_and_fields(self) -> None:
         from bot.help_text import HELP_SHEET_COLOR, build_help_embed
 
@@ -213,10 +186,10 @@ class TestCommandHelpEmbed(unittest.TestCase):
         from bot.help_text import split_command_help
 
         description, usage, extras = split_command_help(
-            "Start combat. `;combat start [tavern]`"
+            "Add initiative. `;init add @joueur`"
         )
-        self.assertEqual(description, "Start combat.")
-        self.assertEqual(usage, "`;combat start [tavern]`")
+        self.assertEqual(description, "Add initiative.")
+        self.assertEqual(usage, "`;init add @joueur`")
         self.assertEqual(extras, ())
 
     def test_glued_usage_keeps_trailing_note(self) -> None:
@@ -281,7 +254,7 @@ class TestTutoHelpSections(unittest.TestCase):
         sections = build_tuto_help_sections(prefix=";")
         self.assertEqual(
             [section.key for section in sections],
-            ["principle", "play", "sheet", "combat"],
+            ["principle", "play", "sheet", "init"],
         )
 
     def test_mentions_essential_commands(self) -> None:

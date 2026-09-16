@@ -299,6 +299,17 @@ def lookup_candidates(
     An empty list means nothing matched. One item is a unique candidate;
     two or more should be shown as a picker.
     """
+    if kind == "subclass":
+        matches = collect_subclass_matches(query)
+        if not matches:
+            return []
+        if force_list:
+            return matches
+        if len(matches) == 1:
+            return None
+        if len(_exact_subclass_matches(matches, query)) == 1:
+            return None
+        return matches
     if kind not in FUZZY_KINDS:
         return None
     if not force_list and has_exact_name_match(kind, query):
@@ -1048,7 +1059,10 @@ def _class_archetypes(char_class: dict[str, Any]) -> list[dict[str, Any]]:
             {
                 "name": subclass["name"],
                 "slug": subclass_slug,
+                "shortName": subclass.get("shortName") or subclass["name"],
                 "desc": desc,
+                "features": _normalize_class_features(features),
+                "url": entry_url("subclass", subclass["name"], source=subclass_source),
                 "document__slug": subclass_source,
                 "document__title": index.source_title(subclass_source),
             }
@@ -1230,6 +1244,22 @@ def suggest_names(kind: str, query: str, *, limit: int = 25) -> list[str]:
     index = peek_index()
     if index is None:
         return []
+    if kind == "subclass":
+        matches = collect_subclass_matches((query or "").strip(), limit=limit)
+        suggestions: list[str] = []
+        seen: set[str] = set()
+        for item in matches:
+            class_name = str(item.get("class_name") or "").strip()
+            name = str(item.get("name") or "").strip()
+            label = f"{class_name} {name}".strip() if class_name else name
+            key = label.lower()
+            if not label or key in seen:
+                continue
+            seen.add(key)
+            suggestions.append(label)
+            if len(suggestions) >= limit:
+                break
+        return suggestions
     store_name = _KIND_NAME_STORES.get(kind)
     if not store_name:
         return []
@@ -1309,14 +1339,151 @@ async def get_equipment(slug: str, *, kind: str | None = None) -> dict[str, Any]
 
 
 def find_subclass(char_class: dict[str, Any], query: str) -> dict[str, Any] | None:
-    query_lower = query.lower().strip()
+    query_lower = query.lower().strip().replace("-", " ")
+    if not query_lower:
+        return None
+
+    def labels(archetype: dict[str, Any]) -> list[str]:
+        return [
+            str(archetype.get("name") or "").lower().replace("-", " "),
+            str(archetype.get("slug") or "").lower().replace("-", " "),
+            str(archetype.get("shortName") or "").lower().replace("-", " "),
+        ]
+
     for archetype in char_class.get("archetypes", []):
-        if archetype.get("name", "").lower() == query_lower:
+        if query_lower in labels(archetype):
             return archetype
     for archetype in char_class.get("archetypes", []):
-        if query_lower in archetype.get("name", "").lower():
+        if any(query_lower in label for label in labels(archetype) if label):
             return archetype
     return None
+
+
+def _class_named(query: str) -> tuple[dict[str, Any] | None, str]:
+    index = get_index()
+    text = query.lower().strip()
+    best_name = ""
+    best_item: dict[str, Any] | None = None
+    for name, item in index.classes_by_name.items():
+        if text == name or text.startswith(f"{name} "):
+            if len(name) > len(best_name):
+                best_name = name
+                best_item = item
+    if best_item is None:
+        return None, query.strip()
+    return best_item, query.strip()[len(best_name) :].strip()
+
+
+def collect_subclass_matches(query: str, *, limit: int = 25) -> list[dict[str, Any]]:
+    index = get_index()
+    parent, rest = _class_named(query)
+    if parent is not None and not rest:
+        exact_named = [
+            item
+            for item in index.subclasses
+            if str(item.get("name") or "").lower() == query.lower().strip()
+        ]
+        if exact_named:
+            parent = None
+    text = rest if parent is not None else query.strip()
+    scored: list[tuple[tuple[int, float], int, dict[str, Any]]] = []
+    for subclass in index.subclasses:
+        if parent is not None and not _subclass_matches_class(subclass, parent):
+            continue
+        name = str(subclass.get("name") or "")
+        short = str(subclass.get("shortName") or "")
+        class_name = str(subclass.get("className") or "")
+        class_slug = str(subclass.get("class_slug") or slugify(class_name))
+        sub_slug = str(subclass.get("slug") or slugify(short or name))
+        if parent is not None and not text:
+            score: tuple[int, float] = (0, 0.0)
+        else:
+            scored_name = _fuzzy_score(name, text)
+            if scored_name is None and short:
+                scored_name = _fuzzy_score(short, text)
+            if scored_name is None:
+                scored_name = _fuzzy_score(f"{class_name} {name}", query.strip())
+            if scored_name is None:
+                continue
+            score = scored_name
+        row = {
+            "name": name,
+            "slug": f"{class_slug}/{sub_slug}",
+            "source": subclass.get("source"),
+            "class_name": class_name,
+        }
+        scored.append((score, edition_rank(subclass), row))
+    best: dict[str, tuple[tuple[int, float], int, dict[str, Any]]] = {}
+    for score, rank, row in scored:
+        key = str(row["slug"])
+        current = best.get(key)
+        if (
+            current is None
+            or score < current[0]
+            or (score == current[0] and rank > current[1])
+        ):
+            best[key] = (score, rank, row)
+    ordered = sorted(best.values(), key=lambda item: (item[0], -item[1]))
+    return [item[2] for item in ordered[:limit]]
+
+
+async def get_subclass(slug: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    await ensure_index_loaded()
+    cleaned = slug.strip()
+    if "/" not in cleaned:
+        return await search_subclass(cleaned)
+    class_slug, sub_slug = cleaned.split("/", 1)
+    char_class = await get_class(class_slug)
+    subclass = find_subclass(char_class, sub_slug)
+    if subclass is None:
+        raise FiveToolsNotFoundError(f"No subclass found matching '{slug}'.")
+    return char_class, subclass
+
+
+def _subclass_query_labels(item: dict[str, Any]) -> list[str]:
+    name = str(item.get("name") or "").lower().strip()
+    class_name = str(item.get("class_name") or "").lower().strip()
+    labels = [name]
+    if class_name:
+        labels.append(f"{class_name} {name}")
+    return [label for label in labels if label]
+
+
+def _exact_subclass_matches(
+    matches: list[dict[str, Any]], query: str
+) -> list[dict[str, Any]]:
+    needle = query.lower().strip()
+    return [item for item in matches if needle in _subclass_query_labels(item)]
+
+
+async def search_subclass(query: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    await ensure_index_loaded()
+    text, _force_fuzzy = parse_search_query(query)
+    if not text:
+        raise FiveToolsNotFoundError("Missing search text.")
+    matches = collect_subclass_matches(text)
+    if not matches:
+        raise FiveToolsNotFoundError(f"No subclass found matching '{text}'.")
+    exact = _exact_subclass_matches(matches, text)
+    chosen = exact[0] if len(exact) == 1 else matches[0]
+    return await get_subclass(str(chosen["slug"]))
+
+
+async def resolve_subclass(
+    text: str, *, force_list: bool = False
+) -> tuple[dict[str, Any], dict[str, Any]] | list[dict[str, Any]]:
+    """Return a unique class/subclass pair, or picker matches."""
+    cleaned = text.strip()
+    if not cleaned:
+        raise FiveToolsNotFoundError("Missing search text.")
+    candidates = lookup_candidates("subclass", cleaned, force_list=force_list)
+    if candidates is None:
+        return await search_subclass(cleaned)
+    if not candidates:
+        raise FiveToolsNotFoundError(f"No subclass found matching '{cleaned}'.")
+    if len(candidates) == 1:
+        return await get_subclass(str(candidates[0].get("slug") or cleaned))
+    return candidates
 
 
 async def fetch_all(endpoint: str) -> list[dict[str, Any]]:

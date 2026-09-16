@@ -272,6 +272,68 @@ class TestMonstersAndCache(unittest.IsolatedAsyncioTestCase):
         self.assertGreater(len(pages), 1)
         self.assertIn("1/", pages[0].footer.text or "")
 
+    async def test_search_subclass_by_name(self) -> None:
+        char_class, subclass = await fivetools.search_subclass("Champion")
+        self.assertEqual(char_class["name"], "Fighter")
+        self.assertEqual(subclass["name"], "Champion")
+        self.assertTrue(subclass.get("features"))
+
+    async def test_search_subclass_with_class_prefix(self) -> None:
+        char_class, subclass = await fivetools.search_subclass("fighter battle master")
+        self.assertEqual(char_class["name"], "Fighter")
+        self.assertEqual(subclass["name"], "Battle Master")
+
+    async def test_subclass_pages_include_features(self) -> None:
+        from srd.class_view import build_class_pages
+
+        char_class, subclass = await fivetools.search_subclass("Champion")
+        pages = build_class_pages(char_class, subclass=subclass)
+        self.assertGreater(len(pages), 1)
+        self.assertIn("Champion", pages[0].title)
+        first = pages[0]
+        self.assertTrue(first.description)
+        field_names = [field.name for field in first.fields]
+        self.assertIn("🎲 Hit Dice", field_names)
+        self.assertIn("🎯 Skills", field_names)
+        self.assertIn("📚 Champion", field_names)
+        self.assertTrue(
+            any("Champion" in (page.title or "") for page in pages[1:]),
+        )
+
+    async def test_get_subclass_by_slug(self) -> None:
+        char_class, subclass = await fivetools.get_subclass("fighter/champion")
+        self.assertEqual(char_class["name"], "Fighter")
+        self.assertEqual(subclass["name"], "Champion")
+
+    async def test_lookup_candidates_subclass_unique_is_none(self) -> None:
+        self.assertIsNone(fivetools.lookup_candidates("subclass", "Champion"))
+        self.assertIsNone(
+            fivetools.lookup_candidates("subclass", "fighter battle master")
+        )
+
+    async def test_lookup_candidates_subclass_class_lists_picker(self) -> None:
+        matches = fivetools.lookup_candidates("subclass", "fighter")
+        self.assertIsNotNone(matches)
+        assert matches is not None
+        self.assertGreater(len(matches), 1)
+        self.assertTrue(all(item.get("class_name") == "Fighter" for item in matches))
+
+    async def test_lookup_candidates_subclass_force_list(self) -> None:
+        matches = fivetools.lookup_candidates("subclass", "Champion", force_list=True)
+        self.assertIsNotNone(matches)
+        assert matches is not None
+        self.assertGreaterEqual(len(matches), 1)
+        self.assertTrue(any(item["name"] == "Champion" for item in matches))
+
+    async def test_resolve_subclass_unique_and_picker(self) -> None:
+        char_class, subclass = await fivetools.resolve_subclass("fighter champion")
+        self.assertEqual(char_class["name"], "Fighter")
+        self.assertEqual(subclass["name"], "Champion")
+        picker = await fivetools.resolve_subclass("fighter")
+        self.assertIsInstance(picker, list)
+        assert isinstance(picker, list)
+        self.assertGreater(len(picker), 1)
+
 
 def _compact(value: str) -> str:
     return "".join(value.lower().split())

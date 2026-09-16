@@ -50,10 +50,21 @@ def build_class_pages(
     source_title = char_class.get("document__title", "5etools")
     url = (subclass or char_class).get("url") or char_class.get("url")
 
-    for title, body in _packed_feature_pages(char_class.get("features") or []):
+    feature_list = (
+        subclass.get("features")
+        if subclass and subclass.get("features")
+        else ([] if subclass else char_class.get("features") or [])
+    )
+    feature_owner = subclass["name"] if subclass else char_class["name"]
+    for title, body in _packed_feature_pages(feature_list):
+        heading = (
+            f"{char_class['name']} — {feature_owner} — {title}"
+            if subclass
+            else f"{char_class['name']} — {title}"
+        )
         pages.append(
             discord.Embed(
-                title=f"{char_class['name']} — {title}",
+                title=heading,
                 description=truncate(clean_markdown(body), 4000),
                 color=kind_embed_color("class"),
                 url=url,

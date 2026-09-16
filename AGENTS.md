@@ -1,6 +1,6 @@
 # discord-bot (Arkann) — notes for agents
 
-Python Discord bot for D&D: character sheets, combat, SRD lookups (5etools), campaign/lore tools, image generation.
+Python Discord bot for D&D: character sheets, initiative, SRD lookups (5etools), campaign/lore tools, image generation.
 
 ## Run and test
 
@@ -26,7 +26,7 @@ Agents: run the full suite in a **background** subagent (do not block the chat).
 
 - `main.py` — entry point
 - `bot/` — Discord events, slash commands, help, error handling
-- `sheets/`, `combat/`, `srd/`, `campaign/`, `initiative/`, `roll/` — feature modules
+- `sheets/`, `srd/`, `campaign/`, `initiative/`, `players/`, `roll/` — feature modules
 - `data/db.py` — SQLite persistence
 - `5etools/` — bundled 5e.tools data + optional homebrew JSON
 - `tests/` — unittest suite (mirror module names where possible)

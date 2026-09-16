@@ -10,7 +10,6 @@ from bot.slash import setup_slash
 from bot.tree_utils import clamp_app_command_descriptions
 from campaign.commands import setup_campaign
 from campaign.time_commands import setup_time
-from combat.commands import setup_combat
 from fun.commands import setup_fun
 from image.commands import setup_image
 from initiative.commands import setup_initiative
@@ -43,7 +42,6 @@ def _register_commands(bot: commands.Bot) -> None:
         setup_srd,
         setup_campaign,
         setup_time,
-        setup_combat,
         setup_help,
         setup_slash,
     ):
@@ -76,7 +74,6 @@ class TestSlashRegistration(unittest.TestCase):
                 "aide",
                 "roll",
                 "sheet",
-                "combat",
                 "init",
                 "srd",
                 "pc",

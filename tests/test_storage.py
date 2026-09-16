@@ -84,5 +84,39 @@ class TestUpdateSheet(unittest.TestCase):
         self.assertEqual(other.name, "Other Hero")
 
 
+class TestRetiredCombatTables(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self._original_db = db_module.DB_FILE
+        db_module.DB_FILE = Path(self._tmpdir.name) / "test.db"
+
+    def tearDown(self) -> None:
+        db_module.DB_FILE = self._original_db
+        self._tmpdir.cleanup()
+
+    def test_init_db_drops_legacy_combat_tables(self) -> None:
+        db_module.init_db()
+        with db_module.db_connection() as connection:
+            connection.executescript(
+                """
+                CREATE TABLE combat (guild_id TEXT, scope_id TEXT, state_json TEXT);
+                CREATE TABLE combat_maps (guild_id TEXT, map_id TEXT);
+                CREATE TABLE combat_history (id INTEGER);
+                """
+            )
+        db_module.init_db()
+        with db_module.db_connection() as connection:
+            names = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+        self.assertNotIn("combat", names)
+        self.assertNotIn("combat_maps", names)
+        self.assertNotIn("combat_history", names)
+        self.assertIn("initiative", names)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -19,7 +19,6 @@ from bot.slash import setup_slash
 from bot.trash_commands import setup_trash
 from campaign.commands import setup_campaign
 from campaign.time_commands import setup_time
-from combat.commands import setup_combat
 from fun.commands import setup_fun
 from image.commands import setup_image
 from initiative.commands import setup_initiative
@@ -54,7 +53,6 @@ def _register_commands(bot: commands.Bot) -> None:
         setup_campaign,
         setup_time,
         setup_hunger,
-        setup_combat,
         setup_trash,
         setup_purge,
         setup_help,
@@ -85,7 +83,6 @@ class TestGuideDumpAndPacking(unittest.TestCase):
         titles = " ".join(embed.title or "" for embed in player)
         self.assertIn("Arkann", titles)
         self.assertIn("Fiche", titles)
-        self.assertIn("Combat", titles)
         self.assertIn("règles", titles)
         self.assertIn("Faim", titles)
         self.assertNotIn("Gemini", titles)
@@ -121,7 +118,7 @@ class TestCollectAllHelp(unittest.TestCase):
         self.assertIn("❓ Commandes", titles)
         self.assertIn("❓ roll", titles)
         self.assertIn("❓ sheet gear bag", titles)
-        self.assertIn("❓ combat board", titles)
+        self.assertIn("❓ init add", titles)
         self.assertNotIn("❓ sheet", titles)
         self.assertNotIn("❓ help", joined)
 

@@ -1,7 +1,19 @@
+import asyncio
 import json
 from dataclasses import dataclass
 
 from data.db import db_connection
+
+_locks: dict[tuple[int, int], asyncio.Lock] = {}
+
+
+def lock_for(*, guild_id: int, scope_id: int) -> asyncio.Lock:
+    key = (int(guild_id), int(scope_id))
+    lock = _locks.get(key)
+    if lock is None:
+        lock = asyncio.Lock()
+        _locks[key] = lock
+    return lock
 
 
 @dataclass
