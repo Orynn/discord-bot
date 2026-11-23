@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from sheets.commands.status import _send_sheet_status
+from sheets.commands.status import _send_sheet_status, parse_short_rest_dice
 from sheets.context import target_plain
 from sheets.data import CharacterSheet
 from sheets.embeds import build_status_embed
@@ -53,9 +53,7 @@ class TestSendSheetStatus(unittest.IsolatedAsyncioTestCase):
             patch(
                 "sheets.commands.status.send_message", new_callable=AsyncMock
             ) as send,
-            patch(
-                "sheets.commands.status.delete_command", new_callable=AsyncMock
-            ),
+            patch("sheets.commands.status.delete_command", new_callable=AsyncMock),
         ):
             await _send_sheet_status(ctx, None)
         sync.assert_called_once_with(sheet, clock)
@@ -83,12 +81,8 @@ class TestSendSheetStatus(unittest.IsolatedAsyncioTestCase):
                 return_value=([], False),
             ),
             patch("sheets.commands.status.save_owner_sheet") as save,
-            patch(
-                "sheets.commands.status.send_message", new_callable=AsyncMock
-            ),
-            patch(
-                "sheets.commands.status.delete_command", new_callable=AsyncMock
-            ),
+            patch("sheets.commands.status.send_message", new_callable=AsyncMock),
+            patch("sheets.commands.status.delete_command", new_callable=AsyncMock),
         ):
             await _send_sheet_status(ctx, None)
         save.assert_not_called()
@@ -96,6 +90,21 @@ class TestSendSheetStatus(unittest.IsolatedAsyncioTestCase):
 
 class TestStatusEmbedNotices(unittest.TestCase):
     def test_omits_starvation_field_without_notices(self) -> None:
-        embed = build_status_embed(CharacterSheet(name="Hero", hp_max=10, hp_current=10))
+        embed = build_status_embed(
+            CharacterSheet(name="Hero", hp_max=10, hp_current=10)
+        )
         names = [field.name for field in embed.fields]
         self.assertNotIn("⚠️ Starvation", names)
+
+
+class TestShortRestDice(unittest.TestCase):
+    def test_defaults_and_parses_count(self) -> None:
+        self.assertEqual(parse_short_rest_dice(""), 1)
+        self.assertEqual(parse_short_rest_dice("2"), 2)
+
+    def test_rejects_non_numeric(self) -> None:
+        with self.assertRaises(ValueError) as raised:
+            parse_short_rest_dice("beaucoup")
+        self.assertIn("rest short", str(raised.exception))
+        with self.assertRaises(ValueError):
+            parse_short_rest_dice("0")

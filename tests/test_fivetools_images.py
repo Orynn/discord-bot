@@ -26,7 +26,12 @@ class TestMonsterImageUrls(unittest.TestCase):
         )
         self.assertEqual(
             image_href_url(
-                {"href": {"type": "external", "url": "https://cdn.example.com/owlbear.png"}}
+                {
+                    "href": {
+                        "type": "external",
+                        "url": "https://cdn.example.com/owlbear.png",
+                    }
+                }
             ),
             "https://cdn.example.com/owlbear.png",
         )
@@ -50,7 +55,10 @@ class TestMonsterImageUrls(unittest.TestCase):
                 "images": [
                     {
                         "type": "image",
-                        "href": {"type": "internal", "path": "bestiary/XMM/Goblins.webp"},
+                        "href": {
+                            "type": "internal",
+                            "path": "bestiary/XMM/Goblins.webp",
+                        },
                     }
                 ],
             }

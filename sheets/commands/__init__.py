@@ -9,6 +9,7 @@ from bot.messaging import send_message
 from config import PREFIX
 from sheets.commands.core import register_core_commands
 from sheets.commands.equipment import register_equipment_commands
+from sheets.commands.everyday import setup_everyday_shortcuts
 from sheets.commands.import_cmd import register_import_commands
 from sheets.commands.money import register_money_commands
 from sheets.commands.proficiencies import register_proficiency_commands
@@ -54,3 +55,4 @@ def setup_sheet(bot: Bot) -> None:
     register_slot_commands(sheet_group)
     register_status_commands(sheet_group)
     setup_status_shortcut(bot)
+    setup_everyday_shortcuts(bot)

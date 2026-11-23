@@ -26,7 +26,6 @@ from campaign.wiki import (
     rewrite_imported_links,
 )
 
-IMPORT_PLACEHOLDER = "_Import des liens…_"
 WIKI_CONTINUATION = "suite sur le wiki"
 _FILL_DELAY = 0.2
 _WIKI_DELAY = 0.3

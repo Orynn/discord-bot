@@ -25,23 +25,16 @@ _CONDITION_ALIASES: dict[str, str] = {
     "grappled": "grappled",
     "agrippe": "grappled",
     "agrippé": "grappled",
+    # Spell effects that change d20 rolls (see sheets.dice).
+    "blessed": "blessed",
+    "bless": "blessed",
+    "beni": "blessed",
+    "benediction": "blessed",
+    "baned": "baned",
+    "bane": "baned",
+    "fleau": "baned",
 }
 
-CHECK_DISADVANTAGE = frozenset({"poisoned", "frightened", "exhaustion"})
-ATTACKER_DISADVANTAGE = frozenset(
-    {"poisoned", "frightened", "blinded", "restrained", "prone"}
-)
-DEFENDER_ADVANTAGE = frozenset(
-    {
-        "blinded",
-        "restrained",
-        "prone",
-        "paralyzed",
-        "unconscious",
-        "stunned",
-        "incapacitated",
-    }
-)
 
 _CANONICAL = frozenset(_CONDITION_ALIASES.values())
 

@@ -130,7 +130,11 @@ def setup_slash(bot: Bot) -> None:
         if not kind:
             return []
         text, _force = parse_search_query(current)
+        try:
+            options = fivetools.suggest_names(str(kind), text)
+        except fivetools.IndexNotReadyError:
+            return []
         return [
             app_commands.Choice(name=option[:100], value=option[:100])
-            for option in fivetools.suggest_names(str(kind), text)
+            for option in options
         ]

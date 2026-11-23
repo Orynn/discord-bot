@@ -173,25 +173,9 @@ def format_forum_list(forums: list[discord.ForumChannel]) -> str:
     return ", ".join(f"**{forum.name}**" for forum in forums)
 
 
-def require_campaign_category(guild: discord.Guild) -> discord.CategoryChannel:
-    category = find_campaign_category(guild)
-    if category is None:
-        raise CampaignForumError(
-            "No CAMPAIGN category found. The bot will recreate it on the next startup if it has Manage Channels."
-        )
-    return category
-
-
 def has_manage_channels(guild: discord.Guild) -> bool:
     me = guild.me
     return bool(me and me.guild_permissions.manage_channels)
-
-
-def is_campaign_home_guild(guild: discord.Guild) -> bool:
-    home_id = app_config.CAMPAIGN_GUILD_ID
-    if home_id is not None:
-        return guild.id == home_id
-    return find_campaign_category(guild) is not None
 
 
 def require_manage_channels(guild: discord.Guild) -> None:

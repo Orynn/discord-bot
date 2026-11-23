@@ -7,7 +7,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from srd.fivetools.source import build_official_body, load_json, summarize_body
+from srd.fivetools.source import build_official_body, load_json
 
 REPO_URL = "https://github.com/5etools-mirror-3/5etools-src.git"
 
@@ -86,11 +86,3 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     with path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, ensure_ascii=False, indent="\t")
         handle.write("\n")
-
-
-def summarize_export(export: dict[str, Any]) -> str:
-    entries = export.get("async", {}).get("HOMEBREW_2_STORAGE") or []
-    if not entries:
-        return "empty export"
-    first_body = entries[0].get("body") or {}
-    return summarize_body(first_body)

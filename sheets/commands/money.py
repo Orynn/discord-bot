@@ -220,9 +220,7 @@ def register_money_commands(sheet_group: Group) -> None:
 
         recipient_sheet = get_sheet(user_id=recipient.id, guild_id=guild_id)
         if recipient_sheet is None:
-            await command_reply(
-                ctx, f"**{recipient.display_name}** n’a pas de fiche."
-            )
+            await command_reply(ctx, f"**{recipient.display_name}** n’a pas de fiche.")
             return
 
         try:

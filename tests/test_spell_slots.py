@@ -1,7 +1,8 @@
 import unittest
 
+from sheets.commands.slots import parse_slots_spec
 from sheets.data import CharacterSheet
-from sheets.spell_slots import SpellSlots, slots_table_for_class
+from sheets.spell_slots import SpellSlots, parse_slot_level, slots_table_for_class
 
 
 class TestSpellSlots(unittest.TestCase):
@@ -84,6 +85,22 @@ class TestSpellSlots(unittest.TestCase):
         restored = CharacterSheet.from_dict(sheet.to_dict())
         self.assertEqual(restored.spell_slots.get_current(1), 2)
         self.assertEqual(restored.spell_slots.get_maximum(2), 2)
+
+    def test_parse_slot_level_rejects_words(self) -> None:
+        with self.assertRaises(ValueError) as raised:
+            parse_slot_level("show")
+        self.assertIn("1 and 9", str(raised.exception))
+        self.assertNotIn("invalid literal", str(raised.exception))
+        self.assertEqual(parse_slot_level("1st"), 1)
+
+    def test_parse_slots_spec_show_and_spend(self) -> None:
+        self.assertIsNone(parse_slots_spec(""))
+        self.assertIsNone(parse_slots_spec("show"))
+        self.assertEqual(parse_slots_spec("1"), ("1", 1))
+        self.assertEqual(parse_slots_spec("2 2"), ("2", 2))
+        with self.assertRaises(ValueError) as raised:
+            parse_slots_spec("1 lots")
+        self.assertIn("slots 1", str(raised.exception))
 
 
 if __name__ == "__main__":

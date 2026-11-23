@@ -39,19 +39,43 @@ def save_owner_sheet(ctx: Context, owner_id: int, sheet: CharacterSheet) -> None
 def parse_mention_and_text(
     ctx: Context, text: str
 ) -> tuple[discord.Member | None, str]:
+    # Only trust mentions typed in the text: message.mentions also holds the
+    # author of a replied-to message when the reply pings.
     member = None
-    mentions = getattr(getattr(ctx, "message", None), "mentions", None) or []
-    if mentions:
-        member = mentions[0]
     match = re.search(r"<@!?(\d+)>", text)
     if match:
         user_id = int(match.group(1))
+        mentions = getattr(getattr(ctx, "message", None), "mentions", None) or []
+        member = next((m for m in mentions if getattr(m, "id", None) == user_id), None)
         if member is None and ctx.guild is not None:
             found = ctx.guild.get_member(user_id)
             if isinstance(found, discord.Member):
                 member = found
     cleaned = re.sub(r"<@!?\d+>", "", text).strip()
     return member, cleaned
+
+
+async def resolve_mention_and_text(
+    ctx: Context, text: str
+) -> tuple[discord.Member | None, str] | None:
+    """Like parse_mention_and_text, but fetches uncached members.
+
+    Replies and returns None when a typed mention can't be resolved, so the
+    command never falls back to the caller's own sheet.
+    """
+    member, cleaned = parse_mention_and_text(ctx, text)
+    match = re.search(r"<@!?(\d+)>", text)
+    if member is not None or match is None:
+        return member, cleaned
+    if ctx.guild is not None:
+        try:
+            found = await ctx.guild.fetch_member(int(match.group(1)))
+        except discord.HTTPException:
+            found = None
+        if isinstance(found, discord.Member):
+            return found, cleaned
+    await command_reply(ctx, "Joueur introuvable sur ce serveur.")
+    return None
 
 
 def target_label(member: discord.Member | None, sheet: CharacterSheet) -> str:
@@ -140,9 +164,7 @@ async def get_sheet_for_owner(
         elif owner_id != ctx.author.id:
             message = f"Ce joueur n’a pas de fiche. `{PREFIX}sheet create` d’abord."
         else:
-            message = (
-                f"Tu n’as pas de fiche. `{PREFIX}sheet create <nom>` d’abord."
-            )
+            message = f"Tu n’as pas de fiche. `{PREFIX}sheet create <nom>` d’abord."
         await command_reply(ctx, message)
         return None
 

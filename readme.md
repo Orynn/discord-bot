@@ -36,14 +36,6 @@ chmod +x deploy/install-service.sh scripts/run.sh
 
 `scripts/run.sh` is the same restart loop without systemd. Daily snapshots of `data/arkann.db` land in `data/backups/` (14 kept).
 
-This machine has no NVIDIA GPU, so `;image` uses a **CPU** worker (`stabilityai/sd-turbo`, ~512px) when `scripts/install-image.sh` has been run. `image_provider` defaults to `auto`: local first, Pollinations if the worker is still loading or down.
-
-```bash
-chmod +x scripts/install-image.sh
-./scripts/install-image.sh
-# logs: journalctl --user -u arkann-image.service -f
-```
-
 `config.json` holds bot settings (prefix, catch-up, campaign category, 5etools paths). The token lives only in `.env` (gitignored).
 
 ## Project structure
@@ -86,14 +78,12 @@ Use `;help` or `;aide` in Discord for the full in-game list (sectioned embed + e
 | Module         | Commands                                                                                          |
 | -------------- | ------------------------------------------------------------------------------------------------- |
 | **help**       | `;help`, `;aide`                                                                                  |
-| **image**      | `;image` / `;dessine` / `;draw` — illustrate this channel's RP (optional prompt focuses the shot) |
-| **sheets**     | `;sheet create/show/set/hp/money/prof/spells/slots/condition/inspire/deathsave/rest/info/import/delete` |
-| **initiative** | `;init add/next/show/remove/clear`                                                                |
+| **sheets**     | `;sheet create/show/set/hp/money/prof/spells/slots/condition/inspire/deathsave/rest/info/import/delete` · `;hp` · `;slots` · `;rest` |
 | **roll**       | `;roll` / `;r`                                                                                    |
 | **srd**        | `;srd spell/species/class/background/feat/condition/monster/weapon/armor/item` (5etools) |
 | **campaign**   | `;campaign` / `;lore` (admin) — including `;campaign document` parchment                          |
 | **players**    | `;player setup/list/remove @member` (admin) — private category + channels + sheet                 |
-| **slash**      | `/roll`, `/sheet_show`, `/sheet_hp`, `/sheet_slots`, `/init_next`, `/srd`                       |
+| **slash**      | `/roll`, `/sheet`, `/hp`, `/slots`, `/rest`, `/srd`                       |
 
 Re-export from 5e.tools when you add or update homebrew, then save to `5etools/homebrew.json`.
 

@@ -277,11 +277,6 @@ async def _bot_channel_permissions(
         return None
 
 
-async def _bot_can_manage_messages(channel: discord.abc.GuildChannel) -> bool:
-    perms = await _bot_channel_permissions(channel)
-    return perms is not None and perms.manage_messages
-
-
 async def prompt_channel_purge(ctx: Context) -> None:
     if ctx.interaction is not None and not ctx.interaction.response.is_done():
         await ctx.defer()

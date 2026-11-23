@@ -1,7 +1,9 @@
 from srd.fivetools.loader import (
     FiveToolsIndex,
+    IndexNotReadyError,
     ensure_index_loaded,
     get_index,
+    peek_index,
     reload_index,
 )
 from srd.fivetools.lookup import (
@@ -83,6 +85,7 @@ __all__ = [
     "collect_subclass_matches",
     "has_exact_name_match",
     "lookup_candidates",
+    "IndexNotReadyError",
     "ensure_index_loaded",
     "entry_url",
     "entry_url_for_item",
@@ -117,6 +120,7 @@ __all__ = [
     "page_url",
     "parse_search_query",
     "register_glossary_item",
+    "peek_index",
     "reload_index",
     "resolve_subclass",
     "search_armor",

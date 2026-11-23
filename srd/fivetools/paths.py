@@ -33,17 +33,6 @@ def is_available() -> bool:
     return has_official_source() or has_homebrew_source()
 
 
-def describe_sources() -> str:
-    parts: list[str] = []
-    if has_official_source():
-        parts.append(f"official data ({FIVETOOLS_DATA_DIR})")
-    if FIVETOOLS_HOMEBREW_FILE.is_file():
-        parts.append(f"homebrew ({FIVETOOLS_HOMEBREW_FILE})")
-    elif FIVETOOLS_EXPORT_FILE.is_file():
-        parts.append(f"export ({FIVETOOLS_EXPORT_FILE})")
-    return ", ".join(parts) if parts else "no 5etools sources configured"
-
-
 def content_fingerprint() -> str:
     """Fingerprint all inputs that feed the rules index."""
     parts: list[str] = []

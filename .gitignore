@@ -3,7 +3,6 @@ config.json
 data/arkann.db
 data/arkann.db-*
 data/backups/
-data/hf-cache/
 data/exports/
 data/portraits/
 data/monster_tokens/

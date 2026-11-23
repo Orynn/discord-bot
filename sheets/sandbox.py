@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from initiative.storage import clear_initiative
-from players.discover import sandbox_player_id, sandbox_scope_id
+from players.discover import sandbox_player_id
 from sheets.currency import Currency
 from sheets.data import CharacterSheet
 from sheets.equipment import (
@@ -75,10 +74,8 @@ def ensure_sandbox_sheet(*, guild_id: int, user_id: int) -> CharacterSheet:
 
 def reset_sandbox(*, guild_id: int, channel: Any) -> CharacterSheet:
     user_id = sandbox_player_id(channel)
-    scope_id = sandbox_scope_id(channel)
-    if user_id is None or scope_id is None:
+    if user_id is None:
         raise ValueError("Sandbox reset only works in #🚯trash.")
     sheet = build_mock_sheet()
     save_sheet(user_id=user_id, guild_id=guild_id, sheet=sheet)
-    clear_initiative(guild_id=guild_id, scope_id=scope_id)
     return sheet

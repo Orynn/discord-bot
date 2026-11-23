@@ -4,12 +4,6 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import data.db as db_module
-from initiative.storage import (
-    InitiativeEntry,
-    InitiativeState,
-    get_initiative,
-    save_initiative,
-)
 from players.discover import sandbox_player_id
 from sheets.sandbox import (
     MOCK_NAME,
@@ -52,7 +46,7 @@ class TestSandboxMock(unittest.TestCase):
         self.assertEqual(sheet.name, "Edited")
         self.assertEqual(sheet.hp_current, 3)
 
-    def test_reset_reseeds_sheet_and_clears_initiative(self) -> None:
+    def test_reset_reseeds_sheet(self) -> None:
         trash = MagicMock()
         trash.id = 404
         trash.name = "🚯trash"
@@ -62,21 +56,11 @@ class TestSandboxMock(unittest.TestCase):
             guild_id=7,
             sheet=CharacterSheet(name="Broken", hp_current=0, hp_max=10),
         )
-        save_initiative(
-            guild_id=7,
-            scope_id=404,
-            state=InitiativeState(
-                channel_id=404,
-                active_index=0,
-                order=[InitiativeEntry(name="Mock", total=10, user_id=-404)],
-            ),
-        )
         sheet = reset_sandbox(guild_id=7, channel=trash)
         self.assertEqual(sheet.name, MOCK_NAME)
         self.assertEqual(sheet.hp_current, 44)
         loaded = get_sheet(user_id=-404, guild_id=7)
         assert loaded is not None
         self.assertEqual(loaded.hp_current, 44)
-        self.assertIsNone(get_initiative(guild_id=7, scope_id=404))
         real = get_sheet(user_id=1, guild_id=7)
         self.assertIsNone(real)

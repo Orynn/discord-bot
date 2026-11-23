@@ -7,6 +7,23 @@ from sheets.data import CharacterSheet
 from sheets.portrait import clear_portrait_file
 from srd.spell_slugs import migrate_spell_slugs
 
+# Commands read a sheet, await Discord or other work, then save it whole. The
+# stored row seen at read time is kept on the object so save_sheet can refuse
+# to overwrite a change another command made in between.
+_STORED_ROW = "_stored_row"
+
+
+class SheetConflictError(RuntimeError):
+    def __init__(self) -> None:
+        super().__init__(
+            "La fiche a été modifiée en même temps par une autre commande. "
+            "Rien n’a été enregistré : réessaie."
+        )
+
+
+def _remember_row(sheet: CharacterSheet, *, key: tuple[str, str], data: str) -> None:
+    object.__setattr__(sheet, _STORED_ROW, (key, data))
+
 
 def get_sheet(*, user_id: int, guild_id: int) -> CharacterSheet | None:
     with db_connection() as connection:
@@ -16,7 +33,9 @@ def get_sheet(*, user_id: int, guild_id: int) -> CharacterSheet | None:
         ).fetchone()
     if row is None:
         return None
-    return CharacterSheet.from_dict(json.loads(row["data"]))
+    sheet = CharacterSheet.from_dict(json.loads(row["data"]))
+    _remember_row(sheet, key=(str(user_id), str(guild_id)), data=row["data"])
+    return sheet
 
 
 def save_sheet(
@@ -29,18 +48,31 @@ def save_sheet(
     migrated, _ = migrate_spell_slugs(sheet.spells)
     sheet.spells = migrated
     payload = json.dumps(sheet.to_dict(), ensure_ascii=False)
+    key = (str(user_id), str(guild_id))
+    stored = getattr(sheet, _STORED_ROW, None)
+    expected = stored[1] if stored is not None and stored[0] == key else None
 
     def _write(conn) -> None:
-        conn.execute(
-            "INSERT OR REPLACE INTO sheets (user_id, guild_id, data) VALUES (?, ?, ?)",
-            (str(user_id), str(guild_id), payload),
+        if expected is None:
+            conn.execute(
+                "INSERT OR REPLACE INTO sheets (user_id, guild_id, data) "
+                "VALUES (?, ?, ?)",
+                (*key, payload),
+            )
+            return
+        cursor = conn.execute(
+            "UPDATE sheets SET data = ? WHERE user_id = ? AND guild_id = ? AND data = ?",
+            (payload, *key, expected),
         )
+        if cursor.rowcount == 0:
+            raise SheetConflictError()
 
     if connection is None:
         with db_connection() as conn:
             _write(conn)
-        return
-    _write(connection)
+    else:
+        _write(connection)
+    _remember_row(sheet, key=key, data=payload)
 
 
 def update_sheet(

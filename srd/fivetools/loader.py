@@ -14,6 +14,21 @@ from srd.fivetools_parser import slugify
 
 _index: FiveToolsIndex | None = None
 _index_lock = asyncio.Lock()
+
+
+class FiveToolsError(Exception):
+    pass
+
+
+class IndexNotReadyError(FiveToolsError):
+    """Raised instead of building the 100+ MB index on the running event loop."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Les règles 5etools se chargent encore. Réessaie dans quelques secondes."
+        )
+
+
 _ARMOR_TYPES = frozenset({"LA", "MA", "HA", "S"})
 
 
@@ -363,7 +378,15 @@ def peek_index() -> FiveToolsIndex | None:
 def get_index() -> FiveToolsIndex:
     global _index
     if _index is None:
-        _index = _build_index()
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            # No event loop (scripts, sync tests): building inline is fine.
+            _index = _build_index()
+        else:
+            # Building here would freeze the bot for seconds; callers inside
+            # the bot must await ensure_index_loaded() first.
+            raise IndexNotReadyError()
     return _index
 
 

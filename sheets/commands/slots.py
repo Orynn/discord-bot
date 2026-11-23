@@ -7,8 +7,29 @@ from bot.command_helpers import command_reply, delete_command
 from bot.help_text import HELP_MAGIC_COLOR, command_help
 from bot.messaging import send_message
 from config import PREFIX
-from sheets.context import get_sheet_for_owner, save_owner_sheet, target_label
+from sheets.context import (
+    get_sheet_for_owner,
+    parse_mention_and_text,
+    resolve_mention_and_text,
+    save_owner_sheet,
+    target_label,
+)
 from sheets.spell_slots import level_label, parse_slot_level, slots_table_for_class
+
+_SLOT_SHOW_WORDS = frozenset({"show", "afficher", "affichage"})
+
+
+def parse_slots_spec(spec: str) -> tuple[str, int] | None:
+    tokens = spec.split()
+    if not tokens or tokens[0].casefold() in _SLOT_SHOW_WORDS:
+        return None
+    count = 1
+    if len(tokens) > 1:
+        try:
+            count = int(tokens[1])
+        except ValueError as exc:
+            raise ValueError(f"Usage: `{PREFIX}slots 1` · `{PREFIX}slots 2 2`") from exc
+    return tokens[0], count
 
 
 def _slots_help_embed(*, label: str, slots_text: str, admin_hint: str) -> discord.Embed:
@@ -37,6 +58,77 @@ def _slots_help_embed(*, label: str, slots_text: str, admin_hint: str) -> discor
     return embed
 
 
+async def spend_spell_slots(
+    ctx: Context,
+    member: discord.Member | None,
+    level: str,
+    count: int,
+) -> None:
+    result = await get_sheet_for_owner(ctx, member)
+    if result is None:
+        await delete_command(ctx)
+        return
+    owner_id, sheet = result
+
+    if not level:
+        await command_reply(
+            ctx,
+            f"Usage: `{PREFIX}slots 1` · `{PREFIX}sheet slots use [@player] <level> [count]`",
+        )
+        await delete_command(ctx)
+        return
+
+    try:
+        slot_level = parse_slot_level(level)
+        sheet.spell_slots.use(slot_level, count)
+    except ValueError as exc:
+        await command_reply(ctx, str(exc))
+        await delete_command(ctx)
+        return
+
+    save_owner_sheet(ctx, owner_id, sheet)
+    label = target_label(member, sheet)
+    await command_reply(
+        ctx,
+        (
+            f"{label} used **{count}** {level_label(slot_level)}-level slot(s). "
+            f"Now: {sheet.spell_slots.format()}."
+        ),
+    )
+    await delete_command(ctx)
+
+
+async def handle_slots_spec(ctx: Context, spec: str) -> None:
+    parsed_target = await resolve_mention_and_text(ctx, spec)
+    if parsed_target is None:
+        await delete_command(ctx)
+        return
+    member, rest = parsed_target
+    try:
+        parsed = parse_slots_spec(rest)
+    except ValueError as exc:
+        await command_reply(ctx, str(exc))
+        await delete_command(ctx)
+        return
+    if parsed is None:
+        result = await get_sheet_for_owner(ctx, member)
+        if result is None:
+            await delete_command(ctx)
+            return
+        _, sheet = result
+        label = target_label(member, sheet)
+        await command_reply(
+            ctx,
+            (
+                f"{label} spell slots: {sheet.spell_slots.format()}.\n"
+                f"`{PREFIX}slots 1` — spend a 1st-level slot"
+            ),
+        )
+        await delete_command(ctx)
+        return
+    await spend_spell_slots(ctx, member, parsed[0], parsed[1])
+
+
 def register_slot_commands(sheet_group: Group) -> None:
     @sheet_group.group(
         name="slots",
@@ -45,11 +137,19 @@ def register_slot_commands(sheet_group: Group) -> None:
         help=command_help(
             "Suivi des emplacements de sorts (pas les sorts connus).",
             f"`{PREFIX}sheet slots`",
+            f"`{PREFIX}sheet slots 1` — dépenser un emplacement de niveau 1",
         ),
     )
-    async def sheet_slots_group(
-        ctx: Context, member: discord.Member | None = None
-    ) -> None:
+    async def sheet_slots_group(ctx: Context, *, spec: str = "") -> None:
+        _, rest = parse_mention_and_text(ctx, spec)
+        if rest:
+            await handle_slots_spec(ctx, spec)
+            return
+        parsed = await resolve_mention_and_text(ctx, spec)
+        if parsed is None:
+            await delete_command(ctx)
+            return
+        member, _ = parsed
         result = await get_sheet_for_owner(ctx, member)
         if result is None:
             return
@@ -100,33 +200,7 @@ def register_slot_commands(sheet_group: Group) -> None:
         level: str = "",
         count: int = 1,
     ) -> None:
-        result = await get_sheet_for_owner(ctx, member)
-        if result is None:
-            return
-        owner_id, sheet = result
-
-        if not level:
-            await command_reply(
-                ctx,
-                f"Usage: `{PREFIX}sheet slots use [@player] <level> [count]`",
-            )
-            return
-
-        try:
-            slot_level = parse_slot_level(level)
-            sheet.spell_slots.use(slot_level, count)
-        except ValueError as exc:
-            await command_reply(ctx, str(exc))
-            return
-
-        save_owner_sheet(ctx, owner_id, sheet)
-        label = target_label(member, sheet)
-        await command_reply(
-            ctx,
-            f"{label} used **{count}** {level_label(slot_level)}-level slot(s). "
-            f"Now: {sheet.spell_slots.format()}.",
-        )
-        await delete_command(ctx)
+        await spend_spell_slots(ctx, member, level, count)
 
     @sheet_slots_group.command(
         name="recover",

@@ -1,6 +1,6 @@
 # discord-bot (Arkann) — notes for agents
 
-Python Discord bot for D&D: character sheets, initiative, SRD lookups (5etools), campaign/lore tools, image generation.
+Python Discord bot for D&D: character sheets, SRD lookups (5etools), campaign/lore tools.
 
 ## Run and test
 
@@ -26,7 +26,7 @@ Agents: run the full suite in a **background** subagent (do not block the chat).
 
 - `main.py` — entry point
 - `bot/` — Discord events, slash commands, help, error handling
-- `sheets/`, `srd/`, `campaign/`, `initiative/`, `players/`, `roll/` — feature modules
+- `sheets/`, `srd/`, `campaign/`, `players/`, `roll/` — feature modules
 - `data/db.py` — SQLite persistence
 - `5etools/` — bundled 5e.tools data + optional homebrew JSON
 - `tests/` — unittest suite (mirror module names where possible)
@@ -36,6 +36,17 @@ Agents: run the full suite in a **background** subagent (do not block the chat).
 - Token: `.env` (`DISCORD_TOKEN`) — never commit
 - Bot settings: `config.json` (copy from `config.example.json`)
 - Homebrew: `5etools/homebrew.json` (gitignored)
+
+## Deploy
+
+Remote: `git@github.com:Orynn/discord-bot.git` (SSH). After `git pull` on the machine that runs the bot:
+
+```bash
+systemctl --user restart arkann.service
+# logs: journalctl --user -u arkann.service -f
+```
+
+Install the unit once with `./deploy/install-service.sh` (see `readme.md`).
 
 ## Conventions
 

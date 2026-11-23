@@ -13,13 +13,6 @@ async def _admin_only_predicate(ctx: Context) -> bool:
 admin_only = check(_admin_only_predicate)
 
 
-async def _staff_only_predicate(ctx: Context) -> bool:
-    return is_staff(ctx)
-
-
-staff_only = check(_staff_only_predicate)
-
-
 def _as_member(
     guild: discord.Guild | None, user: User | discord.Member | None
 ) -> discord.Member | None:

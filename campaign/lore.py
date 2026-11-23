@@ -295,42 +295,6 @@ def filter_campaign_entries(
     return matched
 
 
-def select_campaign_entries(
-    entries: list[CampaignEntry],
-    query: str,
-    *,
-    limit: int = 3,
-) -> list[CampaignEntry]:
-    terms = extract_query_terms(query)
-    if not terms or limit <= 0:
-        return []
-    scored = [(score_campaign_entry(entry, terms), entry) for entry in entries]
-    scored = [(score, entry) for score, entry in scored if score > 0]
-    scored.sort(key=lambda item: (-item[0], item[1].section, item[1].title))
-    return [entry for _score, entry in scored[:limit]]
-
-
-def format_campaign_index(entries: list[CampaignEntry]) -> str:
-    if not entries:
-        return "No campaign forum entries found."
-
-    by_section: dict[str, list[CampaignEntry]] = {}
-    for entry in entries:
-        by_section.setdefault(entry.section, []).append(entry)
-
-    lines = ["**Campaign — index**"]
-    for section, section_entries in by_section.items():
-        lines.append(f"\n**{section}** ({len(section_entries)})")
-        for entry in section_entries:
-            lines.append(f"• {entry.link}")
-    return "\n".join(lines)
-
-
-def format_campaign_entry(entry: CampaignEntry) -> str:
-    body = entry.body.strip() if entry.body.strip() else "_(no text in this thread)_"
-    return f"**{entry.section}** — {entry.link}\n\n{body}"
-
-
 def clear_campaign_cache(guild_id: int | None = None) -> None:
     if guild_id is None:
         _cache_by_guild.clear()

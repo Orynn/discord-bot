@@ -20,13 +20,11 @@ from bot.trash_commands import setup_trash
 from campaign.commands import setup_campaign
 from campaign.time_commands import setup_time
 from fun.commands import setup_fun
-from image.commands import setup_image
-from initiative.commands import setup_initiative
 from npc.commands import setup_npc
 from party.commands import setup_party
 from pc.commands import setup_pc
 from players.commands import setup_player
-from ai.commands import setup_ai
+from combat.commands import setup_combat
 from roll.commands import setup_roll
 from scene.commands import setup_desc
 from scene.rp_commands import setup_rp
@@ -40,13 +38,11 @@ def _register_commands(bot: commands.Bot) -> None:
         setup_npc,
         setup_desc,
         setup_rp,
-        setup_ai,
         setup_fun,
-        setup_image,
         setup_pc,
         setup_roll,
+        setup_combat,
         setup_sheet,
-        setup_initiative,
         setup_party,
         setup_player,
         setup_srd,
@@ -87,7 +83,7 @@ class TestGuideDumpAndPacking(unittest.TestCase):
         self.assertIn("Faim", titles)
         self.assertNotIn("Gemini", titles)
         admin_titles = " ".join(embed.title or "" for embed in admin)
-        self.assertIn("Gemini", admin_titles)
+        self.assertNotIn("Gemini", admin_titles)
         self.assertGreater(len(admin), len(player))
         self.assertFalse(
             any(
@@ -118,7 +114,8 @@ class TestCollectAllHelp(unittest.TestCase):
         self.assertIn("❓ Commandes", titles)
         self.assertIn("❓ roll", titles)
         self.assertIn("❓ sheet gear bag", titles)
-        self.assertIn("❓ init add", titles)
+        self.assertIn("❓ hp", titles)
+        self.assertNotIn("❓ init add", titles)
         self.assertNotIn("❓ sheet", titles)
         self.assertNotIn("❓ help", joined)
 

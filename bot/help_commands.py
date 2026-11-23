@@ -7,11 +7,10 @@ from discord.ext.commands import CheckFailure, Group, MinimalHelpCommand
 from discord.ext.commands.bot import Bot
 from discord.ext.commands.context import Context
 
-from bot.checks import is_admin, is_staff
+from bot.checks import is_admin
 from bot.command_helpers import command_reply, delete_command
 from bot.help_text import (
     HELP_COLOR,
-    build_ai_help_sections,
     build_command_help_embed,
     build_group_help_embed,
     build_guide_help_embeds,
@@ -24,7 +23,6 @@ from bot.help_text import (
     build_tuto_help_sections,
     command_help,
     command_help_summary,
-    is_ai_help_topic,
     is_help_all_topic,
     is_roleplay_help_topic,
     is_tuto_help_topic,
@@ -36,7 +34,7 @@ from config import PREFIX
 
 HELP_FLAGS = frozenset({"-h", "--help", "-help"})
 HELP_WORDS = frozenset({"help", "aide"})
-_SECTIONED_GROUPS = frozenset({"sheet", "srd", "hunger", "ai"})
+_SECTIONED_GROUPS = frozenset({"sheet", "srd", "hunger"})
 _HELP_ALL_PAUSE_SECONDS = 0.35
 _TEXT_KWARG_NAMES = frozenset(
     {
@@ -336,18 +334,6 @@ async def send_srd_help(ctx: Context) -> None:
     )
 
 
-async def send_ai_help(ctx: Context) -> None:
-    if not is_staff(ctx):
-        await command_reply(ctx, "Tu n’as pas le droit d’utiliser cette commande.")
-        await delete_command(ctx)
-        return
-    await _send_sectioned_help(
-        ctx,
-        title="Gemini",
-        sections=build_ai_help_sections(prefix=PREFIX),
-    )
-
-
 async def send_tuto_help(ctx: Context) -> None:
     await _send_sectioned_help(
         ctx,
@@ -369,9 +355,6 @@ class ArkannHelpCommand(MinimalHelpCommand):
                 title="Jeu de rôle",
                 sections=build_roleplay_help_sections(prefix=PREFIX),
             )
-            return
-        if is_ai_help_topic(command):
-            await send_ai_help(ctx)
             return
         if is_tuto_help_topic(command):
             await send_tuto_help(ctx)
@@ -412,10 +395,6 @@ class ArkannHelpCommand(MinimalHelpCommand):
                     is_admin=is_admin(ctx),
                 ),
             )
-            return
-
-        if group.qualified_name == "ai":
-            await send_ai_help(ctx)
             return
 
         subcommands = []
@@ -556,9 +535,6 @@ def setup_help(bot: Bot) -> None:
                 title="Jeu de rôle",
                 sections=build_roleplay_help_sections(prefix=PREFIX),
             )
-            return
-        if is_ai_help_topic(query):
-            await send_ai_help(ctx)
             return
         if is_tuto_help_topic(query):
             await send_tuto_help(ctx)

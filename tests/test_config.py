@@ -50,7 +50,6 @@ class TestConfigImport(unittest.TestCase):
             else:
                 app_config.config["campaign_guild_id"] = previous_guild
 
-
     def test_is_home_guild_uses_id_then_name(self) -> None:
         import config as app_config
         from types import SimpleNamespace

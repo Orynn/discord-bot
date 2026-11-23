@@ -9,6 +9,7 @@ from urllib.parse import quote
 from srd.fivetools.edition import edition_rank, url_target
 from srd.fivetools.images import monster_token_url
 from srd.fivetools.loader import (
+    FiveToolsError,
     FiveToolsIndex,
     ensure_index_loaded,
     get_index,
@@ -49,10 +50,6 @@ _KIND_PAGES = {
     "skill": "skills",
     "monster": "bestiary",
 }
-
-
-class FiveToolsError(Exception):
-    pass
 
 
 class FiveToolsNotFoundError(FiveToolsError):

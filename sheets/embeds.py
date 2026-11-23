@@ -55,9 +55,7 @@ def build_status_embed(
         color=status_embed_color(sheet),
     )
 
-    hp_value = (
-        f"**{sheet.hp_current}/{sheet.hp_max}**" if sheet.hp_max else "—"
-    )
+    hp_value = f"**{sheet.hp_current}/{sheet.hp_max}**" if sheet.hp_max else "—"
     embed.add_field(name="❤️ HP", value=hp_value, inline=True)
     embed.add_field(
         name="✨ Inspiration",

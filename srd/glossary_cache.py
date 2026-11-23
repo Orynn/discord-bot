@@ -1,15 +1,9 @@
 from dataclasses import asdict
-from pathlib import Path
 from typing import Any
 
 from data.db import get_json, set_json
 
 CACHE_KEY = "srd_glossary_v5_monsters"
-
-
-def file_fingerprint(path: Path) -> str:
-    stat = path.stat()
-    return f"{stat.st_mtime_ns}:{stat.st_size}"
 
 
 def save_glossary(entries: list[Any], *, fingerprint: str) -> None:

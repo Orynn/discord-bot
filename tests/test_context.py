@@ -3,7 +3,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import discord
 
-from sheets.context import infer_player_id, parse_mention_and_text, resolve_owner
+from sheets.context import (
+    infer_player_id,
+    parse_mention_and_text,
+    resolve_mention_and_text,
+    resolve_owner,
+)
 
 
 class TestParseMentionAndText(unittest.TestCase):
@@ -17,10 +22,20 @@ class TestParseMentionAndText(unittest.TestCase):
     def test_strips_player_mention(self) -> None:
         ctx = MagicMock()
         player = MagicMock(spec=discord.Member)
+        player.id = 123
         ctx.message.mentions = [player]
         member, text = parse_mention_and_text(ctx, "<@123> dagger")
         self.assertIs(member, player)
         self.assertEqual(text, "dagger")
+
+    def test_ignores_reply_ping_without_typed_mention(self) -> None:
+        ctx = MagicMock()
+        replied_author = MagicMock(spec=discord.Member)
+        replied_author.id = 456
+        ctx.message.mentions = [replied_author]
+        member, text = parse_mention_and_text(ctx, "-4")
+        self.assertIsNone(member)
+        self.assertEqual(text, "-4")
 
     def test_resolves_raw_mention_from_text(self) -> None:
         player = MagicMock(spec=discord.Member)
@@ -31,6 +46,38 @@ class TestParseMentionAndText(unittest.TestCase):
         self.assertIs(member, player)
         self.assertEqual(text, "dagger")
         ctx.guild.get_member.assert_called_once_with(123)
+
+
+class TestResolveMentionAndText(unittest.IsolatedAsyncioTestCase):
+    async def test_fetches_uncached_member(self) -> None:
+        player = MagicMock(spec=discord.Member)
+        ctx = MagicMock()
+        ctx.message.mentions = []
+        ctx.guild.get_member.return_value = None
+        ctx.guild.fetch_member = AsyncMock(return_value=player)
+        parsed = await resolve_mention_and_text(ctx, "<@123> -4")
+        self.assertEqual(parsed, (player, "-4"))
+        ctx.guild.fetch_member.assert_awaited_once_with(123)
+
+    async def test_unknown_mention_replies_instead_of_targeting_self(self) -> None:
+        ctx = MagicMock()
+        ctx.message.mentions = []
+        ctx.guild.get_member.return_value = None
+        ctx.guild.fetch_member = AsyncMock(
+            side_effect=discord.NotFound(MagicMock(status=404), "Unknown Member")
+        )
+        with unittest.mock.patch(
+            "sheets.context.command_reply", new_callable=AsyncMock
+        ) as reply:
+            parsed = await resolve_mention_and_text(ctx, "<@123> -4")
+        self.assertIsNone(parsed)
+        reply.assert_awaited_once()
+
+    async def test_no_mention_returns_text(self) -> None:
+        ctx = MagicMock()
+        ctx.message.mentions = []
+        parsed = await resolve_mention_and_text(ctx, "-4")
+        self.assertEqual(parsed, (None, "-4"))
 
 
 class TestResolveOwner(unittest.IsolatedAsyncioTestCase):
@@ -64,9 +111,7 @@ class TestResolveOwner(unittest.IsolatedAsyncioTestCase):
             owner_id = await resolve_owner(ctx, member)
         self.assertIsNone(owner_id)
         reply.assert_awaited_once()
-        self.assertIn(
-            "fiche d’un autre joueur", reply.await_args.args[1]
-        )
+        self.assertIn("fiche d’un autre joueur", reply.await_args.args[1])
 
     async def test_staff_without_mention_uses_player_section(self) -> None:
         ctx = MagicMock()
@@ -142,9 +187,7 @@ class TestResolveOwner(unittest.IsolatedAsyncioTestCase):
         ctx.channel.name = "🚯trash"
         ctx.channel.id = 404
 
-        with unittest.mock.patch(
-            "sheets.context.ensure_sandbox_sheet"
-        ) as ensure:
+        with unittest.mock.patch("sheets.context.ensure_sandbox_sheet") as ensure:
             self.assertEqual(infer_player_id(ctx), -404)
             owner_id = await resolve_owner(ctx, None)
         self.assertEqual(owner_id, -404)

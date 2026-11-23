@@ -88,9 +88,7 @@ class TestSheetShowHands(unittest.TestCase):
         self.assertNotIn("**Potion**", belt.value)
 
     def test_url_portrait_is_thumbnail(self) -> None:
-        sheet = CharacterSheet(
-            name="Hero", image_url="https://example.com/hero.png"
-        )
+        sheet = CharacterSheet(name="Hero", image_url="https://example.com/hero.png")
         embed = build_sheet_embed(sheet=sheet)
         self.assertEqual(embed.thumbnail.url, "https://example.com/hero.png")
 
@@ -170,9 +168,7 @@ class TestStatusEmbed(unittest.TestCase):
 
     def test_recap_shows_starvation_notices(self) -> None:
         sheet = CharacterSheet(name="Hero", hp_current=10, hp_max=10)
-        embed = build_status_embed(
-            sheet, notices=["starvation → exhaustion 1"]
-        )
+        embed = build_status_embed(sheet, notices=["starvation → exhaustion 1"])
         starvation = next(
             field for field in embed.fields if field.name == "⚠️ Starvation"
         )

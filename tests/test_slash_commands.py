@@ -1,8 +1,10 @@
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
 from discord.ext import commands
+from discord.ext.commands.view import StringView
 
 from bot.command_helpers import delete_command
 from bot.help_commands import setup_help
@@ -11,13 +13,11 @@ from bot.tree_utils import clamp_app_command_descriptions
 from campaign.commands import setup_campaign
 from campaign.time_commands import setup_time
 from fun.commands import setup_fun
-from image.commands import setup_image
-from initiative.commands import setup_initiative
 from npc.commands import setup_npc
 from party.commands import setup_party
 from pc.commands import setup_pc
 from players.commands import setup_player
-from ai.commands import setup_ai
+from combat.commands import setup_combat
 from roll.commands import setup_roll
 from scene.commands import setup_desc
 from scene.rp_commands import setup_rp
@@ -30,13 +30,11 @@ def _register_commands(bot: commands.Bot) -> None:
         setup_npc,
         setup_desc,
         setup_rp,
-        setup_ai,
         setup_fun,
-        setup_image,
         setup_pc,
         setup_roll,
+        setup_combat,
         setup_sheet,
-        setup_initiative,
         setup_party,
         setup_player,
         setup_srd,
@@ -74,19 +72,19 @@ class TestSlashRegistration(unittest.TestCase):
                 "aide",
                 "roll",
                 "sheet",
-                "init",
                 "srd",
                 "pc",
+                "hp",
+                "slots",
+                "rest",
                 "desc",
                 "think",
                 "whisper",
                 "scene",
                 "look",
-                "ai",
                 "campaign",
                 "time",
                 "get",
-                "image",
                 "status",
                 "tuto",
             }.issubset(names)
@@ -123,13 +121,25 @@ class TestSlashRegistration(unittest.TestCase):
             for command in self.bot.tree.get_commands()
             if command.name == "roll"
         )
-        roll_options = {option.name for option in roll.parameters}
+        roll_options = [option.name for option in roll.parameters]
+        self.assertEqual(roll_options[0], "args")
         self.assertTrue({"args", "bonus", "avantage"}.issubset(roll_options))
         avantage = next(
             option for option in roll.parameters if option.name == "avantage"
         )
         choice_values = {choice.value for choice in (avantage.choices or [])}
         self.assertEqual(choice_values, {"advantage", "disadvantage"})
+
+        desc = next(
+            command
+            for command in self.bot.tree.get_commands()
+            if command.name == "desc"
+        )
+        child_names = {child.name for child in desc.commands}
+        self.assertIn("text", child_names)
+        narrate = next(child for child in desc.commands if child.name == "text")
+        narrate_options = {option.name for option in narrate.parameters}
+        self.assertTrue({"text", "file"}.issubset(narrate_options))
 
     def test_registers_sheet_gear_custom(self) -> None:
         command = self.bot.get_command("sheet gear custom")
@@ -153,3 +163,27 @@ class TestDeleteCommandSlash(unittest.IsolatedAsyncioTestCase):
         ctx.defer.assert_awaited_once_with(ephemeral=True)
         ctx.interaction.delete_original_response.assert_awaited_once()
         ctx.message.delete.assert_not_called()
+
+
+class TestRollArgumentOrder(unittest.IsolatedAsyncioTestCase):
+    async def _parse_prefix_args(self, rest: str) -> dict:
+        bot = commands.Bot(command_prefix=";", intents=discord.Intents.none())
+        setup_roll(bot)
+        command = bot.get_command("roll")
+        ctx = SimpleNamespace(
+            view=StringView(rest),
+            message=SimpleNamespace(attachments=[]),
+            command=command,
+            interaction=None,
+        )
+        await command._parse_arguments(ctx)
+        return ctx.kwargs
+
+    async def test_prefix_skill_goes_to_args_not_member(self) -> None:
+        kwargs = await self._parse_prefix_args("perception")
+        self.assertEqual(kwargs["args"], "perception")
+        self.assertNotIn("member", kwargs)
+
+    async def test_prefix_keeps_advantage_in_args(self) -> None:
+        kwargs = await self._parse_prefix_args("adv perception")
+        self.assertEqual(kwargs["args"], "adv perception")

@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from sheets.data import CharacterSheet
 from PIL import Image
@@ -38,6 +38,32 @@ class TestPortraitHelpers(unittest.TestCase):
             parse_image_url("not-a-url")
         with self.assertRaises(ValueError):
             parse_image_url("ftp://files.example.com/hero.png")
+
+    def test_parse_image_url_rejects_internal_hosts(self) -> None:
+        for url in (
+            "http://localhost:8080/admin",
+            "http://127.0.0.1/x.png",
+            "http://192.168.1.10/x.png",
+            "http://[::1]/x.png",
+            "http://169.254.169.254/latest/meta-data",
+            "http://nas.local/x.png",
+        ):
+            with self.assertRaises(ValueError, msg=url):
+                parse_image_url(url)
+
+    def test_download_skips_hosts_resolving_to_private_ips(self) -> None:
+        import sheets.portrait as portrait
+
+        private = [(None, None, None, None, ("10.0.0.5", 0))]
+        with (
+            patch.object(portrait.socket, "getaddrinfo", return_value=private),
+            patch.object(portrait._OPENER, "open") as opened,
+        ):
+            result = portrait.cache_portrait_from_url(
+                guild_id=1, user_id=2, url="https://evil.example.com/x.png"
+            )
+        self.assertIsNone(result)
+        opened.assert_not_called()
 
     def test_roundtrip_sheet_image_url(self) -> None:
         sheet = CharacterSheet(name="Hero", image_url="https://example.com/a.png")

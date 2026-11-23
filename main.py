@@ -10,21 +10,20 @@ VoiceClient.warn_dave = False
 from discord.flags import Intents
 
 import bot.command_parser  # noqa: F401 — relax French apostrophes in command parsing
-from ai.commands import setup_ai
 from bot.events import register_events
 from bot.help_commands import maybe_send_command_help, setup_help
 from bot.logging_config import setup_logging
 from bot.purge_commands import setup_purge
 from bot.slash import setup_slash
+from bot.slash_globals import purge_stale_global_app_commands
 from bot.trash_commands import setup_trash
 from bot.tree_utils import clamp_app_command_descriptions
 from campaign.commands import setup_campaign
 from campaign.time_commands import setup_time
+from combat.commands import setup_combat
 from config import CAMPAIGN_GUILD_ID, PREFIX, require_token
 from data.db import init_db
 from fun.commands import setup_fun
-from image.commands import setup_image
-from initiative.commands import setup_initiative
 from npc.commands import setup_npc
 from party.commands import setup_party
 from pc.commands import setup_pc
@@ -60,6 +59,15 @@ class ArkannBot(commands.Bot):
             logger.info("Synced %s slash command(s).", len(synced))
         except Exception:
             logger.exception("Slash command sync failed")
+            return
+        # Only drop the stale globals once the guild copy is live.
+        if CAMPAIGN_GUILD_ID is not None:
+            try:
+                removed = await purge_stale_global_app_commands(self)
+                if removed:
+                    logger.info("Purged %s stale global slash command(s).", removed)
+            except Exception:
+                logger.exception("Stale global slash command purge failed")
 
     async def close(self) -> None:
         from campaign.wiki import close_session as close_wiki_session
@@ -82,13 +90,11 @@ COMMAND_SETUPS = (
     setup_npc,
     setup_desc,
     setup_rp,
-    setup_ai,
     setup_fun,
-    setup_image,
     setup_pc,
     setup_roll,
+    setup_combat,
     setup_sheet,
-    setup_initiative,
     setup_party,
     setup_player,
     setup_srd,

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import io
+import ipaddress
+import socket
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -25,11 +27,60 @@ def is_image_attachment(attachment: discord.Attachment) -> bool:
     return name.endswith(PORTRAIT_SUFFIXES)
 
 
+def _is_public_ip(address: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(address.split("%", 1)[0])
+    except ValueError:
+        return False
+    return ip.is_global and not ip.is_multicast
+
+
+def _is_local_hostname(host: str) -> bool:
+    lowered = host.casefold().rstrip(".")
+    if lowered == "localhost" or lowered.endswith((".localhost", ".local")):
+        return True
+    try:
+        ipaddress.ip_address(lowered)
+    except ValueError:
+        return False
+    return not _is_public_ip(lowered)
+
+
+def _host_resolves_publicly(host: str) -> bool:
+    """True only when every address the host resolves to is public."""
+    if _is_local_hostname(host):
+        return False
+    try:
+        infos = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
+    except (OSError, UnicodeError):
+        return False
+    addresses = {info[4][0] for info in infos}
+    return bool(addresses) and all(_is_public_ip(address) for address in addresses)
+
+
+class _PublicOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
+    # A public URL must not be able to bounce the bot onto an internal host.
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        target = urlparse(newurl)
+        if target.scheme not in {"http", "https"} or not _host_resolves_publicly(
+            target.hostname or ""
+        ):
+            raise urllib.error.URLError("Redirect to a non-public address refused.")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+_OPENER = urllib.request.build_opener(_PublicOnlyRedirectHandler)
+
+
 def parse_image_url(text: str) -> str:
     cleaned = text.strip()
     parsed = urlparse(cleaned)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise ValueError("Need an http(s) image URL, or attach a picture.")
+    if _is_local_hostname(parsed.hostname):
+        raise ValueError(
+            "Cette adresse n’est pas publique : utilise une image en ligne."
+        )
     return cleaned
 
 
@@ -68,11 +119,17 @@ def cache_portrait_from_url(
     user_id: int,
     url: str,
 ) -> Path | None:
+    """Blocking download; call it through asyncio.to_thread from the bot."""
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not _host_resolves_publicly(
+        parsed.hostname or ""
+    ):
+        return None
     try:
         request = urllib.request.Request(
             url, headers={"User-Agent": "Arkann-portrait/1.0"}
         )
-        with urllib.request.urlopen(request, timeout=4) as response:
+        with _OPENER.open(request, timeout=4) as response:
             data = response.read(MAX_PORTRAIT_BYTES + 1)
         if not data or len(data) > MAX_PORTRAIT_BYTES:
             return None

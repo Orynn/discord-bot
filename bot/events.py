@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 import discord
@@ -24,6 +25,7 @@ from bot.views import register_persistent_views
 from campaign.forums import CampaignForumError, ensure_default_campaign_forums
 from config import PREFIX, is_home_guild
 from players.discover import refresh_guild_player_sections, sync_guild_player_sections
+from sheets.storage import SheetConflictError
 from srd import fivetools, glossary
 from srd.fivetools.paths import is_available
 
@@ -54,9 +56,46 @@ async def _error_reply(ctx: Context, message: str) -> None:
 
 
 def register_events(bot: Bot) -> None:
+    started = False
+    catchup_lock = asyncio.Lock()
+    # Keep references so background tasks are not garbage-collected mid-run.
+    background_tasks: set[asyncio.Task] = set()
+
+    def _spawn(coro) -> None:
+        task = asyncio.create_task(coro)
+        background_tasks.add(task)
+        task.add_done_callback(background_tasks.discard)
+
+    async def _catch_up() -> None:
+        if catchup_lock.locked():
+            return
+        async with catchup_lock:
+            try:
+                await catch_up_missed_commands(bot=bot)
+            except Exception:
+                logger.exception("Catch-up failed")
+
+    @bot.before_invoke
+    async def _wait_for_rules_index(ctx: Context) -> None:
+        # Commands that read 5etools data wait for the background load instead
+        # of building the index synchronously and freezing the whole bot.
+        if fivetools.peek_index() is None and is_available():
+            try:
+                await fivetools.ensure_index_loaded()
+            except Exception:
+                logger.exception("5etools index load failed")
+
     @bot.event
     async def on_ready() -> None:
+        nonlocal started
         logger.info("Logged in as %s", bot.user)
+        if started:
+            # on_ready fires again after a reconnect (e.g. the host slept):
+            # only catch up on what was missed, the rest is already set up.
+            logger.info("Reconnected; catching up missed commands only.")
+            _spawn(_catch_up())
+            return
+        started = True
         reset_session_tracking()
         register_persistent_views(bot)
 
@@ -109,12 +148,9 @@ def register_events(bot: Bot) -> None:
                     except Exception:
                         logger.exception("Rules glossary load failed")
 
-            try:
-                await catch_up_missed_commands(bot=bot)
-            except Exception:
-                logger.exception("Catch-up failed")
+            await _catch_up()
 
-        bot.loop.create_task(_startup())
+        _spawn(_startup())
 
     def _refresh_sections(guild: discord.Guild | None) -> None:
         if guild is None:
@@ -168,8 +204,9 @@ def register_events(bot: Bot) -> None:
         if is_command_help_shown(error):
             return
 
-        if is_catchup_invoke(ctx):
-            ctx.command_failed = True
+        original = getattr(error, "original", None)
+        if isinstance(original, (fivetools.IndexNotReadyError, SheetConflictError)):
+            await _error_reply(ctx, str(original))
             return
 
         if isinstance(error, commands.CommandOnCooldown):
@@ -239,6 +276,12 @@ def register_events(bot: Bot) -> None:
                 SERVER_ONLY
                 if interaction.guild is None
                 else "Tu n’as pas le droit d’utiliser cette commande."
+            )
+        elif isinstance(error, discord.app_commands.CommandSignatureMismatch):
+            message = (
+                "Cette commande slash n’est pas à jour sur Discord "
+                f"(le bot vient peut‑être d’être mis à jour). Réessaie dans une minute, "
+                f"ou utilise la même commande avec `{PREFIX}`."
             )
         else:
             logger.exception(

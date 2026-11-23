@@ -244,13 +244,9 @@ class TestShowAllHungerNotices(unittest.IsolatedAsyncioTestCase):
         ctx.author.id = 42
         with (
             patch("sheets.commands.hunger.is_staff", return_value=True),
-            patch(
-                "sheets.commands.hunger._party_user_ids", return_value=[42]
-            ),
+            patch("sheets.commands.hunger._party_user_ids", return_value=[42]),
             patch("sheets.commands.hunger.get_sheet", return_value=sheet),
-            patch(
-                "sheets.commands.hunger.get_clock", return_value=MagicMock()
-            ),
+            patch("sheets.commands.hunger.get_clock", return_value=MagicMock()),
             patch(
                 "sheets.commands.hunger.apply_clock_hunger",
                 return_value=(["starvation → exhaustion 1"], True),
@@ -259,9 +255,7 @@ class TestShowAllHungerNotices(unittest.IsolatedAsyncioTestCase):
             patch(
                 "sheets.commands.hunger.send_message", new_callable=AsyncMock
             ) as send,
-            patch(
-                "sheets.commands.hunger.delete_command", new_callable=AsyncMock
-            ),
+            patch("sheets.commands.hunger.delete_command", new_callable=AsyncMock),
         ):
             await _show_all(ctx)
         save.assert_called_once()
@@ -277,24 +271,16 @@ class TestShowAllHungerNotices(unittest.IsolatedAsyncioTestCase):
         ctx.author.id = 42
         with (
             patch("sheets.commands.hunger.is_staff", return_value=True),
-            patch(
-                "sheets.commands.hunger._party_user_ids", return_value=[42]
-            ),
+            patch("sheets.commands.hunger._party_user_ids", return_value=[42]),
             patch("sheets.commands.hunger.get_sheet", return_value=sheet),
-            patch(
-                "sheets.commands.hunger.get_clock", return_value=MagicMock()
-            ),
+            patch("sheets.commands.hunger.get_clock", return_value=MagicMock()),
             patch(
                 "sheets.commands.hunger.apply_clock_hunger",
                 return_value=([], False),
             ),
             patch("sheets.commands.hunger.save_owner_sheet") as save,
-            patch(
-                "sheets.commands.hunger.send_message", new_callable=AsyncMock
-            ),
-            patch(
-                "sheets.commands.hunger.delete_command", new_callable=AsyncMock
-            ),
+            patch("sheets.commands.hunger.send_message", new_callable=AsyncMock),
+            patch("sheets.commands.hunger.delete_command", new_callable=AsyncMock),
         ):
             await _show_all(ctx)
         save.assert_not_called()

@@ -76,14 +76,6 @@ def init_db() -> None:
                 guild_id TEXT PRIMARY KEY,
                 currency TEXT NOT NULL
             );
-            CREATE TABLE IF NOT EXISTS initiative (
-                guild_id TEXT NOT NULL,
-                scope_id TEXT NOT NULL,
-                channel_id TEXT NOT NULL,
-                active_index INTEGER NOT NULL DEFAULT 0,
-                order_json TEXT NOT NULL,
-                PRIMARY KEY (guild_id, scope_id)
-            );
             CREATE TABLE IF NOT EXISTS stashed_gear (
                 guild_id TEXT NOT NULL,
                 place_key TEXT NOT NULL,
@@ -113,7 +105,8 @@ def _migrate_guild_scoped_tables() -> None:
         _migrate_sheets_guild(connection)
         _migrate_npc_names_guild(connection)
         _drop_retired_combat_tables(connection)
-        _migrate_player_scoped_initiative(connection)
+        _drop_retired_initiative_table(connection)
+        _drop_retired_ai_context(connection)
 
 
 def _migrate_sheets_guild(connection: sqlite3.Connection) -> None:
@@ -167,22 +160,12 @@ def _drop_retired_combat_tables(connection: sqlite3.Connection) -> None:
     connection.execute("DROP TABLE IF EXISTS combat_history")
 
 
-def _migrate_player_scoped_initiative(connection: sqlite3.Connection) -> None:
-    initiative_cols = _table_columns(connection, "initiative")
-    if initiative_cols and "scope_id" not in initiative_cols:
-        connection.execute("DROP TABLE initiative")
-        connection.execute(
-            """
-            CREATE TABLE initiative (
-                guild_id TEXT NOT NULL,
-                scope_id TEXT NOT NULL,
-                channel_id TEXT NOT NULL,
-                active_index INTEGER NOT NULL DEFAULT 0,
-                order_json TEXT NOT NULL,
-                PRIMARY KEY (guild_id, scope_id)
-            )
-            """
-        )
+def _drop_retired_initiative_table(connection: sqlite3.Connection) -> None:
+    connection.execute("DROP TABLE IF EXISTS initiative")
+
+
+def _drop_retired_ai_context(connection: sqlite3.Connection) -> None:
+    connection.execute("DELETE FROM kv_store WHERE key LIKE 'ai_context:%'")
 
 
 def _migrate_json_files() -> None:
@@ -267,6 +250,11 @@ def set_json(key: str, value: Any) -> None:
             "INSERT OR REPLACE INTO kv_store (key, value) VALUES (?, ?)",
             (key, json.dumps(value, ensure_ascii=False)),
         )
+
+
+def delete_json(key: str) -> None:
+    with db_connection() as connection:
+        connection.execute("DELETE FROM kv_store WHERE key = ?", (key,))
 
 
 def update_json(key: str, default: Any, updater: Callable[[Any], Any]) -> Any:

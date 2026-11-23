@@ -12,6 +12,7 @@ from campaign.clock_storage import get_clock
 from config import PREFIX
 from sheets.context import (
     get_sheet_for_owner,
+    resolve_mention_and_text,
     resolve_guild_id,
     save_owner_sheet,
     target_plain,
@@ -21,9 +22,7 @@ from sheets.embeds import build_status_embed
 from sheets.hunger import apply_clock_hunger
 
 
-async def _send_sheet_status(
-    ctx: Context, member: discord.Member | None
-) -> None:
+async def _send_sheet_status(ctx: Context, member: discord.Member | None) -> None:
     result = await get_sheet_for_owner(ctx, member)
     if result is None:
         await delete_command(ctx)
@@ -38,9 +37,7 @@ async def _send_sheet_status(
     label = target_plain(member, sheet)
     await send_message(
         ctx,
-        embed=build_status_embed(
-            sheet, who=label, clock=clock, notices=notices
-        ),
+        embed=build_status_embed(sheet, who=label, clock=clock, notices=notices),
     )
     await delete_command(ctx)
 
@@ -66,18 +63,152 @@ def advance_clock_for_long_rest(
     return note, notices
 
 
+async def perform_long_rest(ctx: Context, member: discord.Member | None = None) -> None:
+    result = await get_sheet_for_owner(ctx, member)
+    if result is None:
+        await delete_command(ctx)
+        return
+    owner_id, sheet = result
+    before_hp = sheet.hp_current
+    sheet.long_rest()
+    save_owner_sheet(ctx, owner_id, sheet)
+    slots_note = ""
+    if sheet.spell_slots.has_slots():
+        slots_note = f"\n🔮 Spell slots **{sheet.spell_slots.format()}**"
+    clock_note = ""
+    hunger_lines: list[str] = []
+    guild_id = resolve_guild_id(ctx)
+    if guild_id is not None:
+        clock_note, hunger_lines = advance_clock_for_long_rest(
+            guild_id=guild_id,
+            user_id=owner_id,
+        )
+        clock_note = f"\n⏳ Clock **{clock_note}**."
+    hp_bit = f"**{before_hp} → {sheet.hp_current}**/{sheet.hp_max}"
+    if before_hp == sheet.hp_current:
+        hp_bit = f"**{sheet.hp_current}/{sheet.hp_max}**"
+    reply = (
+        f"Long rest confirmed for **{sheet.name}**.\n"
+        f"❤️ HP {hp_bit} · 🎲 hit dice **{sheet.hit_dice_remaining}**"
+        f"{slots_note}.{clock_note}"
+    )
+    if hunger_lines:
+        reply += "\n" + "\n".join(hunger_lines)
+    await command_reply(ctx, reply)
+    await delete_command(ctx)
+
+
+async def perform_short_rest(
+    ctx: Context,
+    member: discord.Member | None = None,
+    dice_spent: int = 1,
+) -> None:
+    result = await get_sheet_for_owner(ctx, member)
+    if result is None:
+        await delete_command(ctx)
+        return
+    owner_id, sheet = result
+    if dice_spent < 1:
+        await command_reply(ctx, "Must spend at least 1 hit die.")
+        await delete_command(ctx)
+        return
+    if sheet.hit_dice_remaining < dice_spent:
+        await command_reply(
+            ctx, f"Not enough hit dice ({sheet.hit_dice_remaining} remaining)."
+        )
+        await delete_command(ctx)
+        return
+    con_mod = ability_modifier(sheet.abilities["con"])
+    die_sides = sheet.get_hit_die_sides()
+    healing = sum(random.randint(1, die_sides) + con_mod for _ in range(dice_spent))
+    healing = max(0, healing)
+    before_hp = sheet.hp_current
+    sheet.short_rest(dice_spent=dice_spent, healing=healing)
+    save_owner_sheet(ctx, owner_id, sheet)
+    slots_note = ""
+    if sheet.char_class.lower().startswith("warlock") and sheet.spell_slots.has_slots():
+        slots_note = f"\n🔮 Pact slots **{sheet.spell_slots.format()}**"
+    await command_reply(
+        ctx,
+        (
+            f"Short rest confirmed for **{sheet.name}**.\n"
+            f"❤️ Recovered **{healing}** HP (**{before_hp} → {sheet.hp_current}**/"
+            f"{sheet.hp_max}) · 🎲 hit dice **{sheet.hit_dice_remaining}** left"
+            f"{slots_note}."
+        ),
+    )
+    await delete_command(ctx)
+
+
+def parse_short_rest_dice(rest: str) -> int:
+    tokens = rest.split()
+    if not tokens:
+        return 1
+    try:
+        dice_spent = int(tokens[0])
+    except ValueError as exc:
+        raise ValueError(f"Usage: `{PREFIX}rest short [@player] [dice]`") from exc
+    if dice_spent < 1:
+        raise ValueError("Must spend at least 1 hit die.")
+    return dice_spent
+
+
+async def handle_short_rest_spec(ctx: Context, spec: str) -> None:
+    parsed = await resolve_mention_and_text(ctx, spec)
+    if parsed is None:
+        await delete_command(ctx)
+        return
+    member, rest = parsed
+    try:
+        dice_spent = parse_short_rest_dice(rest)
+    except ValueError as exc:
+        await command_reply(ctx, str(exc))
+        await delete_command(ctx)
+        return
+    await perform_short_rest(ctx, member, dice_spent)
+
+
+async def handle_rest_spec(ctx: Context, spec: str) -> None:
+    parsed = await resolve_mention_and_text(ctx, spec)
+    if parsed is None:
+        await delete_command(ctx)
+        return
+    member, rest = parsed
+    tokens = rest.split()
+    kind = tokens[0].casefold() if tokens else ""
+    if kind in {"long", "longue"}:
+        await perform_long_rest(ctx, member)
+        return
+    if kind in {"short", "court"}:
+        leftover = " ".join(tokens[1:])
+        try:
+            dice_spent = parse_short_rest_dice(leftover)
+        except ValueError as exc:
+            await command_reply(ctx, str(exc))
+            await delete_command(ctx)
+            return
+        await perform_short_rest(ctx, member, dice_spent)
+        return
+    await command_reply(
+        ctx,
+        (
+            f"`{PREFIX}rest long [@player]` — long rest\n"
+            f"`{PREFIX}rest short [@player] [hit dice]` — short rest"
+        ),
+    )
+    await delete_command(ctx)
+
+
 def register_status_commands(sheet_group: Group) -> None:
     @sheet_group.command(
         name="status",
-        aliases=["recap", "etats"],
+        aliases=["etats"],
         help=command_help(
             "Récap PV, faim, repos et états.",
             f"`{PREFIX}sheet status [@joueur]`",
         ),
     )
-    async def sheet_status(
-        ctx: Context, member: discord.Member | None = None
-    ) -> None:
+    async def sheet_status(ctx: Context, member: discord.Member | None = None) -> None:
         await _send_sheet_status(ctx, member)
 
     @sheet_group.command(
@@ -172,11 +303,14 @@ def register_status_commands(sheet_group: Group) -> None:
             f"`{PREFIX}sheet rest short|long`",
         ),
     )
-    async def sheet_rest_group(ctx: Context) -> None:
+    async def sheet_rest_group(ctx: Context, *, spec: str = "") -> None:
+        if spec.strip():
+            await handle_rest_spec(ctx, spec)
+            return
         await command_reply(
             ctx,
-            f"`{PREFIX}sheet rest short [@player] [hit dice]` — short rest\n"
-            f"`{PREFIX}sheet rest long [@player]` — long rest",
+            f"`{PREFIX}rest long [@player]` — long rest\n"
+            f"`{PREFIX}rest short [@player] [hit dice]` — short rest",
         )
         await delete_command(ctx)
 
@@ -190,34 +324,7 @@ def register_status_commands(sheet_group: Group) -> None:
     async def sheet_rest_long(
         ctx: Context, member: discord.Member | None = None
     ) -> None:
-        result = await get_sheet_for_owner(ctx, member)
-        if result is None:
-            return
-        owner_id, sheet = result
-        sheet.long_rest()
-        save_owner_sheet(ctx, owner_id, sheet)
-        slots_note = ""
-        if sheet.spell_slots.has_slots():
-            slots_note = f", spell slots {sheet.spell_slots.format()}"
-        clock_note = ""
-        hunger_lines: list[str] = []
-        guild_id = resolve_guild_id(ctx)
-        if guild_id is not None:
-            clock_note, hunger_lines = advance_clock_for_long_rest(
-                guild_id=guild_id,
-                user_id=owner_id,
-            )
-            clock_note = f" Clock {clock_note}."
-        reply = (
-            f"**{sheet.name}** finished a long rest — "
-            f"HP **{sheet.hp_current}/{sheet.hp_max}**, "
-            f"hit dice **{sheet.hit_dice_remaining}**"
-            f"{slots_note}.{clock_note}"
-        )
-        if hunger_lines:
-            reply += "\n" + "\n".join(hunger_lines)
-        await command_reply(ctx, reply)
-        await delete_command(ctx)
+        await perform_long_rest(ctx, member)
 
     @sheet_rest_group.command(
         name="short",
@@ -226,49 +333,14 @@ def register_status_commands(sheet_group: Group) -> None:
             f"`{PREFIX}sheet rest short [@joueur] [dés]`",
         ),
     )
-    async def sheet_rest_short(
-        ctx: Context,
-        member: discord.Member | None = None,
-        dice_spent: int = 1,
-    ) -> None:
-        result = await get_sheet_for_owner(ctx, member)
-        if result is None:
-            return
-        owner_id, sheet = result
-        if dice_spent < 1:
-            await command_reply(ctx, "Must spend at least 1 hit die.")
-            return
-        if sheet.hit_dice_remaining < dice_spent:
-            await command_reply(
-                ctx, f"Not enough hit dice ({sheet.hit_dice_remaining} remaining)."
-            )
-            return
-        con_mod = ability_modifier(sheet.abilities["con"])
-        die_sides = sheet.get_hit_die_sides()
-        healing = sum(random.randint(1, die_sides) + con_mod for _ in range(dice_spent))
-        healing = max(0, healing)
-        sheet.short_rest(dice_spent=dice_spent, healing=healing)
-        save_owner_sheet(ctx, owner_id, sheet)
-        slots_note = ""
-        if (
-            sheet.char_class.lower().startswith("warlock")
-            and sheet.spell_slots.has_slots()
-        ):
-            slots_note = f", pact slots {sheet.spell_slots.format()}"
-        await command_reply(
-            ctx,
-            f"**{sheet.name}** short rest — recovered **{healing}** HP "
-            f"({sheet.hp_current}/{sheet.hp_max}), "
-            f"hit dice **{sheet.hit_dice_remaining}** left"
-            f"{slots_note}.",
-        )
-        await delete_command(ctx)
+    async def sheet_rest_short(ctx: Context, *, spec: str = "") -> None:
+        await handle_short_rest_spec(ctx, spec)
 
 
 def setup_status_shortcut(bot: Bot) -> None:
     @bot.hybrid_command(
         name="status",
-        aliases=["etats", "recap"],
+        aliases=["etats"],
         help=command_help(
             "Récap PV, faim, repos et états.",
             f"`{PREFIX}status [@joueur]`",

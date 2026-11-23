@@ -5,7 +5,13 @@ from pathlib import Path
 import data.db as db_module
 from sheets.currency import Currency
 from sheets.data import CharacterSheet
-from sheets.storage import get_sheet, save_sheet, transfer_currency, update_sheet
+from sheets.storage import (
+    SheetConflictError,
+    get_sheet,
+    save_sheet,
+    transfer_currency,
+    update_sheet,
+)
 
 
 class TestTransferCurrency(unittest.TestCase):
@@ -102,6 +108,7 @@ class TestRetiredCombatTables(unittest.TestCase):
                 CREATE TABLE combat (guild_id TEXT, scope_id TEXT, state_json TEXT);
                 CREATE TABLE combat_maps (guild_id TEXT, map_id TEXT);
                 CREATE TABLE combat_history (id INTEGER);
+                CREATE TABLE initiative (guild_id TEXT, scope_id TEXT);
                 """
             )
         db_module.init_db()
@@ -115,7 +122,50 @@ class TestRetiredCombatTables(unittest.TestCase):
         self.assertNotIn("combat", names)
         self.assertNotIn("combat_maps", names)
         self.assertNotIn("combat_history", names)
-        self.assertIn("initiative", names)
+        self.assertNotIn("initiative", names)
+
+
+class TestConcurrentSheetSaves(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self._original_db = db_module.DB_FILE
+        db_module.DB_FILE = Path(self._tmpdir.name) / "test.db"
+        db_module.init_db()
+        save_sheet(user_id=1, guild_id=1, sheet=CharacterSheet(name="Hero", hp_max=20))
+
+    def tearDown(self) -> None:
+        db_module.DB_FILE = self._original_db
+        self._tmpdir.cleanup()
+
+    def test_stale_copy_cannot_overwrite_newer_save(self) -> None:
+        first = get_sheet(user_id=1, guild_id=1)
+        second = get_sheet(user_id=1, guild_id=1)
+        assert first is not None and second is not None
+        first.hp_current = 5
+        save_sheet(user_id=1, guild_id=1, sheet=first)
+        second.name = "Renamed"
+        with self.assertRaises(SheetConflictError):
+            save_sheet(user_id=1, guild_id=1, sheet=second)
+        stored = get_sheet(user_id=1, guild_id=1)
+        assert stored is not None
+        self.assertEqual((stored.name, stored.hp_current), ("Hero", 5))
+
+    def test_same_copy_can_save_twice(self) -> None:
+        sheet = get_sheet(user_id=1, guild_id=1)
+        assert sheet is not None
+        sheet.hp_current = 3
+        save_sheet(user_id=1, guild_id=1, sheet=sheet)
+        sheet.hp_current = 4
+        save_sheet(user_id=1, guild_id=1, sheet=sheet)
+        stored = get_sheet(user_id=1, guild_id=1)
+        assert stored is not None
+        self.assertEqual(stored.hp_current, 4)
+
+    def test_copy_saved_under_another_owner_replaces(self) -> None:
+        sheet = get_sheet(user_id=1, guild_id=1)
+        assert sheet is not None
+        save_sheet(user_id=2, guild_id=1, sheet=sheet)
+        self.assertIsNotNone(get_sheet(user_id=2, guild_id=1))
 
 
 if __name__ == "__main__":

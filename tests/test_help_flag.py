@@ -6,12 +6,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import discord
 from discord.ext import commands
 
-from ai.commands import setup_ai
 from bot.events import register_events
 from bot.help_commands import (
     CommandHelpShown,
     is_command_help_shown,
-    help_target_command,
     leftover_argument_tokens,
     maybe_send_command_help,
     tokens_request_help,
@@ -172,7 +170,6 @@ class TestRealCommandHelpParams(unittest.TestCase):
         self.bot = commands.Bot(command_prefix=";", intents=intents)
         setup_sheet(self.bot)
         setup_srd(self.bot)
-        setup_ai(self.bot)
 
     def test_sheet_set_word_help_shows_help(self) -> None:
         ctx = _ctx(rest="set help")
@@ -188,14 +185,6 @@ class TestRealCommandHelpParams(unittest.TestCase):
         ctx = _ctx(rest="spell -h")
         ctx.command = self.bot.get_command("srd")
         self.assertTrue(wants_command_help(ctx))
-
-    def test_ai_help_flags(self) -> None:
-        command = self.bot.get_command("ai")
-        for rest in ("-h", "--help", "help", "--help help -h"):
-            ctx = _ctx(rest=rest)
-            ctx.command = command
-            self.assertTrue(wants_command_help(ctx), rest)
-            self.assertIs(help_target_command(ctx), command)
 
 
 class TestCommandHelpShown(unittest.IsolatedAsyncioTestCase):

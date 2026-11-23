@@ -73,16 +73,19 @@ class TestCommandErrorHandler(unittest.IsolatedAsyncioTestCase):
         reply.assert_awaited_once()
         self.assertIn(";roll", reply.await_args.args[1])
 
-    async def test_catchup_marks_command_failed(self) -> None:
+    async def test_catchup_errors_are_reported_like_live(self) -> None:
         bot = self._bot()
         ctx = MagicMock()
         ctx.command = bot.get_command("roll")
-        ctx.command_failed = False
         ctx._from_catchup = True
-        await bot.on_command_error(
-            ctx, commands.CommandInvokeError(RuntimeError("boom"))
-        )
-        self.assertTrue(ctx.command_failed)
+        with (
+            patch("bot.events._error_reply", new_callable=AsyncMock) as reply,
+            self.assertLogs("bot.events", level="ERROR"),
+        ):
+            await bot.on_command_error(
+                ctx, commands.CommandInvokeError(RuntimeError("boom"))
+            )
+        reply.assert_awaited_once()
 
     async def test_unknown_unrelated_text_stays_quiet(self) -> None:
         bot = self._bot()

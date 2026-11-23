@@ -1,3 +1,5 @@
+import asyncio
+
 import discord
 from discord.ext.commands import Group
 from discord.ext.commands.context import Context
@@ -9,6 +11,7 @@ from config import PREFIX
 from sheets.context import (
     get_sheet_for_owner,
     parse_mention_and_text,
+    resolve_mention_and_text,
     resolve_guild_id,
     resolve_owner,
     save_owner_sheet,
@@ -16,7 +19,7 @@ from sheets.context import (
 )
 from sheets.data import CharacterSheet
 from sheets.embeds import build_sheet_embed, sheet_info_embeds
-from sheets.handlers import apply_hp
+from sheets.handlers import HP_USAGE, apply_hp_spec, format_hp_update
 from sheets.portrait import (
     CLEAR_WORDS,
     cache_portrait_from_url,
@@ -27,6 +30,38 @@ from sheets.portrait import (
 )
 from sheets.storage import delete_sheet, get_sheet, set_character_name
 from srd import fivetools
+
+
+async def handle_hp(ctx: Context, spec: str) -> None:
+    parsed = await resolve_mention_and_text(ctx, spec)
+    if parsed is None:
+        await delete_command(ctx)
+        return
+    member, rest = parsed
+    result = await get_sheet_for_owner(ctx, member)
+    if result is None:
+        await delete_command(ctx)
+        return
+    owner_id, sheet = result
+    if not rest:
+        label = target_label(member, sheet)
+        await command_reply(
+            ctx,
+            (f"{label}: HP **{sheet.hp_current}/{sheet.hp_max}**.\n{HP_USAGE}"),
+        )
+        await delete_command(ctx)
+        return
+
+    try:
+        update = apply_hp_spec(sheet, rest)
+    except ValueError as exc:
+        await command_reply(ctx, str(exc))
+        await delete_command(ctx)
+        return
+
+    save_owner_sheet(ctx, owner_id, sheet)
+    await command_reply(ctx, format_hp_update(target_label(member, sheet), update))
+    await delete_command(ctx)
 
 
 def register_core_commands(sheet_group: Group) -> None:
@@ -234,8 +269,11 @@ def register_core_commands(sheet_group: Group) -> None:
         except ValueError as exc:
             await command_reply(ctx, str(exc))
             return
-        cached = cache_portrait_from_url(
-            guild_id=guild_id, user_id=owner_id, url=sheet.image_url
+        cached = await asyncio.to_thread(
+            cache_portrait_from_url,
+            guild_id=guild_id,
+            user_id=owner_id,
+            url=sheet.image_url,
         )
         save_owner_sheet(ctx, owner_id, sheet)
         token_note = (
@@ -252,41 +290,13 @@ def register_core_commands(sheet_group: Group) -> None:
     @sheet_group.command(
         name="hp",
         help=command_help(
-            "Fixe les points de vie.",
-            f"`{PREFIX}sheet hp [@joueur] <actuel> [max]`",
+            "Change les PV : relatif (`-4`, `+6`) ou valeur (`12`, `12/20`).",
+            f"`{PREFIX}sheet hp [@joueur] -4`",
+            f"`{PREFIX}hp -4` · `{PREFIX}sheet hp 12/20`",
         ),
     )
-    async def sheet_hp(
-        ctx: Context,
-        member: discord.Member | None = None,
-        current: int | None = None,
-        maximum: int | None = None,
-    ) -> None:
-        result = await get_sheet_for_owner(ctx, member)
-        if result is None:
-            return
-        owner_id, sheet = result
-
-        if current is None:
-            await command_reply(
-                ctx,
-                f"Missing HP value. Usage: `{PREFIX}sheet hp [@player] <current> [max]`",
-            )
-            return
-
-        try:
-            apply_hp(sheet, current, maximum)
-        except ValueError as exc:
-            await command_reply(ctx, str(exc))
-            return
-
-        save_owner_sheet(ctx, owner_id, sheet)
-        label = target_label(member, sheet)
-        await command_reply(
-            ctx,
-            f"{label}: HP set to **{sheet.hp_current}/{sheet.hp_max}**.",
-        )
-        await delete_command(ctx)
+    async def sheet_hp(ctx: Context, *, spec: str = "") -> None:
+        await handle_hp(ctx, spec)
 
     @sheet_group.command(
         name="info",

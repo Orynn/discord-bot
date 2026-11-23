@@ -17,7 +17,7 @@ def setup_trash(bot: Bot) -> None:
         help=command_help(
             "Sandbox mock dans #🚯trash.",
             f"`{PREFIX}trash`",
-            f"`{PREFIX}trash reset` — recréer Mock et vider l’initiative",
+            f"`{PREFIX}trash reset` — recréer Mock",
         ),
     )
     @guild_only
@@ -37,8 +37,8 @@ def setup_trash(bot: Bot) -> None:
                 f"**Sandbox** — `{MOCK_NAME}` (not a real player sheet)\n"
                 f"HP **{sheet.hp_current}/{sheet.hp_max}** · "
                 f"AC **{sheet.ac}** · {sheet.char_class} {sheet.level}\n"
-                f"`{PREFIX}sheet show` · `{PREFIX}init add`\n"
-                f"`{PREFIX}trash reset` — restore mock + clear this channel's initiative."
+                f"`{PREFIX}sheet show` · `{PREFIX}hp -4` · `{PREFIX}slots 1`\n"
+                f"`{PREFIX}trash reset` — restore mock."
             ),
         )
         await delete_command(ctx)
@@ -46,7 +46,7 @@ def setup_trash(bot: Bot) -> None:
     @trash_group.command(
         name="reset",
         help=command_help(
-            "Recrée la fiche Mock et vide l’initiative du trash.",
+            "Recrée la fiche Mock du trash.",
             f"`{PREFIX}trash reset`",
         ),
     )

@@ -1,6 +1,9 @@
 import unittest
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from roll.commands import prepare_roll_request
+from discord.ext import commands
+
+from roll.commands import _leading_member, prepare_roll_request
 from sheets.currency import Currency, parse_currency
 from sheets.dice import (
     RollResult,
@@ -47,6 +50,91 @@ class TestDice(unittest.TestCase):
         self.assertEqual(dice.sides, 6)
         self.assertEqual(dice.flat_modifier, 3)
 
+    def test_parse_dice_without_count(self) -> None:
+        dice = parse_dice("d20+5")
+        self.assertEqual((dice.count, dice.sides, dice.flat_modifier), (1, 20, 5))
+
+    def test_parse_dice_chained_modifiers(self) -> None:
+        self.assertEqual(parse_dice("2d6+3-1").flat_modifier, 2)
+
+    def test_parse_roll_args_manual_rolls(self) -> None:
+        cases = {
+            "d20+5": (20, 5, []),
+            "d20 + 5": (20, 5, []),
+            "1d20 -2": (20, -2, []),
+            "+3": (20, 3, []),
+            "athletics + 2": (20, 2, ["athletics"]),
+            "dex save -1": (20, -1, ["dex", "save"]),
+        }
+        for args, (sides, flat, tokens) in cases.items():
+            with self.subTest(args=args):
+                request = parse_roll_args(args)
+                self.assertEqual(request.dice.sides, sides)
+                self.assertEqual(request.dice.flat_modifier, flat)
+                self.assertEqual(request.modifier_tokens, tokens)
+
+    def test_parse_dice_extra_dice_groups(self) -> None:
+        dice = parse_dice("1d20+1d4-d6+5")
+        self.assertEqual((dice.count, dice.sides, dice.flat_modifier), (1, 20, 5))
+        self.assertEqual(
+            [(e.sign, e.count, e.sides) for e in dice.extra_dice],
+            [(1, 1, 4), (-1, 1, 6)],
+        )
+
+    def test_parse_roll_args_spaced_and_bare_extra_dice(self) -> None:
+        spaced = parse_roll_args("adv d20 + 1d4 + 3")
+        self.assertEqual(spaced.advantage, True)
+        self.assertEqual(spaced.dice.flat_modifier, 3)
+        self.assertEqual([e.sides for e in spaced.dice.extra_dice], [4])
+        guidance = parse_roll_args("athletics +d4")
+        self.assertEqual(guidance.modifier_tokens, ["athletics"])
+        self.assertEqual([e.sides for e in guidance.dice.extra_dice], [4])
+        validate_roll_request(spaced)
+
+    def test_parse_dice_total_count_limit(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_dice("60d6+60d6")
+
+    def test_execute_roll_with_extra_dice(self) -> None:
+        request = parse_roll_args("1d20+1d4-1d6+2")
+        with patch("sheets.dice.random.randint", side_effect=[20, 3, 5]):
+            result = execute_roll(
+                dice=request.dice,
+                sheet=None,
+                modifier_tokens=request.modifier_tokens,
+                advantage=request.advantage,
+            )
+        self.assertEqual(result.dice_notation, "1d20+1d4-1d6+2")
+        self.assertEqual(result.total, 20 + 3 - 5 + 2)
+        embed = format_roll_embed(result, roller_label="Test")
+        self.assertIn("Critique", embed.title)
+        fields = {field.name: field.value for field in embed.fields}
+        self.assertIn("+ 1d4 : **3**", fields["🎲 Dés"])
+        self.assertIn("- 1d6 : **5**", fields["🎲 Dés"])
+        self.assertEqual(fields["🧮 Calcul"], "20 + 3 - 5 + 2 = **20**")
+
+    def test_extra_d20_is_not_a_crit(self) -> None:
+        request = parse_roll_args("1d4+1d20")
+        with patch("sheets.dice.random.randint", side_effect=[1, 20]):
+            result = execute_roll(
+                dice=request.dice,
+                sheet=None,
+                modifier_tokens=request.modifier_tokens,
+                advantage=None,
+            )
+        self.assertNotIn("Critique", format_roll_embed(result, roller_label="T").title)
+
+    def test_manual_roll_needs_no_sheet(self) -> None:
+        request = parse_roll_args("d20+5")
+        result = execute_roll(
+            dice=request.dice,
+            sheet=None,
+            modifier_tokens=request.modifier_tokens,
+            advantage=request.advantage,
+        )
+        self.assertEqual(result.dice_notation, "1d20+5")
+        self.assertEqual(result.total, result.dice_rolls[0] + 5)
+
     def test_parse_keep_highest(self) -> None:
         dice = parse_dice("2d20kh1")
         self.assertEqual(dice.keep_mode, "kh")
@@ -79,7 +167,7 @@ class TestDice(unittest.TestCase):
             modifier_tokens=request.modifier_tokens,
             advantage=None,
         )
-        self.assertIn("Athletics", result.modifier_label)
+        self.assertIn("Athlétisme", result.modifier_label)
         self.assertEqual(result.sheet_modifier, 6)
 
     def test_french_skill_and_advantage_aliases(self) -> None:
@@ -105,7 +193,7 @@ class TestDice(unittest.TestCase):
             modifier_tokens=request.modifier_tokens,
             advantage=request.advantage,
         )
-        self.assertIn("Stealth", result.modifier_label)
+        self.assertIn("Discrétion", result.modifier_label)
         self.assertEqual(result.sheet_modifier, 6)
 
         adv = parse_roll_args("avantage discrétion")
@@ -120,9 +208,9 @@ class TestDice(unittest.TestCase):
         self.assertFalse(dis.advantage)
 
         modifier, label = resolve_sheet_modifier(sheet, ["acrobaties"])
-        self.assertIn("Acrobatics", label)
+        self.assertIn("Acrobaties", label)
         modifier, label = resolve_sheet_modifier(sheet, ["escamotage"])
-        self.assertIn("Sleight Of Hand", label)
+        self.assertIn("Escamotage", label)
 
     def test_slash_options_add_bonus_and_advantage(self) -> None:
         request = parse_roll_args("athletics")
@@ -165,8 +253,8 @@ class TestDice(unittest.TestCase):
         self.assertIn("**20**", embed.description)
         self.assertIn("**25**", embed.description)
         self.assertEqual(embed.color.value, 0x27AE60)
-        self.assertIn("🧮 Breakdown", [field.name for field in embed.fields])
-        rolls_field = next(field for field in embed.fields if field.name == "🎲 Rolls")
+        self.assertIn("🧮 Calcul", [field.name for field in embed.fields])
+        rolls_field = next(field for field in embed.fields if field.name == "🎲 Dés")
         self.assertIn("Critique", rolls_field.value)
 
     def test_format_roll_embed_nat1(self) -> None:
@@ -199,8 +287,8 @@ class TestDice(unittest.TestCase):
         )
         embed = format_roll_embed(result, roller_label="Fighter")
         self.assertEqual(embed.color.value, 0x2980B9)
-        rolls_field = next(field for field in embed.fields if field.name == "🎲 Rolls")
-        self.assertIn("⬆️ Advantage", rolls_field.value)
+        rolls_field = next(field for field in embed.fields if field.name == "🎲 Dés")
+        self.assertIn("⬆️ Avantage", rolls_field.value)
         self.assertIn("~~8~~", rolls_field.value)
 
     def test_inspiration_grants_advantage_on_d20(self) -> None:
@@ -268,7 +356,7 @@ class TestDice(unittest.TestCase):
 
     def test_unknown_modifier_raises(self) -> None:
         sheet = CharacterSheet(name="Test")
-        with self.assertRaisesRegex(ValueError, "Unknown modifier"):
+        with self.assertRaisesRegex(ValueError, "Je ne connais pas"):
             resolve_sheet_modifier(sheet, ["help"])
 
 
@@ -288,6 +376,32 @@ class TestPrepareRollRequest(unittest.TestCase):
         assert request is not None
         self.assertFalse(request.advantage)
         self.assertEqual(request.modifier_tokens, ["perception"])
+
+
+class TestLeadingMember(unittest.IsolatedAsyncioTestCase):
+    async def test_first_word_names_a_member(self) -> None:
+        alice = MagicMock()
+        with patch.object(
+            commands.MemberConverter, "convert", AsyncMock(return_value=alice)
+        ):
+            member, rest = await _leading_member(MagicMock(), "Alice athletics")
+        self.assertIs(member, alice)
+        self.assertEqual(rest, "athletics")
+
+    async def test_unknown_word_keeps_args(self) -> None:
+        with patch.object(
+            commands.MemberConverter,
+            "convert",
+            AsyncMock(side_effect=commands.MemberNotFound("perception")),
+        ):
+            member, rest = await _leading_member(MagicMock(), "perception adv")
+        self.assertIsNone(member)
+        self.assertEqual(rest, "perception adv")
+
+    async def test_single_word_is_never_a_member(self) -> None:
+        member, rest = await _leading_member(MagicMock(), "perception")
+        self.assertIsNone(member)
+        self.assertEqual(rest, "perception")
 
 
 if __name__ == "__main__":

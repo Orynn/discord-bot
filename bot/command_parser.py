@@ -1,7 +1,7 @@
 import discord.ext.commands.view as command_view
 
 # Discord and French keyboards often send ’ (U+2019) instead of ASCII '.
-# discord.py treats those marks as string quotes, so `;ai Qu’est-ce…` dies
+# discord.py treats those marks as string quotes, so `;pc Qu’est-ce…` dies
 # with UnexpectedQuoteError and never reaches the callback.
 _FRENCH_APOSTROPHES = frozenset({"‘", "’", "‚", "‛"})
 

@@ -29,19 +29,6 @@ _DEFAULT_CONFIG: dict = {
     "player_channel_ooc": "📢blabla",
     "player_channel_rp": "🎲roleplay",
     "staff_user_ids": [],
-    "image_provider": "auto",
-    "image_local_url": "http://127.0.0.1:7860",
-    "image_model": "flux",
-    "image_width": 1024,
-    "image_height": 1024,
-    "image_timeout_seconds": 180,
-    "image_cooldown_seconds": 20,
-    "image_history_limit": 1000,
-    "gemini_model": "gemini-3.5-flash",
-    "gemini_timeout_seconds": 45,
-    "gemini_max_output_tokens": 1600,
-    "gemini_history_limit": 20,
-    "gemini_cooldown_seconds": 8,
 }
 
 if _CONFIG_PATH.exists():
@@ -124,7 +111,6 @@ FIVETOOLS_HOMEBREW_FILE = _resolve_path(
 )
 
 # Legacy alias used by glossary fingerprinting and startup logs.
-FIVETOOLS_FILE = FIVETOOLS_EXPORT_FILE
 
 _raw_token = os.environ.get("DISCORD_TOKEN")
 TOKEN: str | None = None if not _raw_token or _raw_token == "TOKEN_HERE" else _raw_token
@@ -163,39 +149,3 @@ PLAYER_CHANNEL_RP = str(
 STAFF_USER_IDS = {
     int(user_id) for user_id in config.get("staff_user_ids", []) if str(user_id).strip()
 }
-
-IMAGE_PROVIDER = str(config.get("image_provider", _DEFAULT_CONFIG["image_provider"]))
-IMAGE_LOCAL_URL = str(config.get("image_local_url", _DEFAULT_CONFIG["image_local_url"]))
-IMAGE_MODEL = str(config.get("image_model", _DEFAULT_CONFIG["image_model"]))
-IMAGE_WIDTH = int(config.get("image_width", _DEFAULT_CONFIG["image_width"]))
-IMAGE_HEIGHT = int(config.get("image_height", _DEFAULT_CONFIG["image_height"]))
-IMAGE_TIMEOUT_SECONDS = int(
-    config.get("image_timeout_seconds", _DEFAULT_CONFIG["image_timeout_seconds"])
-)
-IMAGE_COOLDOWN_SECONDS = int(
-    config.get("image_cooldown_seconds", _DEFAULT_CONFIG["image_cooldown_seconds"])
-)
-IMAGE_HISTORY_LIMIT = int(
-    config.get("image_history_limit", _DEFAULT_CONFIG["image_history_limit"])
-)
-
-_raw_gemini = (
-    os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or ""
-).strip()
-GEMINI_API_KEY: str | None = _raw_gemini or None
-GEMINI_MODEL = str(
-    os.environ.get("GEMINI_MODEL")
-    or config.get("gemini_model", _DEFAULT_CONFIG["gemini_model"])
-).strip()
-GEMINI_TIMEOUT_SECONDS = int(
-    config.get("gemini_timeout_seconds", _DEFAULT_CONFIG["gemini_timeout_seconds"])
-)
-GEMINI_MAX_OUTPUT_TOKENS = int(
-    config.get("gemini_max_output_tokens", _DEFAULT_CONFIG["gemini_max_output_tokens"])
-)
-GEMINI_HISTORY_LIMIT = int(
-    config.get("gemini_history_limit", _DEFAULT_CONFIG["gemini_history_limit"])
-)
-GEMINI_COOLDOWN_SECONDS = int(
-    config.get("gemini_cooldown_seconds", _DEFAULT_CONFIG["gemini_cooldown_seconds"])
-)

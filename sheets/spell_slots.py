@@ -299,7 +299,10 @@ def slots_table_for_class(
 
 def parse_slot_level(value: str) -> int:
     cleaned = value.strip().lower().rstrip("stndrh")
-    level = int(cleaned)
+    try:
+        level = int(cleaned)
+    except ValueError as exc:
+        raise ValueError("Spell slot level must be between 1 and 9.") from exc
     if level not in SPELL_LEVELS:
         raise ValueError("Spell slot level must be between 1 and 9.")
     return level

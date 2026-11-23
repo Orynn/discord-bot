@@ -230,6 +230,7 @@ async def maybe_send_parenthetical_desc(ctx: Context, text: str) -> bool:
 def setup_desc(bot: Bot) -> None:
     @bot.hybrid_group(
         name="desc",
+        fallback="text",
         invoke_without_command=True,
         help=command_help(
             "Narre une scène en italique. La description du salon ne change qu’avec `desc set`.",
