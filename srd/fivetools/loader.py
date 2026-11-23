@@ -365,9 +365,22 @@ class FiveToolsIndex:
         return self._class_features.get(class_slug, [])
 
 
-def _build_index() -> FiveToolsIndex:
+def _build_index(*, use_cache: bool = True) -> FiveToolsIndex:
+    from srd.fivetools.index_cache import (
+        cache_path,
+        load_cached_index,
+        save_cached_index,
+    )
+    from srd.fivetools.paths import content_fingerprint
+
+    path = cache_path(content_fingerprint())
+    if use_cache:
+        cached = load_cached_index(path)
+        if isinstance(cached, FiveToolsIndex):
+            return cached
     index = FiveToolsIndex()
     index.load()
+    save_cached_index(path, index)
     return index
 
 
@@ -394,7 +407,7 @@ def reload_index() -> FiveToolsIndex:
     global _index
     from srd.fivetools.lookup import clear_render_cache
 
-    _index = _build_index()
+    _index = _build_index(use_cache=False)
     clear_render_cache()
     return _index
 

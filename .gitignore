@@ -6,6 +6,7 @@ data/backups/
 data/exports/
 data/portraits/
 data/monster_tokens/
+data/cache/
 5etools.json
 5etools/5etools.json
 5etools/homebrew.json

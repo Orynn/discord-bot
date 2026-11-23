@@ -31,11 +31,58 @@ class GlossaryEntry:
     parent_slug: str | None = None
 
 
+# A mention starts where the previous character is not a word character or `[`
+# (already a link); its first token is a word, or one symbol (`+1 Shield`).
+_CANDIDATE_START = re.compile(r"(?<![\w\[])(?:\w+|[^\w\s])")
+_BLOCKS_END = re.compile(r"[\w\]]")
+
+
+def _first_token(name: str) -> str:
+    match = re.match(r"\w+", name)
+    return match.group(0) if match else name[:1]
+
+
+class _MentionMatcher:
+    """Finds glossary names in text, longest name first at each position.
+
+    Same results as one big `name1|name2|…` regex, but each position only tries
+    the names sharing its first word instead of all ~9 000 names.
+    """
+
+    def __init__(self, entries: list[GlossaryEntry]) -> None:
+        self._buckets: dict[str, list[str]] = {}
+        seen: set[str] = set()
+        for entry in entries:  # longest first
+            name = entry.name.lower()
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            self._buckets.setdefault(_first_token(name), []).append(name)
+
+    def spans(self, text: str) -> list[tuple[int, int]]:
+        found: list[tuple[int, int]] = []
+        resume = 0
+        for start in _CANDIDATE_START.finditer(text):
+            position = start.start()
+            if position < resume:
+                continue
+            for name in self._buckets.get(start.group(0).lower(), ()):
+                end = position + len(name)
+                if text[position:end].lower() != name:
+                    continue
+                if end < len(text) and _BLOCKS_END.match(text, end):
+                    continue
+                found.append((position, end))
+                resume = end
+                break
+        return found
+
+
 @dataclass
 class _GlossaryStore:
     by_key: dict[str, GlossaryEntry] = field(default_factory=dict)
     by_length: list[GlossaryEntry] = field(default_factory=list)
-    matcher: re.Pattern[str] | None = None
+    matcher: _MentionMatcher | None = None
     loaded: bool = False
     dirty: bool = False
 
@@ -43,26 +90,11 @@ class _GlossaryStore:
         self.by_length = sorted(
             self.by_key.values(), key=lambda entry: len(entry.name), reverse=True
         )
-        self.matcher = _compile_matcher(self.by_length)
+        self.matcher = _MentionMatcher(self.by_length) if self.by_length else None
         self.dirty = False
 
 
 _store = _GlossaryStore()
-
-
-def _compile_matcher(entries: list[GlossaryEntry]) -> re.Pattern[str] | None:
-    """One IGNORECASE alternation, longest names first, compiled once per rebuild."""
-    names: list[str] = []
-    seen: set[str] = set()
-    for entry in entries:
-        key = entry.name.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        names.append(re.escape(entry.name))
-    if not names:
-        return None
-    return re.compile(rf"(?<![\w\[])(?:{'|'.join(names)})(?![\w\]])", re.IGNORECASE)
 
 
 def reset_store() -> None:
@@ -253,12 +285,12 @@ def iter_mention_spans(text: str) -> list[tuple[int, int, str, GlossaryEntry]]:
         return []
 
     spans: list[tuple[int, int, str, GlossaryEntry]] = []
-    for match in matcher.finditer(text):
-        original = match.group(0)
+    for start, end in matcher.spans(text):
+        original = text[start:end]
         entry = _store.by_key.get(_entry_key(original))
         if entry is None:
             continue
-        spans.append((match.start(), match.end(), original, entry))
+        spans.append((start, end, original, entry))
     return spans
 
 

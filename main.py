@@ -16,6 +16,7 @@ from bot.logging_config import setup_logging
 from bot.purge_commands import setup_purge
 from bot.slash import setup_slash
 from bot.slash_globals import purge_stale_global_app_commands
+from bot.slash_sync import needs_sync, remember_sync
 from bot.trash_commands import setup_trash
 from bot.tree_utils import clamp_app_command_descriptions
 from campaign.commands import setup_campaign
@@ -50,18 +51,24 @@ class ArkannBot(commands.Bot):
     async def setup_hook(self) -> None:
         try:
             clamp_app_command_descriptions(self.tree)
-            if CAMPAIGN_GUILD_ID is not None:
-                guild = discord.Object(id=CAMPAIGN_GUILD_ID)
+            guild = (
+                discord.Object(id=CAMPAIGN_GUILD_ID)
+                if CAMPAIGN_GUILD_ID is not None
+                else None
+            )
+            if guild is not None:
                 self.tree.copy_global_to(guild=guild)
-                synced = await self.tree.sync(guild=guild)
-            else:
-                synced = await self.tree.sync()
+            if not needs_sync(self.tree, guild):
+                logger.info("Slash commands unchanged: sync skipped.")
+                return
+            synced = await self.tree.sync(guild=guild)
+            remember_sync(self.tree, guild)
             logger.info("Synced %s slash command(s).", len(synced))
         except Exception:
             logger.exception("Slash command sync failed")
             return
         # Only drop the stale globals once the guild copy is live.
-        if CAMPAIGN_GUILD_ID is not None:
+        if guild is not None:
             try:
                 removed = await purge_stale_global_app_commands(self)
                 if removed:
